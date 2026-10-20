@@ -1373,9 +1373,9 @@
     };
 
     const SHEET_URLS = {
-      vehicles: 'https://docs.google.com/spreadsheets/d/1UbOppkZyjMlUl__uXB4_sbWGSWAqxNu47oyMEhqyf5M/export?format=csv',
-      drivers: 'https://docs.google.com/spreadsheets/d/1OGq9CC7QJnIDRklknHB-vsv2QiJxPu3LE2JfvY5IE30/export?format=csv',
-      cards: 'https://docs.google.com/spreadsheets/d/1Z8aqMUIA-V_Kh3XzdfZ5eIzITkvGKqSXKbXIFTGrfEA/export?format=csv'
+      vehicles: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=0',
+      cards: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=1',
+      contacts: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=2'
     };
 
     const STORAGE_KEY = 'flotta_nyilvantarto_v8';
@@ -1403,48 +1403,66 @@
     }
 
     async function loadFromSheets() {
-      // Sheets loading disabled – using embedded real data only
-      console.log('Using embedded fleet data');
+      try {
+        const [vRes, cRes, kRes] = await Promise.all([
+          fetch(SHEET_URLS.vehicles),
+          fetch(SHEET_URLS.cards),
+          fetch(SHEET_URLS.contacts)
+        ]);
+        if (!vRes.ok) throw new Error('vehicles not ok');
+        const vText = await vRes.text();
+        const vParsed = parseCSV(vText);
+        if (vParsed.length > 0) {
+          vehicles = vParsed.map((r, i) => ({
+            id: r.id || 'v' + (i+1),
+            rendszam: r.RENDSZÁM || r.rendszam || '',
+            gyartmany: (r.TÍPUS || '').split(' ')[0] || '',
+            modell: (r.TÍPUS || '').split(' ').slice(1).join(' ') || '',
+            currentDriver: r.HASZNÁLÓ || r['KI HASZNÁLJA'] || null,
+            berbeado: r.BÉRBEADÓ || '',
+            helyszin: r.HELY || '',
+            status: r.ÁLLAPOT || 'aktiv',
+            gumicsere: r.GUMICSERE || '',
+            muszakiLejarat: r.MŰSZAKI_LEJÁRAT || '',
+            kovetkezoSzervizDatum: r.KÖVETKEZŐ_SZERVIZ || '',
+            megjegyzes: r.MEGJEGYZÉS || '',
+            alvazszam: r.VIN || '',
+            history: []
+          }));
+        }
+        if (cRes.ok) {
+          const cText = await cRes.text();
+          const cParsed = parseCSV(cText);
+          fuelCards = cParsed.map((r, i) => ({
+            id: 'c' + (i+1),
+            number: r.KÁRTYASZÁM || r.number || '',
+            provider: r.SZOLGÁLTATÓ || 'MOL',
+            vehicle: r.JÁRMŰ || '',
+            note: r.PIN ? 'PIN: ' + r.PIN : '',
+            status: r.STÁTUSZ || 'aktiv'
+          }));
+        }
+        if (kRes.ok) {
+          const kText = await kRes.text();
+          const kParsed = parseCSV(kText);
+          contacts = kParsed.map((r, i) => ({
+            id: 'k' + (i+1),
+            ceg: r.CÉG || '',
+            nev: r.NÉV || '',
+            telefon: r.TELEFON || ''
+          }));
+        }
+        save();
+        refresh();
+      } catch (e) {
+        console.warn('Sheets load failed', e);
+      }
     }
 
     // Ensure data is always shown
     function init() {
-      if (useFirebase && db) {
-        // Load from Firebase
-        db.ref('flotta').once('value').then(snap => {
-          const data = snap.val();
-          if (data && data.vehicles) {
-            vehicles = data.vehicles || [];
-            drivers = data.drivers || [];
-            fuelCards = data.fuelCards || [];
-            contacts = data.contacts || [];
-          } else {
-            // First time: seed with embedded data
-            vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
-            drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
-            fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
-            contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
-            save();
-          }
-          refresh();
-          // Listen for real-time changes
-          db.ref('flotta').on('value', snap2 => {
-            const d = snap2.val();
-            if (d) {
-              vehicles = d.vehicles || [];
-              drivers = d.drivers || [];
-              fuelCards = d.fuelCards || [];
-              contacts = d.contacts || [];
-              refresh();
-            }
-          });
-        }).catch(e => {
-          console.error("Firebase load error", e);
-          loadFromLocal();
-        });
-      } else {
-        loadFromLocal();
-      }
+      loadFromLocal();
+      loadFromSheets();
     }
 
     function loadFromLocal() {
