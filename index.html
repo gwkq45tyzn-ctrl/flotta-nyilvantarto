@@ -1379,6 +1379,7 @@
     };
 
     const STORAGE_KEY = 'flotta_nyilvantarto_v8';
+    const OLD_KEYS = ['flotta_nyilvantarto_v7', 'flotta_nyilvantarto_v6', 'flotta_nyilvantarto_v5', 'flotta_nyilvantarto_v4', 'flotta_nyilvantarto_v3'];
     let vehicles = [];
     let fuelCards = [];
     let drivers = [];
@@ -1467,13 +1468,24 @@
 
     function loadFromLocal() {
       try {
-        const saved = localStorage.getItem(STORAGE_KEY);
+        // Try current key first, then older keys
+        let saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) {
+          for (const key of OLD_KEYS) {
+            saved = localStorage.getItem(key);
+            if (saved) {
+              console.log('Restored from old key:', key);
+              break;
+            }
+          }
+        }
         if (saved) {
           const data = JSON.parse(saved);
           vehicles = data.vehicles || [];
           drivers = data.drivers || [];
           fuelCards = data.fuelCards || [];
           contacts = data.contacts || [];
+          save(); // migrate to current key
         } else {
           vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
           drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
