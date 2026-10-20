@@ -1351,7 +1351,7 @@
     };
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyDBU7_QNpjzhyQ_zO6JiS6ssjV70DivkG6BADUhXA/exec';
 
-    const STORAGE_KEY = 'flotta_nyilvantarto_v8';
+    const STORAGE_KEY = 'flotta_nyilvantarto_v10';
     let vehicles = [];
     let fuelCards = [];
     let drivers = [];
@@ -1406,28 +1406,32 @@
         }
         if (cRes.ok) {
           const cText = await cRes.text();
-          if (!cText.includes('<html')) {
+          if (!cText.includes('<html') && cText.includes('KÁRTYASZÁM')) {
             const cParsed = parseCSV(cText);
-            fuelCards = cParsed.map((r, i) => ({
-              id: 'c' + (i+1),
-              number: r.KÁRTYASZÁM || '',
-              provider: r.SZOLGÁLTATÓ || 'MOL',
-              vehicle: r.JÁRMŰ || '',
-              note: r.PIN ? 'PIN: ' + r.PIN : '',
-              status: r.STÁTUSZ || 'aktiv'
-            }));
+            if (cParsed.length > 0) {
+              fuelCards = cParsed.map((r, i) => ({
+                id: 'c' + (i+1),
+                number: r.KÁRTYASZÁM || '',
+                provider: r.SZOLGÁLTATÓ || 'MOL',
+                vehicle: r.JÁRMŰ || '',
+                note: r.PIN ? 'PIN: ' + r.PIN : '',
+                status: r.STÁTUSZ || 'aktiv'
+              }));
+            }
           }
         }
         if (kRes.ok) {
           const kText = await kRes.text();
-          if (!kText.includes('<html')) {
+          if (!kText.includes('<html') && kText.includes('CÉG')) {
             const kParsed = parseCSV(kText);
-            contacts = kParsed.map((r, i) => ({
-              id: 'k' + (i+1),
-              ceg: r.CÉG || '',
-              nev: r.NÉV || '',
-              telefon: r.TELEFON || ''
-            }));
+            if (kParsed.length > 0) {
+              contacts = kParsed.map((r, i) => ({
+                id: 'k' + (i+1),
+                ceg: r.CÉG || '',
+                nev: r.NÉV || '',
+                telefon: r.TELEFON || ''
+              }));
+            }
           }
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
@@ -1442,10 +1446,17 @@
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const data = JSON.parse(saved);
-          vehicles = data.vehicles || [];
-          drivers = data.drivers || [];
-          fuelCards = data.fuelCards || [];
-          contacts = data.contacts || [];
+          if (data.vehicles && data.vehicles.length > 0) {
+            vehicles = data.vehicles;
+            drivers = data.drivers || [];
+            fuelCards = data.fuelCards || [];
+            contacts = data.contacts || [];
+          } else {
+            vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
+            drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
+            fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
+            contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
+          }
         } else {
           vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
           drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
