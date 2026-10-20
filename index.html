@@ -1350,8 +1350,7 @@
       cards: 'https://docs.google.com/spreadsheets/d/1Z8aqMUIA-V_Kh3XzdfZ5eIzITkvGKqSXKbXIFTGrfEA/export?format=csv'
     };
 
-    const STORAGE_KEY = 'flotta_nyilvantarto_v9';
-    const OLD_KEYS = ['flotta_nyilvantarto_v8', 'flotta_nyilvantarto_v7', 'flotta_nyilvantarto_v6', 'flotta_nyilvantarto_v5', 'flotta_nyilvantarto_v4', 'flotta_nyilvantarto_v3'];
+    const STORAGE_KEY = 'flotta_nyilvantarto_v8';
     let vehicles = [];
     let fuelCards = [];
     let drivers = [];
@@ -1382,15 +1381,27 @@
 
     // Ensure data is always shown
     function init() {
-      // Force embedded data (user's good version) - clear old localStorage
-      localStorage.removeItem(STORAGE_KEY);
-      OLD_KEYS.forEach(k => localStorage.removeItem(k));
-      vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
-      drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
-      fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
-      contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
-      save();
-      refresh();
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const data = JSON.parse(saved);
+          vehicles = data.vehicles || [];
+          drivers = data.drivers || [];
+          fuelCards = data.fuelCards || [];
+          contacts = data.contacts || [];
+        } else {
+          // First time: use embedded data
+          vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
+          drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
+          fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
+          contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
+          save();
+        }
+        refresh();
+      } catch (e) {
+        console.error(e);
+        refresh();
+      }
     }
 
     function load() {
