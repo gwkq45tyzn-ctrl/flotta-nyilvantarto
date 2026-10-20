@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flotta Nyilvántartó</title>
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   <style>
     :root {
       --bg: #f0f4f8;
@@ -832,31 +829,6 @@
       });
     }
 
-    // Firebase konfiguráció - cseréld ki a saját projekt adataidra
-    const FIREBASE_CONFIG = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-      projectId: "YOUR_PROJECT",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    let db = null;
-    let useFirebase = false;
-
-    try {
-      if (FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
-        firebase.initializeApp(FIREBASE_CONFIG);
-        db = firebase.database();
-        useFirebase = true;
-        console.log("Firebase connected");
-      }
-    } catch (e) {
-      console.warn("Firebase init failed, using localStorage", e);
-    }
-
     const EMBEDDED_DATA = {
       vehicles: [
         {
@@ -1373,9 +1345,9 @@
     };
 
     const SHEET_URLS = {
-      vehicles: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=0',
-      cards: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=1',
-      contacts: 'https://docs.google.com/spreadsheets/d/1G6xHDZi_BVb0idt3oj7qSMLFA0BNWq1KCuWSFKYL8XU/export?format=csv&gid=2'
+      vehicles: 'https://docs.google.com/spreadsheets/d/1UbOppkZyjMlUl__uXB4_sbWGSWAqxNu47oyMEhqyf5M/export?format=csv',
+      drivers: 'https://docs.google.com/spreadsheets/d/1OGq9CC7QJnIDRklknHB-vsv2QiJxPu3LE2JfvY5IE30/export?format=csv',
+      cards: 'https://docs.google.com/spreadsheets/d/1Z8aqMUIA-V_Kh3XzdfZ5eIzITkvGKqSXKbXIFTGrfEA/export?format=csv'
     };
 
     const STORAGE_KEY = 'flotta_nyilvantarto_v8';
@@ -1404,89 +1376,22 @@
     }
 
     async function loadFromSheets() {
-      try {
-        const [vRes, cRes, kRes] = await Promise.all([
-          fetch(SHEET_URLS.vehicles),
-          fetch(SHEET_URLS.cards),
-          fetch(SHEET_URLS.contacts)
-        ]);
-        if (!vRes.ok) throw new Error('vehicles not ok');
-        const vText = await vRes.text();
-        const vParsed = parseCSV(vText);
-        if (vParsed.length > 0) {
-          vehicles = vParsed.map((r, i) => ({
-            id: r.id || 'v' + (i+1),
-            rendszam: r.RENDSZÁM || r.rendszam || '',
-            gyartmany: (r.TÍPUS || '').split(' ')[0] || '',
-            modell: (r.TÍPUS || '').split(' ').slice(1).join(' ') || '',
-            currentDriver: r.HASZNÁLÓ || r['KI HASZNÁLJA'] || null,
-            berbeado: r.BÉRBEADÓ || '',
-            helyszin: r.HELY || '',
-            status: r.ÁLLAPOT || 'aktiv',
-            gumicsere: r.GUMICSERE || '',
-            muszakiLejarat: r.MŰSZAKI_LEJÁRAT || '',
-            kovetkezoSzervizDatum: r.KÖVETKEZŐ_SZERVIZ || '',
-            megjegyzes: r.MEGJEGYZÉS || '',
-            alvazszam: r.VIN || '',
-            history: []
-          }));
-        }
-        if (cRes.ok) {
-          const cText = await cRes.text();
-          const cParsed = parseCSV(cText);
-          fuelCards = cParsed.map((r, i) => ({
-            id: 'c' + (i+1),
-            number: r.KÁRTYASZÁM || r.number || '',
-            provider: r.SZOLGÁLTATÓ || 'MOL',
-            vehicle: r.JÁRMŰ || '',
-            note: r.PIN ? 'PIN: ' + r.PIN : '',
-            status: r.STÁTUSZ || 'aktiv'
-          }));
-        }
-        if (kRes.ok) {
-          const kText = await kRes.text();
-          const kParsed = parseCSV(kText);
-          contacts = kParsed.map((r, i) => ({
-            id: 'k' + (i+1),
-            ceg: r.CÉG || '',
-            nev: r.NÉV || '',
-            telefon: r.TELEFON || ''
-          }));
-        }
-        save();
-        refresh();
-      } catch (e) {
-        console.warn('Sheets load failed', e);
-      }
+      // Sheets loading disabled – using embedded real data only
+      console.log('Using embedded fleet data');
     }
 
     // Ensure data is always shown
     function init() {
-      loadFromLocal();
-      // loadFromSheets(); // kikapcsolva – ne írja felül a helyi adatokat
-    }
-
-    function loadFromLocal() {
       try {
-        // Try current key first, then older keys
-        let saved = localStorage.getItem(STORAGE_KEY);
-        if (!saved) {
-          for (const key of OLD_KEYS) {
-            saved = localStorage.getItem(key);
-            if (saved) {
-              console.log('Restored from old key:', key);
-              break;
-            }
-          }
-        }
+        const saved = localStorage.getItem(STORAGE_KEY) || OLD_KEYS.map(k => localStorage.getItem(k)).find(Boolean);
         if (saved) {
           const data = JSON.parse(saved);
           vehicles = data.vehicles || [];
           drivers = data.drivers || [];
           fuelCards = data.fuelCards || [];
           contacts = data.contacts || [];
-          save(); // migrate to current key
         } else {
+          // First time: use embedded data
           vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
           drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
           fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
@@ -1504,34 +1409,8 @@
       init();
     }
 
-    // Google Apps Script web app URL - ide jön a deployed script URL
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDBU7_QNpjzhyQ_zO6JiS6ssjV70DivkG6BADUhXA/exec";
-
-    function saveToSheet(type, rows) {
-      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_URL") return;
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, rows })
-      }).catch(e => console.warn("Sheet save failed", e));
-    }
-
     function save() {
-      const data = { vehicles, fuelCards, drivers, contacts };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      // Sync to Google Sheet
-      saveToSheet("vehicles", vehicles.map(v => [
-        v.rendszam || "", (v.gyartmany || "") + " " + (v.modell || ""), v.currentDriver || "",
-        v.berbeado || "", v.helyszin || "", v.status || "", v.gumicsere || "",
-        v.muszakiLejarat || "", v.kovetkezoSzervizDatum || "", v.megjegyzes || "", v.alvazszam || ""
-      ]));
-      saveToSheet("cards", fuelCards.map(c => [
-        c.number || "", c.provider || "", c.vehicle || "", c.note || "", c.status || "", ""
-      ]));
-      saveToSheet("contacts", contacts.map(c => [
-        c.ceg || "", c.nev || "", c.telefon || ""
-      ]));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
     }
 
     function uid() {
