@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flotta Nyilvántartó</title>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   <style>
     :root {
       --bg: #f0f4f8;
@@ -829,6 +832,31 @@
       });
     }
 
+    // Firebase konfiguráció - cseréld ki a saját projekt adataidra
+    const FIREBASE_CONFIG = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    let db = null;
+    let useFirebase = false;
+
+    try {
+      if (FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        db = firebase.database();
+        useFirebase = true;
+        console.log("Firebase connected");
+      }
+    } catch (e) {
+      console.warn("Firebase init failed, using localStorage", e);
+    }
+
     const EMBEDDED_DATA = {
       vehicles: [
         {
@@ -1381,6 +1409,45 @@
 
     // Ensure data is always shown
     function init() {
+      if (useFirebase && db) {
+        // Load from Firebase
+        db.ref('flotta').once('value').then(snap => {
+          const data = snap.val();
+          if (data && data.vehicles) {
+            vehicles = data.vehicles || [];
+            drivers = data.drivers || [];
+            fuelCards = data.fuelCards || [];
+            contacts = data.contacts || [];
+          } else {
+            // First time: seed with embedded data
+            vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
+            drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
+            fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
+            contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
+            save();
+          }
+          refresh();
+          // Listen for real-time changes
+          db.ref('flotta').on('value', snap2 => {
+            const d = snap2.val();
+            if (d) {
+              vehicles = d.vehicles || [];
+              drivers = d.drivers || [];
+              fuelCards = d.fuelCards || [];
+              contacts = d.contacts || [];
+              refresh();
+            }
+          });
+        }).catch(e => {
+          console.error("Firebase load error", e);
+          loadFromLocal();
+        });
+      } else {
+        loadFromLocal();
+      }
+    }
+
+    function loadFromLocal() {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
@@ -1390,7 +1457,6 @@
           fuelCards = data.fuelCards || [];
           contacts = data.contacts || [];
         } else {
-          // First time: use embedded data
           vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
           drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
           fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
@@ -1409,7 +1475,11 @@
     }
 
     function save() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
+      const data = { vehicles, fuelCards, drivers, contacts };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      if (useFirebase && db) {
+        db.ref('flotta').set(data).catch(e => console.error("Firebase save error", e));
+      }
     }
 
     function uid() {
