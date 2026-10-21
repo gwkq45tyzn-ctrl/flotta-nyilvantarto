@@ -1,0 +1,2250 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flotta Nyilvántartó</title>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --primary: #1d4ed8;
+      --primary-dark: #1e40af;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --text: #111827;
+      --border: #e2e8f0;
+      --muted: #64748b;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #e0e7ff 100%);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+      color: white;
+      padding: 2rem 2.5rem;
+      box-shadow: 0 4px 20px rgba(37, 99, 235, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -10%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    header h1 { margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; position: relative; }
+    header p { margin: 0.5rem 0 0; opacity: 0.95; font-size: 1rem; position: relative; }
+    .lang-switch {
+      position: absolute;
+      top: 1.5rem;
+      right: 2rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .lang-switch button {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 0.4rem 0.8rem;
+      font-size: 0.85rem;
+    }
+    .lang-switch button.active {
+      background: white;
+      color: #1e3a8a;
+      font-weight: 700;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--card);
+      padding: 1.5rem;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      border-left: 5px solid var(--primary);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .stat-card.danger { border-left-color: var(--danger); }
+    .stat-card.warning { border-left-color: var(--warning); }
+    .stat-card.success { border-left-color: var(--success); }
+    .stat-card h3 { margin: 0 0 0.5rem; font-size: 0.8rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat-card .value { font-size: 2rem; font-weight: 800; color: var(--text); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      background: var(--card);
+      padding: 1.25rem;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .toolbar input, .toolbar select {
+      padding: 0.65rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      background: #f8fafc;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .toolbar input:focus, .toolbar select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .toolbar input { flex: 1; min-width: 220px; }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.65rem 1.25rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    button:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    button.secondary { background: #64748b; }
+    button.secondary:hover { background: #475569; }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: #dc2626; }
+    button.success { background: var(--success); }
+    button.success:hover { background: #059669; }
+    .table-wrap {
+      background: var(--card);
+      border-radius: 16px;
+      overflow-x: auto;
+      overflow-y: visible;
+      box-shadow: var(--shadow);
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    th, td {
+      padding: 1rem 1.1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+      font-weight: 700;
+      color: #334155;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tr:hover td { background: #f8fafc; }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge.aktiv, .badge.ok { background: #d1fae5; color: #065f46; }
+    .badge.hasznalatban { background: #dbeafe; color: #1e40af; }
+    .badge.szerviz { background: #fef3c7; color: #92400e; }
+    .badge.leallitott { background: #fee2e2; color: #991b1b; }
+    .badge.eladva { background: #e2e8f0; color: #334155; }
+    .badge.overdue { background: #fee2e2; color: #991b1b; }
+    .badge.soon { background: #fef3c7; color: #92400e; }
+    .badge.ok-date { background: #d1fae5; color: #065f46; }
+    .actions button { padding: 0.4rem 0.75rem; font-size: 0.8rem; margin-right: 0.3rem; border-radius: 8px; }
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 760px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    }
+    .modal h2 { margin-top: 0; font-size: 1.5rem; color: #1e293b; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.1rem;
+    }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; color: #334155; }
+    .form-group input, .form-group select, .form-group textarea {
+      padding: 0.65rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      background: #f8fafc;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .form-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+    .alerts-section {
+      margin-top: 2rem;
+      background: var(--card);
+      padding: 1.75rem;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .alerts-section h2 { margin-top: 0; font-size: 1.35rem; color: #1e293b; }
+    .alert-item {
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .alert-item:last-child { border-bottom: none; }
+    @media (max-width: 700px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .stats { grid-template-columns: 1fr; }
+      .alert-item { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+      .alert-item .actions { width: 100%; justify-content: flex-end; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 0.5rem 0.4rem; }
+      .actions button { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="lang-switch">
+      <button id="btnHu" class="active" onclick="setLang('hu')">HU</button>
+      <button id="btnEn" onclick="setLang('en')">EN</button>
+    </div>
+    <h1 id="appTitle">Flotta Nyilvántartó</h1>
+    <p id="appSubtitle">Járművek nyilvántartása, állapot követés és lejárati dátumok figyelése</p>
+  </header>
+
+  <div class="container">
+    <div style="margin:0.6rem 0 1rem;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 2px 5px #0001;display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><strong id="syncStatus" role="status" aria-live="polite">Kapcsolódás...</strong><button type="button" class="secondary" onclick="configureBackend()">⚙️ Központi mentés beállítása</button><button type="button" class="secondary" onclick="exportData()">↓ JSON biztonsági mentés</button></div>
+    <div class="stats" id="stats"></div>
+
+    <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem;">
+      <div class="toolbar" style="margin-bottom:0;">
+        <input type="text" id="search" placeholder="Keresés rendszám, gyártmány, modell..." style="width:100%;">
+      </div>
+      <div style="text-align:center;">
+        <button class="success" data-i18n="reports" onclick="showReports()" style="font-weight:700; font-size:1.15rem; padding:1rem 3rem; min-width:260px; border-radius:12px;">📊 Riportok</button>
+      </div>
+    </div>
+
+    <!-- Figyelmeztetések (felülre) -->
+    <div class="alerts-section" style="border-left:5px solid #ef4444; background:linear-gradient(90deg, #fff7ed 0%, #ffffff 100%);">
+      <h2 style="color:#b45309;" data-i18n="alertsTitle">⚠️ Lejárati és állapot figyelmeztetések</h2>
+      <div id="alerts"></div>
+    </div>
+
+    <!-- Kiemelt Átadás / Visszaadás szekció -->
+    <div class="alerts-section" style="margin-top:1.5rem; border-left:5px solid #10b981; background:linear-gradient(90deg, #ecfdf5 0%, #ffffff 100%);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h2 style="margin:0; color:#065f46;" data-i18n="handoverTitle">📝 Átadás / Visszaadás rögzítése</h2>
+        <button class="success" data-i18n="handoverBtn" onclick="openHandoverModal()" style="font-weight:700; font-size:1rem; padding:0.75rem 1.5rem;">+ Új átadás / visszaadás</button>
+      </div>
+      <p style="margin:0; color:#047857; font-size:0.95rem;" data-i18n="handoverDesc">Itt rögzítheted, hogy ki vette át vagy adta le a járművet. A legutóbbi esemény megjelenik a jármű táblázatban is.</p>
+    </div>
+
+    <!-- Járművek -->
+    <div class="alerts-section" style="margin-top:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0;" data-i18n="vehicles">Járművek</h2>
+        <button data-i18n="newVehicle" onclick="openModal()">+ Új jármű</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="plate">Rendszám</th>
+              <th data-i18n="vehicle">Jármű</th>
+              <th data-i18n="driver">Használó</th>
+              <th>Bérbeadó</th>
+              <th>Gumicsere</th>
+              <th>VIN</th>
+              <th data-i18n="status">Állapot</th>
+              <th data-i18n="location">Hely</th>
+              <th data-i18n="technical">Műszaki</th>
+              <th>Következő szerviz</th>
+              <th data-i18n="note">Megjegyzés</th>
+              <th data-i18n="actions">Műveletek</th>
+            </tr>
+          </thead>
+          <tbody id="vehicleTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tankolókártyák -->
+    <div class="alerts-section" style="margin-top:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0;" data-i18n="cards">Tankolókártyák</h2>
+        <button data-i18n="newCard" onclick="openCardModal()">+ Új kártya</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="cardNo">Kártyaszám</th>
+              <th data-i18n="provider">Szolgáltató</th>
+              <th data-i18n="vehicle">Jármű</th>
+              <th data-i18n="expiry">Lejárat</th>
+              <th data-i18n="limitStatus">Limit / Státusz</th>
+              <th data-i18n="actions">Műveletek</th>
+            </tr>
+          </thead>
+          <tbody id="cardTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sofőrök -->
+    <div class="alerts-section" style="margin-top:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0;" data-i18n="drivers">Sofőrök</h2>
+        <button data-i18n="newDriver" onclick="openDriverModal()">+ Új sofőr</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="name">Név</th>
+              <th data-i18n="phone">Telefon</th>
+              <th data-i18n="license">Jogosítvány</th>
+              <th data-i18n="status">Státusz</th>
+              <th data-i18n="since">Mióta</th>
+              <th data-i18n="note">Megjegyzés</th>
+              <th data-i18n="actions">Műveletek</th>
+            </tr>
+          </thead>
+          <tbody id="driverTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h2 id="modalTitle">Új jármű</h2>
+      <form id="vehicleForm" onsubmit="saveVehicle(event)">
+        <input type="hidden" id="editId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Rendszám *</label>
+            <input type="text" id="rendszam" required placeholder="ABC-123">
+          </div>
+          <div class="form-group">
+            <label>Állapot</label>
+            <select id="status">
+              <option value="aktiv">Aktív</option>
+              <option value="szerviz">Szervizben</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Gyártmány</label>
+            <input type="text" id="gyartmany" placeholder="pl. Volkswagen">
+          </div>
+          <div class="form-group">
+            <label>Modell</label>
+            <input type="text" id="modell" placeholder="pl. Golf">
+          </div>
+          <div class="form-group">
+            <label>Évjárat</label>
+            <input type="number" id="evjarat" min="1990" max="2030" placeholder="2022">
+          </div>
+          <div class="form-group">
+            <label>Alvázszám (VIN)</label>
+            <input type="text" id="alvazszam">
+          </div>
+          <div class="form-group">
+            <label>Aktuális km</label>
+            <input type="number" id="km" min="0" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>Biztosítás száma</label>
+            <input type="text" id="biztositasSzam" placeholder="pl. 123456789">
+          </div>
+          <div class="form-group">
+            <label>Helyszín / Telephely</label>
+            <input type="text" id="helyszin">
+          </div>
+          <div class="form-group">
+            <label>Kötelező biztosítás lejárata</label>
+            <input type="date" id="biztositasLejarat">
+          </div>
+          <div class="form-group">
+            <label>Műszaki vizsga lejárata</label>
+            <input type="date" id="muszakiLejarat">
+          </div>
+          <div class="form-group">
+            <label>Casco lejárata</label>
+            <input type="date" id="cascoLejarat">
+          </div>
+          <div class="form-group">
+            <label>Következő szerviz (km)</label>
+            <input type="number" id="kovetkezoSzervizKm" min="0">
+          </div>
+          <div class="form-group">
+            <label>Következő szerviz (dátum és idő)</label>
+            <input type="datetime-local" id="kovetkezoSzervizDatum">
+          </div>
+          <div class="form-group">
+            <label>Gumicsere megtörtént</label>
+            <select id="gumicsere">
+              <option value="">—</option>
+              <option value="igen">Igen</option>
+              <option value="nem">Nem</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bérbeadó</label>
+            <input type="text" id="berbeado" placeholder="pl. FLOTTA BUSINESS">
+          </div>
+          <div class="form-group">
+            <label>Ki használja</label>
+            <input type="text" id="currentDriver" placeholder="pl. KEVIN">
+          </div>
+          <div class="form-group full">
+            <label>Megjegyzés</label>
+            <textarea id="megjegyzes" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" onclick="closeModal()">Mégse</button>
+          <button type="submit">Mentés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Driver Modal -->
+  <div class="modal-overlay" id="driverModal">
+    <div class="modal">
+      <h2 id="driverModalTitle">Új sofőr</h2>
+      <form id="driverForm" onsubmit="saveDriver(event)">
+        <input type="hidden" id="driverEditId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Név *</label>
+            <input type="text" id="driverName" required>
+          </div>
+          <div class="form-group">
+            <label>Telefon</label>
+            <input type="text" id="driverPhone">
+          </div>
+          <div class="form-group">
+            <label>Jogosítvány lejárat</label>
+            <input type="date" id="driverLicenseExpiry">
+          </div>
+          <div class="form-group">
+            <label>Státusz</label>
+            <select id="driverStatus">
+              <option value="aktiv">Aktív</option>
+              <option value="inaktiv">Inaktív</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Mióta</label>
+            <input type="date" id="driverSince">
+          </div>
+          <div class="form-group full">
+            <label>Megjegyzés</label>
+            <textarea id="driverNote" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" onclick="closeDriverModal()">Mégse</button>
+          <button type="submit">Mentés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Card Modal -->
+  <div class="modal-overlay" id="cardModal">
+    <div class="modal">
+      <h2 id="cardModalTitle">Új tankolókártya</h2>
+      <form id="cardForm" onsubmit="saveCard(event)">
+        <input type="hidden" id="cardEditId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Kártyaszám *</label>
+            <input type="text" id="cardNumber" required>
+          </div>
+          <div class="form-group">
+            <label>Szolgáltató</label>
+            <input type="text" id="cardProvider" placeholder="pl. MOL, Shell, OMV">
+          </div>
+          <div class="form-group">
+            <label>Hozzárendelt jármű</label>
+            <select id="cardVehicle">
+              <option value="">— nincs —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lejárat</label>
+            <input type="date" id="cardExpiry">
+          </div>
+          <div class="form-group">
+            <label>Havi limit (Ft / liter)</label>
+            <input type="text" id="cardLimit" placeholder="pl. 150 000 Ft">
+          </div>
+          <div class="form-group">
+            <label>Státusz</label>
+            <select id="cardStatus">
+              <option value="aktiv">Aktív</option>
+              <option value="inaktiv">Inaktív</option>
+              <option value="lezart">Lezárt</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Megjegyzés</label>
+            <textarea id="cardNote" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" onclick="closeCardModal()">Mégse</button>
+          <button type="submit">Mentés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reports Modal -->
+  <div class="modal-overlay" id="reportsModal">
+    <div class="modal" style="max-width:900px;">
+      <h2>Riportok</h2>
+      <div id="reportsContent" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="form-actions">
+        <button type="button" class="secondary" onclick="closeReports()">Bezárás</button>
+        <button onclick="downloadPDF()">Letöltés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Handover Modal -->
+  <div class="modal-overlay" id="handoverModal">
+    <div class="modal">
+      <h2>Átadás / Visszaadás rögzítése</h2>
+      <form id="handoverForm" onsubmit="saveHandover(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Jármű *</label>
+            <select id="hovVehicle" required>
+              <option value="">Válassz járművet...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Típus *</label>
+            <select id="hovType" required onchange="filterHandoverVehicles()">
+              <option value="atadas">Átadás (felvette)</option>
+              <option value="visszaadas">Visszaadás (leadta)</option>
+              <option value="szerviz">Szervizbe került</option>
+              <option value="szervizbol_vissza">Szervizből vissza érkezett</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ki vette át / adta le *</label>
+            <select id="hovWho" required>
+              <option value="">Válassz sofőrt...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Dátum *</label>
+            <input type="date" id="hovDate" required>
+          </div>
+          <div class="form-group">
+            <label>Km állás</label>
+            <input type="number" id="hovKm" min="0" placeholder="Opcionális">
+          </div>
+          <div class="form-group full">
+            <label>Megjegyzés</label>
+            <textarea id="hovNote" rows="2" placeholder="Cél, állapot, megjegyzés..."></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" onclick="closeHandoverModal()">Mégse</button>
+          <button type="submit">Rögzítés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal" style="max-width:800px;">
+      <h2 id="historyTitle">Előzmények</h2>
+      <div id="historyContent" style="max-height:60vh;overflow-y:auto;margin:1rem 0;"></div>
+      <div class="form-actions">
+        <button type="button" class="secondary" onclick="closeHistoryModal()">Bezárás</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Change Modal (for alerts) -->
+  <div class="modal-overlay" id="statusModal">
+    <div class="modal">
+      <h2 id="statusModalTitle">Státusz módosítása</h2>
+      <form id="statusForm" onsubmit="saveStatusChange(event)">
+        <input type="hidden" id="statusVehicleId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Új státusz</label>
+            <select id="newStatus" required>
+              <option value="aktiv">Aktív</option>
+              <option value="szerviz">Szervizben</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Szerviz időpont (dátum és óra)</label>
+            <input type="datetime-local" id="statusServiceTime">
+          </div>
+          <div class="form-group full">
+            <label>Megjegyzés</label>
+            <textarea id="statusNote" rows="3" placeholder="Miért változik a státusz? (pl. szerviz kész, fékcsere, stb.)"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" onclick="closeStatusModal()">Mégse</button>
+          <button type="submit">Mentés</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Filter Modal -->
+  <div class="modal-overlay" id="filterModal">
+    <div class="modal" style="max-width:900px;">
+      <h2 id="filterModalTitle">Járművek</h2>
+      <div id="filterModalContent" style="max-height:60vh;overflow-y:auto;"></div>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button type="button" class="secondary" onclick="closeFilterModal()">Bezárás</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const I18N = {
+      hu: {
+        title: 'Flotta Nyilvántartó',
+        subtitle: 'Járművek nyilvántartása, állapot követés és lejárati dátumok figyelése',
+        search: 'Keresés rendszám, gyártmány, modell...',
+        allStatus: 'Minden állapot',
+        reports: 'Riportok',
+        shareable: 'Megosztható verzió letöltése',
+        sample: 'Minta adatok',
+        export: 'Export JSON',
+        import: 'Import JSON',
+        alertsTitle: '⚠️ Lejárati és állapot figyelmeztetések',
+        handoverTitle: '📝 Átadás / Visszaadás rögzítése',
+        handoverBtn: '+ Új átadás / visszaadás',
+        handoverDesc: 'Itt rögzítheted, hogy ki vette át vagy adta le a járművet. A legutóbbi esemény megjelenik a jármű táblázatban is.',
+        vehicles: 'Járművek',
+        newVehicle: '+ Új jármű',
+        cards: 'Tankolókártyák',
+        newCard: '+ Új kártya',
+        drivers: 'Sofőrök',
+        newDriver: '+ Új sofőr',
+        statusAktiv: 'Aktív',
+        statusHasznalatban: 'Használatban',
+        statusSzerviz: 'Szervizben',
+        statusLeallitott: 'Leállított',
+        statusEladva: 'Eladva',
+        statusInactive: 'Inaktív',
+        overdue: 'Lejárt',
+        daysAgo: 'napja',
+        days: 'nap',
+        daysLater: 'nap múlva',
+        edit: 'Szerkesztés',
+        insurance: 'Kötelező biztosítás',
+        technical: 'Műszaki vizsga',
+        service: 'Szerviz',
+        noData: 'Nincs találat.',
+        history: 'Előzmények',
+        edit: 'Szerk.',
+        delete: 'Törlés',
+        actions: 'Műveletek',
+        plate: 'Rendszám',
+        vehicle: 'Jármű',
+        driver: 'Használó',
+        status: 'Állapot',
+        location: 'Hely',
+        insuranceNo: 'Biztosítás szám',
+        lastHandover: 'Utolsó átadás',
+        cardNo: 'Kártyaszám',
+        provider: 'Szolgáltató',
+        expiry: 'Lejárat',
+        limitStatus: 'Limit / Státusz',
+        name: 'Név',
+        phone: 'Telefon',
+        license: 'Jogosítvány',
+        since: 'Mióta',
+        note: 'Megjegyzés',
+        statTotal: 'Összes jármű',
+        statActive: 'Aktív / használatban',
+        statSoon: '30 napon belül lejár',
+        statOverdue: 'Lejárt',
+        contacts: 'Kapcsolatok',
+        reportsOpen: 'Megnyitás',
+        reportsDesc: 'Összesítő, lejáratok, állapotok áttekintése'
+      },
+      en: {
+        title: 'Fleet Manager',
+        subtitle: 'Vehicle registry, status tracking and expiration date monitoring',
+        search: 'Search plate, make, model...',
+        allStatus: 'All statuses',
+        reports: 'Reports',
+        shareable: 'Download shareable version',
+        sample: 'Sample data',
+        export: 'Export JSON',
+        import: 'Import JSON',
+        alertsTitle: '⚠️ Expiration and status alerts',
+        handoverTitle: '📝 Record handover / return',
+        handoverBtn: '+ New handover / return',
+        handoverDesc: 'Record who took or returned a vehicle. The latest event also appears in the vehicle table.',
+        vehicles: 'Vehicles',
+        newVehicle: '+ New vehicle',
+        cards: 'Fuel cards',
+        newCard: '+ New card',
+        drivers: 'Drivers',
+        newDriver: '+ New driver',
+        statusAktiv: 'Active',
+        statusHasznalatban: 'In use',
+        statusSzerviz: 'In service',
+        statusLeallitott: 'Stopped',
+        statusEladva: 'Sold',
+        statusInactive: 'Inactive',
+        overdue: 'Overdue',
+        daysAgo: 'days ago',
+        days: 'days',
+        daysLater: 'days later',
+        edit: 'Edit',
+        insurance: 'Compulsory insurance',
+        technical: 'Technical inspection',
+        service: 'Service',
+        noData: 'No results.',
+        history: 'History',
+        edit: 'Edit',
+        delete: 'Delete',
+        actions: 'Actions',
+        plate: 'Plate',
+        vehicle: 'Vehicle',
+        driver: 'Driver / User',
+        status: 'Status',
+        location: 'Location',
+        insuranceNo: 'Insurance no.',
+        lastHandover: 'Last handover',
+        cardNo: 'Card number',
+        provider: 'Provider',
+        expiry: 'Expiry',
+        limitStatus: 'Limit / Status',
+        name: 'Name',
+        phone: 'Phone',
+        license: 'License',
+        since: 'Since',
+        note: 'Note',
+        statTotal: 'Total vehicles',
+        statActive: 'Active / in use',
+        statSoon: 'Expiring within 30 days',
+        statOverdue: 'Overdue',
+        contacts: 'Contacts',
+        reportsOpen: 'Open',
+        reportsDesc: 'Overview of summary, expirations and statuses'
+      }
+    };
+
+    let currentLang = localStorage.getItem('flotta_lang') || 'hu';
+
+    function t(key) {
+      return (I18N[currentLang] && I18N[currentLang][key]) || key;
+    }
+
+    function setLang(lang) {
+      currentLang = lang;
+      localStorage.setItem('flotta_lang', lang);
+      document.getElementById('btnHu').classList.toggle('active', lang === 'hu');
+      document.getElementById('btnEn').classList.toggle('active', lang === 'en');
+      applyTranslations();
+      refresh();
+    }
+
+    function applyTranslations() {
+      document.getElementById('appTitle').textContent = t('title');
+      document.getElementById('appSubtitle').textContent = t('subtitle');
+      document.title = t('title');
+      // Toolbar
+      const search = document.getElementById('search');
+      if (search) search.placeholder = t('search');
+      // Buttons by text or add data-i18n later if needed
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.getAttribute('data-i18n'));
+      });
+    }
+
+    const EMBEDDED_DATA = {"vehicles":[{"id":"v1","rendszam":"AALO562","gyartmany":"SEAT","modell":"","currentDriver":"KECSKÉS LÁSZLÓ","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-22T09:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v2","rendszam":"AIIW449","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"KEVIN","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v3","rendszam":"AOFS814","gyartmany":"OPEL","modell":"3.5T","currentDriver":"CDC LineHaul CAR","berbeado":"LOGIXPRESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-11-02T12:00","megjegyzes":"0w30-as olaj kell bele","alvazszam":"VXEYCF6FXSG029086","history":[]},{"id":"v4","rendszam":"AOJT264","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v5","rendszam":"AOJT265","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v6","rendszam":"AOKF960","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v7","rendszam":"AOKF961","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v8","rendszam":"AOML734","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"MIRA","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v9","rendszam":"AOML735","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"PETER PAN","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v10","rendszam":"PHW651","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"IKA","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-26T13:00","megjegyzes":"HÁTSÓ LÁMPA KIÉGETT, JOBB TÜKÖR TÖRÖTT","alvazszam":"WV1ZZZ2KZHX157959","history":[]},{"id":"v11","rendszam":"PHW683","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-27T10:00","megjegyzes":"","alvazszam":"WV1ZZZ2KZHX155586","history":[]},{"id":"v12","rendszam":"PHW803","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-30T13:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v13","rendszam":"PPE951","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-29T13:00","megjegyzes":"","alvazszam":"WF0RXXGAKREJ43894","history":[]},{"id":"v14","rendszam":"RXR311","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-28T13:00","megjegyzes":"OLAJCSERE SZÜKSÉGES","alvazszam":"WF0RXXGAKRFJ86120","history":[]},{"id":"v15","rendszam":"TGW763","gyartmany":"SEAT","modell":"","currentDriver":"MISKI FERENC","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"téli gumicsere kész","alvazszam":"","history":[]}],"fuelCards":[{"id":"c1","number":"7080059206485702","provider":"MOL","vehicle":"AALO562","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c2","number":"7080059206724985","provider":"MOL","vehicle":"AOFS814","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c3","number":"7080059206824983","provider":"MOL","vehicle":"AOJT264","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c4","number":"7080059206818944","provider":"MOL","vehicle":"AOJT265","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c5","number":"7080059007556040","provider":"MOL","vehicle":"AOKF960","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c6","number":"7080059206850152","provider":"MOL","vehicle":"AOKF961","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c7","number":"7080059206450532","provider":"MOL","vehicle":"AOML734","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c8","number":"7080059206450540","provider":"MOL","vehicle":"AOML735","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c9","number":"7080059206724928","provider":"MOL","vehicle":"PHW651","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c10","number":"7080059206724969","provider":"MOL","vehicle":"PHW683","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c11","number":"7080059206724944","provider":"MOL","vehicle":"PHW803","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c12","number":"7080059206825899","provider":"MOL","vehicle":"PPE951","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c13","number":"7080059206786505","provider":"MOL","vehicle":"RXR311","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c14","number":"7080059206485686","provider":"MOL","vehicle":"TGW763","status":"aktiv","note":"","expiry":"","limit":""}],"drivers":[],"contacts":[{"id":"k1","ceg":"PACSA","nev":"NAGY GÁBOR","telefon":"+36209373867"},{"id":"k2","ceg":"DAM","nev":"CSABA SÁNDOR","telefon":"+36203256210"},{"id":"k3","ceg":"FLOTTA CAR","nev":"ISTVÁN","telefon":"+36303921418"},{"id":"k4","ceg":"","nev":"?","telefon":"+36307898057"},{"id":"k5","ceg":"OPEL","nev":"FADL GÁBOR","telefon":"+36709300923"}]};
+
+    const SHEET_URLS = {};
+
+    const STORAGE_KEY = 'flotta_nyilvantarto_v16';
+    let vehicles = [];
+    let fuelCards = [];
+    let drivers = [];
+    let contacts = [];
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return [];
+      const headers = lines[0].split(',').map(h => h.trim());
+      return lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
+        const obj = {};
+        headers.forEach((h, i) => {
+          obj[h] = values[i] || '';
+        });
+        // Convert numbers
+        if (obj.km) obj.km = Number(obj.km) || null;
+        if (obj.evjarat) obj.evjarat = Number(obj.evjarat) || null;
+        if (obj.kovetkezoSzervizKm) obj.kovetkezoSzervizKm = Number(obj.kovetkezoSzervizKm) || null;
+        return obj;
+      });
+    }
+
+    // Flotta központi szinkronizálás – v16; PIN-eket nem tartalmaz.
+    const CLOUD_URL_KEY = 'flotta_backend_url_v16';
+    const PENDING_KEY = 'flotta_pending_v16';
+    const VERSION_KEY = 'flotta_version_v16';
+    const DEFAULT_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby-k2gEFShA4ULWiuQC80Rrgy29c7D4pZLkv7B9PjEAV_m6IdGuIspgKnW5eF9qcUDK/exec';
+    let backendUrl = (DEFAULT_BACKEND_URL.startsWith('https://') ? DEFAULT_BACKEND_URL : '') || localStorage.getItem(CLOUD_URL_KEY) || '';
+    let remoteVersion = Number(localStorage.getItem(VERSION_KEY)||'0');
+    let syncInProgress = false, dirty = false;
+    let pendingTimer = null;
+    function statusMessage(text, error=false) {
+      const el=document.getElementById('syncStatus');
+      if (el) { el.textContent=text; el.style.color=error?'#b91c1c':'#065f46'; }
+    }
+    function snapshot() { return JSON.parse(JSON.stringify({vehicles,fuelCards,drivers,contacts})); }
+    function applySnapshot(d) {
+      vehicles=d.vehicles||[]; fuelCards=d.fuelCards||[]; drivers=d.drivers||[]; contacts=d.contacts||[];
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot())); refresh();
+    }
+    function safeJsonp(url) {
+      return new Promise((resolve,reject)=>{
+        const callback='flottaCb'+Math.random().toString(36).slice(2);
+        const script=document.createElement('script');
+        const timeout=setTimeout(()=>{finish();reject(Error('A központi adatkapcsolat időtúllépés miatt megszakadt.'));},12000);
+        function finish(){ clearTimeout(timeout); delete window[callback]; script.remove(); }
+        window[callback]=(value)=>{finish();resolve(value);};
+        script.onerror=()=>{finish();reject(Error('A szerver nem érhető el.'));};
+        script.src=url+(url.includes('?')?'&':'?')+'callback='+callback+'&_='+Date.now();
+        document.head.appendChild(script);
+      });
+    }
+    async function pullRemote(silent=false) {
+      if(!backendUrl || syncInProgress || dirty) return;
+      try {
+        const reply=await safeJsonp(backendUrl);
+        if(!reply.ok) throw Error(reply.error||'Betöltési hiba');
+        if(Number(reply.version)>remoteVersion){
+          applySnapshot(reply.data);
+          remoteVersion=Number(reply.version);
+          localStorage.setItem(VERSION_KEY,String(remoteVersion));
+        }
+        if(!silent) statusMessage('Központi kapcsolat aktív · verzió '+remoteVersion);
+      } catch(err){statusMessage('Nincs központi kapcsolat: '+err.message,true);}
+    }
+    function configureBackend() {
+      const url=prompt('Illeszd be a Google Apps Script webalkalmazás /exec végű címét:',backendUrl);
+      if(url===null) return;
+      const value=url.trim();
+      if(value && !/^https:\/\/script\.google\.com\/macros\/s\/[^/?]+\/exec(?:\?.*)?$/.test(value)) {
+        alert('Hibás Apps Script URL.');return;
+      }
+      backendUrl=value;localStorage.setItem(CLOUD_URL_KEY,value);
+      remoteVersion=0;localStorage.removeItem(VERSION_KEY);
+      if(!value){statusMessage('Csak helyi mentés – megosztás nem aktív',true);return;}
+      if(dirty){statusMessage('Nem mentett helyi módosítás; előbb mentsd a JSON biztonsági másolatot.',true);return;}
+      pullRemote();
+    }
+    function save() {
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot()));
+      dirty=true;localStorage.setItem(PENDING_KEY,JSON.stringify(snapshot()));
+      statusMessage('Helyi mentés kész · központi mentés folyamatban…');
+      if(pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer=setTimeout(pushRemote,350);
+    }
+    async function pushRemote() {
+      if(!backendUrl){statusMessage('Csak helyi mentés – központi mentés nincs beállítva',true);return;}
+      if(syncInProgress) {pendingTimer=setTimeout(pushRemote,1200);return;}
+      syncInProgress=true;
+      const draft=snapshot();
+      const payload={action:'save',baseVersion:remoteVersion,requestId:'r'+Date.now()+'_'+Math.random().toString(36).slice(2),data:draft};
+      try{
+        // no-cors POST response is opaque; success is confirmed separately through JSONP readback.
+        await fetch(backendUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload)});
+        let confirmed=false;
+        for(let attempt=0;attempt<5;attempt++){
+          await new Promise(r=>setTimeout(r,550+attempt*500));
+          const check=await safeJsonp(backendUrl);
+          if(check.ok && check.requestId===payload.requestId){
+            confirmed=true;remoteVersion=Number(check.version);
+            localStorage.setItem(VERSION_KEY,String(remoteVersion));
+            // Another local edit may have occurred while this request was in flight.
+            if(JSON.stringify(snapshot())===JSON.stringify(draft)){
+              dirty=false;localStorage.removeItem(PENDING_KEY);
+              statusMessage('Minden módosítás elmentve a központi adatbázisba ✓');
+            }
+            break;
+          }
+          if(check.ok && Number(check.version)>remoteVersion){
+            statusMessage('Ütközés: más is módosította az adatokat. A helyi változat megmaradt; exportáld a JSON-t, majd egyeztesd az eltérést.',true);
+            return;
+          }
+        }
+        if(!confirmed) throw Error('A szerver nem igazolta a mentést.');
+      }catch(err){statusMessage('A központi mentés nem sikerült; a helyi másolat megmaradt: '+err.message,true);}
+      finally{
+        syncInProgress=false;
+        if(dirty && !localStorage.getItem(PENDING_KEY)) dirty=false;
+      }
+    }
+    function init() {
+      try{
+        const saved=localStorage.getItem(STORAGE_KEY);
+        const backup=localStorage.getItem(PENDING_KEY);
+        const d=backup?JSON.parse(backup):(saved?JSON.parse(saved):EMBEDDED_DATA);
+        applySnapshot(d);
+        dirty=Boolean(backup);
+        if(dirty)statusMessage('Van nem szinkronizált helyi módosítás. A JSON exporttal mentsd el, mielőtt frissítenél.',true);
+        else if(backendUrl)pullRemote();
+        else statusMessage('Helyi működés · a központi kapcsolat beállításra vár',true);
+      }catch(err){applySnapshot(EMBEDDED_DATA);statusMessage('Helyi visszaállítás szükséges: '+err.message,true);}
+      setInterval(()=>{if(!dirty)pullRemote(true);},7000);
+      window.addEventListener('focus',()=>{if(!dirty)pullRemote(true);});
+    }
+    function load(){init();}
+
+    function uid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function daysUntil(dateStr) {
+      if (!dateStr) return null;
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const d = new Date(dateStr);
+      d.setHours(0,0,0,0);
+      return Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+    }
+
+    function dateBadge(dateStr) {
+      const days = daysUntil(dateStr);
+      if (days === null) return '<span class="badge">—</span>';
+      if (days < 0) return `<span class="badge overdue">${t('overdue')} (${Math.abs(days)} ${t('daysAgo')})</span>`;
+      if (days <= 30) return `<span class="badge soon">${days} ${t('days')}</span>`;
+      return `<span class="badge ok-date">${days} ${t('days')}</span>`;
+    }
+
+    function statusLabel(s) {
+      const map = {
+        aktiv: t('statusAktiv'),
+        hasznalatban: t('statusHasznalatban'),
+        szerviz: t('statusSzerviz'),
+        leallitott: t('statusLeallitott'),
+        eladva: t('statusEladva')
+      };
+      return map[s] || s;
+    }
+
+    function renderStats() {
+      const total = vehicles.length;
+      const active = vehicles.filter(v => v.status === 'aktiv').length;
+      const szerviz = vehicles.filter(v => v.status === 'szerviz').length;
+      let overdue = 0;
+      let soon = 0;
+      vehicles.forEach(v => {
+        ['biztositasLejarat','muszakiLejarat','cascoLejarat'].forEach(k => {
+          const d = daysUntil(v[k]);
+          if (d !== null) {
+            if (d < 0) overdue++;
+            else if (d <= 30) soon++;
+          }
+        });
+      });
+      document.getElementById('stats').innerHTML = `
+        <div class="stat-card" onclick="filterByStat('all')" style="cursor:pointer;"><h3>${t('statTotal')}</h3><div class="value">${total}</div></div>
+        <div class="stat-card success" onclick="filterByStat('active')" style="cursor:pointer;"><h3>${t('statActive')}</h3><div class="value">${active}</div></div>
+        <div class="stat-card" onclick="filterByStat('szerviz')" style="cursor:pointer; border-left-color:#f59e0b;"><h3>${t('statusSzerviz')}</h3><div class="value">${szerviz}</div></div>
+        <div class="stat-card warning" onclick="filterByStat('soon')" style="cursor:pointer;"><h3>${t('statSoon')}</h3><div class="value">${soon}</div></div>
+        <div class="stat-card danger" onclick="filterByStat('overdue')" style="cursor:pointer;"><h3>${t('statOverdue')}</h3><div class="value">${overdue}</div></div>
+        <div class="stat-card" onclick="showContacts()" style="cursor:pointer; border-left-color:#6366f1;"><h3>${t('contacts')}</h3><div class="value">${contacts.length}</div></div>
+      `;
+    }
+
+    function showContacts() {
+      document.getElementById('filterModalTitle').textContent = `${t('contacts')} (${contacts.length})`;
+      const container = document.getElementById('filterModalContent');
+      if (contacts.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;text-align:center;padding:2rem;">Nincs kapcsolat.</p>';
+      } else {
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cég / Szolgáltató</th>
+                  <th>Név</th>
+                  <th>Telefon</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${contacts.map(c => `
+                  <tr>
+                    <td><strong>${c.ceg || '—'}</strong></td>
+                    <td>${c.nev || '—'}</td>
+                    <td><a href="tel:${c.telefon}">${c.telefon || '—'}</a></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+      document.getElementById('filterModal').classList.add('active');
+    }
+
+    function showCardsList() {
+      document.getElementById('filterModalTitle').textContent = `Tankolókártyák (${fuelCards.length})`;
+      const container = document.getElementById('filterModalContent');
+      if (fuelCards.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;text-align:center;padding:2rem;">Nincs tankolókártya.</p>';
+      } else {
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kártyaszám</th>
+                  <th>Szolgáltató</th>
+                  <th>Jármű</th>
+                  <th>Lejárat</th>
+                  <th>Limit / Státusz</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${fuelCards.map(c => `
+                  <tr>
+                    <td><strong>${c.number}</strong></td>
+                    <td>${c.provider || '—'}</td>
+                    <td>${c.vehicle || '—'}</td>
+                    <td>${dateBadge(c.expiry)}</td>
+                    <td>${c.limit || '—'}<br><span class="badge ${c.status === 'aktiv' ? 'ok' : 'leallitott'}">${c.status === 'aktiv' ? t('statusAktiv') : t('statusLeallitott')}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+      document.getElementById('filterModal').classList.add('active');
+    }
+
+    function showDriversList() {
+      document.getElementById('filterModalTitle').textContent = `Sofőrök (${drivers.length})`;
+      const container = document.getElementById('filterModalContent');
+      if (drivers.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;text-align:center;padding:2rem;">Nincs sofőr.</p>';
+      } else {
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Név</th>
+                  <th>Telefon</th>
+                  <th>Jogosítvány</th>
+                  <th>Státusz</th>
+                  <th>Mióta</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${drivers.map(d => `
+                  <tr>
+                    <td><strong>${d.name}</strong></td>
+                    <td>${d.phone || '—'}</td>
+                    <td>${dateBadge(d.licenseExpiry)}</td>
+                    <td><span class="badge ${d.status === 'aktiv' ? 'ok' : 'leallitott'}">${d.status === 'aktiv' ? t('statusAktiv') : t('statusInactive')}</span></td>
+                    <td>${d.since || '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+      document.getElementById('filterModal').classList.add('active');
+    }
+
+    let currentStatFilter = null;
+
+    function filterByStat(type) {
+      currentStatFilter = type;
+      let filtered = [...vehicles];
+      let title = 'Összes jármű';
+
+      if (type === 'active') {
+        filtered = vehicles.filter(v => v.status === 'aktiv');
+        title = 'Aktív';
+      } else if (type === 'szerviz') {
+        filtered = vehicles.filter(v => v.status === 'szerviz');
+        title = 'Szervizben';
+      } else if (type === 'soon') {
+        filtered = vehicles.filter(v => {
+          return ['biztositasLejarat','muszakiLejarat','cascoLejarat'].some(k => {
+            const d = daysUntil(v[k]);
+            return d !== null && d >= 0 && d <= 30;
+          });
+        });
+        title = '30 napon belül lejár';
+      } else if (type === 'overdue') {
+        filtered = vehicles.filter(v => {
+          return ['biztositasLejarat','muszakiLejarat','cascoLejarat'].some(k => {
+            const d = daysUntil(v[k]);
+            return d !== null && d < 0;
+          });
+        });
+        title = 'Lejárt';
+      }
+
+      document.getElementById('filterModalTitle').textContent = title + ` (${filtered.length})`;
+      const container = document.getElementById('filterModalContent');
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;text-align:center;padding:2rem;">Nincs találat.</p>';
+      } else {
+        const showDriver = (type !== 'szerviz');
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rendszám</th>
+                  <th>Jármű</th>
+                  <th>Állapot</th>
+                  <th>Hely</th>
+                  ${showDriver ? '<th>Sofőr</th><th>Dátum</th>' : ''}
+                  <th>Biztosítás</th>
+                  <th>Műszaki</th>
+                  <th>Kártya</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filtered.map(v => {
+                  const card = fuelCards.find(c => c.vehicle === v.rendszam);
+                  const driverName = v.currentDriver || '—';
+                  const dateInfo = v.currentSince ? new Date(v.currentSince).toLocaleString('hu-HU') : (v.statusSince || '—');
+                  return `
+                  <tr>
+                    <td><strong>${v.rendszam}</strong></td>
+                    <td>${v.gyartmany || ''} ${v.modell || ''}</td>
+                    <td><span class="badge ${v.status}">${statusLabel(v.status)}</span></td>
+                    <td>${v.helyszin || '—'}</td>
+                    ${showDriver ? `<td>${driverName}</td><td>${dateInfo}</td>` : ''}
+                    <td>${dateBadge(v.biztositasLejarat)}</td>
+                    <td>${dateBadge(v.muszakiLejarat)}</td>
+                    <td>${card ? card.number + '<br><small>' + (card.provider || '') + '</small>' : '—'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      document.getElementById('filterModal').classList.add('active');
+    }
+
+    function closeFilterModal() {
+      document.getElementById('filterModal').classList.remove('active');
+    }
+
+    document.getElementById('filterModal').addEventListener('click', (e) => {
+      if (e.target.id === 'filterModal') closeFilterModal();
+    });
+
+    function getLastHandover(v) {
+      if (!v.history || v.history.length === 0) return '—';
+      const last = [...v.history].sort((a,b) => (b.date || '').localeCompare(a.date || ''))[0];
+      if (!last) return '—';
+      const typeText = last.type === 'atadas' ? 'Átvette' : 
+                       (last.type === 'visszaadas' ? 'Leadta' : 
+                       (last.type === 'szerviz' ? 'Szervizbe' : 
+                       (last.type === 'szervizbol_vissza' ? 'Szervizből vissza' : last.type)));
+      return `<small>${last.date}<br>${typeText}: ${last.who || '—'}</small>`;
+    }
+
+    function renderTable() {
+      const q = document.getElementById('search').value.toLowerCase();
+      const filtered = vehicles.filter(v => {
+        const text = `${v.rendszam} ${v.gyartmany||''} ${v.modell||''} ${v.helyszin||''} ${v.biztositasSzam||''}`.toLowerCase();
+        return !q || text.includes(q);
+      });
+
+      const tbody = document.getElementById('vehicleTable');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#6b7280;padding:2rem;">Nincs találat.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(v => `
+        <tr>
+          <td><strong>${v.rendszam}</strong></td>
+          <td>${v.gyartmany || '—'} ${v.modell || ''}</td>
+          <td>${v.currentDriver || '—'}</td>
+          <td>${v.berbeado || '—'}</td>
+          <td>${v.gumicsere === 'igen' ? '<span class="badge ok">Igen</span>' : v.gumicsere === 'nem' ? '<span class="badge leallitott">Nem</span>' : '—'}</td>
+          <td style="font-size:0.8rem;">${v.alvazszam || '—'}</td>
+          <td><span class="badge ${v.status}">${statusLabel(v.status)}</span></td>
+          <td>${v.helyszin || '—'}</td>
+          <td>${dateBadge(v.muszakiLejarat)}</td>
+          <td>${v.kovetkezoSzervizDatum ? v.kovetkezoSzervizDatum.replace('T', ' ') : '—'}</td>
+          <td style="max-width:220px; white-space:normal; font-size:0.85rem;">${v.megjegyzes || '—'}</td>
+          <td class="actions">
+            <button onclick="showHistory('${v.id}')">${t('history')}</button>
+            <button onclick="editVehicle('${v.id}')">${t('edit')}</button>
+            <button class="danger" onclick="deleteVehicle('${v.id}')">${t('delete')}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openStatusModal(id) {
+      const v = vehicles.find(x => x.id === id);
+      if (!v) return;
+      document.getElementById('statusVehicleId').value = id;
+      document.getElementById('statusModalTitle').textContent = `Státusz – ${v.rendszam}`;
+      document.getElementById('newStatus').value = v.status || 'aktiv';
+      document.getElementById('statusNote').value = '';
+      document.getElementById('statusModal').classList.add('active');
+    }
+
+    function closeStatusModal() {
+      document.getElementById('statusModal').classList.remove('active');
+    }
+
+    function saveStatusChange(e) {
+      e.preventDefault();
+      const id = document.getElementById('statusVehicleId').value;
+      const v = vehicles.find(x => x.id === id);
+      if (!v) return;
+      const oldStatus = v.status;
+      const newStatus = document.getElementById('newStatus').value;
+      const note = document.getElementById('statusNote').value.trim();
+      const serviceTime = document.getElementById('statusServiceTime').value;
+
+      v.status = newStatus;
+      v.statusSince = new Date().toISOString().slice(0,10);
+      if (note) v.megjegyzes = note;
+      if (serviceTime) v.kovetkezoSzervizDatum = serviceTime;
+
+      ensureHistory(v);
+      v.history.push({
+        id: uid(),
+        type: 'status',
+        date: v.statusSince,
+        note: `Státusz: ${statusLabel(oldStatus)} → ${statusLabel(newStatus)}${note ? ' | ' + note : ''}${serviceTime ? ' | Időpont: ' + serviceTime.replace('T',' ') : ''}`,
+        recordedAt: new Date().toISOString()
+      });
+
+      save();
+      closeStatusModal();
+      refresh();
+    }
+
+    document.getElementById('statusModal').addEventListener('click', (e) => {
+      if (e.target.id === 'statusModal') closeStatusModal();
+    });
+
+    function quickStatusChange(id, newStatus) {
+      const v = vehicles.find(x => x.id === id);
+      if (!v) return;
+      const oldStatus = v.status;
+      v.status = newStatus;
+      v.statusSince = new Date().toISOString().slice(0,10);
+      ensureHistory(v);
+      v.history.push({
+        id: uid(),
+        type: 'status',
+        date: v.statusSince,
+        note: `Státusz: ${statusLabel(oldStatus)} → ${statusLabel(newStatus)}`,
+        recordedAt: new Date().toISOString()
+      });
+      save();
+      refresh();
+    }
+
+    function renderAlerts() {
+      const items = [];
+      const LONG_DAYS = 14;
+
+      // Jármű lejáratok
+      vehicles.forEach(v => {
+        const checks = [
+          { key: 'biztositasLejarat', label: t('insurance') },
+          { key: 'muszakiLejarat', label: t('technical') },
+          { key: 'cascoLejarat', label: 'Casco' },
+          { key: 'kovetkezoSzervizDatum', label: t('service') }
+        ];
+        checks.forEach(c => {
+          const days = daysUntil(v[c.key]);
+          if (days !== null && days <= 60) {
+            items.push({
+              type: 'expiry',
+              id: v.id,
+              rendszam: v.rendszam,
+              label: c.label,
+              days,
+              date: v[c.key],
+              priority: days < 0 ? 0 : days
+            });
+          }
+        });
+
+        if ((v.status === 'szerviz' || v.status === 'leallitott') && v.statusSince) {
+          const daysSince = Math.abs(daysUntil(v.statusSince) || 0);
+          if (daysSince >= LONG_DAYS) {
+            items.push({
+              type: 'downtime',
+              id: v.id,
+              rendszam: v.rendszam,
+              status: statusLabel(v.status),
+              label: `${daysSince} ${t('daysAgo')}`,
+              reason: v.megjegyzes || '',
+              days: daysSince,
+              date: v.statusSince,
+              priority: 100 + daysSince
+            });
+          }
+        }
+      });
+
+      // Tankolókártya lejáratok
+      fuelCards.forEach(c => {
+        const days = daysUntil(c.expiry);
+        if (days !== null && days <= 60) {
+          items.push({
+            type: 'card',
+            rendszam: c.vehicle || c.number,
+            label: `Tankolókártya ${c.number}`,
+            days,
+            date: c.expiry,
+            priority: days < 0 ? 0 : days
+          });
+        }
+      });
+
+      // Sofőr jogosítvány
+      drivers.forEach(d => {
+        const days = daysUntil(d.licenseExpiry);
+        if (days !== null && days <= 60) {
+          items.push({
+            type: 'driver',
+            rendszam: d.name,
+            label: 'Jogosítvány',
+            days,
+            date: d.licenseExpiry,
+            priority: days < 0 ? 0 : days
+          });
+        }
+      });
+
+      items.sort((a, b) => a.priority - b.priority);
+
+      const container = document.getElementById('alerts');
+      if (items.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;">Nincs közelgő lejárat vagy hosszú ideje nem üzemelő jármű.</p>';
+        return;
+      }
+      container.innerHTML = items.map(i => {
+        if (i.type === 'downtime') {
+          return `<div class="alert-item" style="background:#fff7ed;">
+            <div style="flex:1;">
+              <strong>${i.rendszam}</strong> — ${i.status} 
+              <span class="badge soon">${i.days} ${t('daysAgo')}</span>
+              ${i.reason ? `<div style="margin-top:0.25rem;color:#92400e;font-size:0.9rem;">${i.reason}</div>` : ''}
+            </div>
+            <small style="color:#6b7280;margin-right:1rem;">${i.date}</small>
+            <div class="actions" style="display:flex;gap:0.4rem;">
+              <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
+            </div>
+          </div>`;
+        }
+        const cls = i.days < 0 ? 'overdue' : (i.days <= 30 ? 'soon' : 'ok-date');
+        const text = i.days < 0 ? `${t('overdue')} ${Math.abs(i.days)} ${t('daysAgo')}` : `${i.days} ${t('daysLater')}`;
+        const prefix = i.type === 'card' ? '💳 ' : (i.type === 'driver' ? '👤 ' : '');
+        const actions = i.id ? `
+          <div class="actions" style="display:flex;gap:0.4rem;margin-left:0.75rem;">
+            <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
+          </div>` : '';
+        return `<div class="alert-item">
+          <div style="flex:1;">${prefix}<strong>${i.rendszam}</strong> — ${i.label} <span class="badge ${cls}">${text}</span></div>
+          <small style="color:#6b7280;margin-right:0.5rem;">${i.date}</small>
+          ${actions}
+        </div>`;
+      }).join('');
+    }
+
+    function ensureDriverHistory(d) {
+      if (!d.history) d.history = [];
+    }
+
+    function showDriverHistory(id) {
+      const d = drivers.find(x => x.id === id);
+      if (!d) return;
+      ensureDriverHistory(d);
+      document.getElementById('historyTitle').textContent = `Előzmények – ${d.name}`;
+      const container = document.getElementById('historyContent');
+      if (d.history.length === 0) {
+        container.innerHTML = '<p style="color:#6b7280;">Még nincs előzmény.</p>';
+      } else {
+        const sorted = [...d.history].sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+        container.innerHTML = sorted.map(h => `
+          <div style="padding:0.75rem 0;border-bottom:1px solid #e2e8f0;">
+            <strong>${h.date || '—'}</strong> · ${h.type === 'status' ? 'Státuszváltozás' : (h.type || 'Megjegyzés')}
+            ${h.note ? `<div style="margin-top:0.25rem;color:#475569;">${h.note}</div>` : ''}
+          </div>
+        `).join('');
+      }
+      document.getElementById('historyModal').classList.add('active');
+    }
+
+    function renderDrivers() {
+      const tbody = document.getElementById('driverTable');
+      if (drivers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:1.5rem;">Nincs sofőr. Adj hozzá egyet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = drivers.map(d => `
+        <tr>
+          <td><strong>${d.name}</strong></td>
+          <td>${d.phone || '—'}</td>
+          <td>${dateBadge(d.licenseExpiry)}</td>
+          <td><span class="badge ${d.status === 'aktiv' ? 'ok' : 'leallitott'}">${d.status === 'aktiv' ? t('statusAktiv') : t('statusInactive')}</span></td>
+          <td>${d.since || '—'}</td>
+          <td>${d.note || '—'}</td>
+          <td class="actions">
+            <button onclick="showDriverHistory('${d.id}')">${t('history')}</button>
+            <button onclick="editDriver('${d.id}')">${t('edit')}</button>
+            <button class="danger" onclick="deleteDriver('${d.id}')">${t('delete')}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openDriverModal(id = null) {
+      document.getElementById('driverModal').classList.add('active');
+      document.getElementById('driverForm').reset();
+      document.getElementById('driverEditId').value = '';
+      document.getElementById('driverModalTitle').textContent = 'Új sofőr';
+      if (id) {
+        const d = drivers.find(x => x.id === id);
+        if (!d) return;
+        document.getElementById('driverModalTitle').textContent = 'Sofőr szerkesztése';
+        document.getElementById('driverEditId').value = d.id;
+        document.getElementById('driverName').value = d.name || '';
+        document.getElementById('driverPhone').value = d.phone || '';
+        document.getElementById('driverLicenseExpiry').value = d.licenseExpiry || '';
+        document.getElementById('driverStatus').value = d.status || 'aktiv';
+        document.getElementById('driverSince').value = d.since || '';
+        document.getElementById('driverNote').value = d.note || '';
+      }
+    }
+
+    function closeDriverModal() {
+      document.getElementById('driverModal').classList.remove('active');
+    }
+
+    function saveDriver(e) {
+      e.preventDefault();
+      const id = document.getElementById('driverEditId').value || uid();
+      const data = {
+        id,
+        name: document.getElementById('driverName').value.trim(),
+        phone: document.getElementById('driverPhone').value.trim(),
+        licenseExpiry: document.getElementById('driverLicenseExpiry').value || null,
+        status: document.getElementById('driverStatus').value,
+        since: document.getElementById('driverSince').value || null,
+        note: document.getElementById('driverNote').value.trim(),
+        history: []
+      };
+
+      const existing = drivers.find(d => d.id === id);
+      if (existing) {
+        data.history = existing.history || [];
+        if (existing.status !== data.status) {
+          data.history.push({
+            id: uid(),
+            type: 'status',
+            date: new Date().toISOString().slice(0,10),
+            note: `Státusz: ${existing.status || '—'} → ${data.status}`,
+            recordedAt: new Date().toISOString()
+          });
+          if (!data.since) data.since = new Date().toISOString().slice(0,10);
+        }
+      }
+      const idx = drivers.findIndex(d => d.id === id);
+      if (idx >= 0) drivers[idx] = data;
+      else drivers.push(data);
+      save();
+      closeDriverModal();
+      refresh();
+    }
+
+    function editDriver(id) { openDriverModal(id); }
+
+    function deleteDriver(id) {
+      if (!confirm('Biztosan törlöd ezt a sofőrt?')) return;
+      drivers = drivers.filter(d => d.id !== id);
+      save();
+      refresh();
+    }
+
+    function populateSelects() {
+      // Vehicle selects
+      const vehicleOptions = '<option value="">— nincs —</option>' +
+        vehicles.map(v => `<option value="${v.rendszam}">${v.rendszam} – ${v.gyartmany || ''} ${v.modell || ''}</option>`).join('');
+      if (document.getElementById('cardVehicle')) document.getElementById('cardVehicle').innerHTML = vehicleOptions;
+      if (document.getElementById('hovVehicle')) {
+        document.getElementById('hovVehicle').innerHTML = '<option value="">Válassz járművet...</option>' +
+          vehicles.map(v => `<option value="${v.id}">${v.rendszam} – ${v.gyartmany || ''} ${v.modell || ''}</option>`).join('');
+      }
+
+      // Driver selects
+      const driverOptions = '<option value="">— nincs —</option>' +
+        drivers.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+      if (document.getElementById('sofor')) document.getElementById('sofor').innerHTML = driverOptions;
+      if (document.getElementById('hovWho')) {
+        document.getElementById('hovWho').innerHTML = '<option value="">Válassz sofőrt...</option>' +
+          drivers.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+      }
+    }
+
+    document.getElementById('driverModal').addEventListener('click', (e) => {
+      if (e.target.id === 'driverModal') closeDriverModal();
+    });
+
+    function renderCards() {
+      const tbody = document.getElementById('cardTable');
+      if (fuelCards.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:1.5rem;">Nincs tankolókártya. Adj hozzá egyet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = fuelCards.map(c => `
+        <tr>
+          <td><strong>${c.number}</strong></td>
+          <td>${c.provider || '—'}</td>
+          <td>${c.vehicle || '—'}</td>
+          <td>${dateBadge(c.expiry)}</td>
+          <td>${c.limit || '—'}<br><span class="badge ${c.status === 'aktiv' ? 'ok' : 'leallitott'}">${c.status}</span></td>
+          <td class="actions">
+            <button onclick="editCard('${c.id}')">${t('edit')}</button>
+            <button class="danger" onclick="deleteCard('${c.id}')">${t('delete')}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openCardModal(id = null) {
+      populateSelects();
+      document.getElementById('cardModal').classList.add('active');
+      document.getElementById('cardForm').reset();
+      document.getElementById('cardEditId').value = '';
+      document.getElementById('cardModalTitle').textContent = 'Új tankolókártya';
+      if (id) {
+        const c = fuelCards.find(x => x.id === id);
+        if (!c) return;
+        document.getElementById('cardModalTitle').textContent = 'Kártya szerkesztése';
+        document.getElementById('cardEditId').value = c.id;
+        document.getElementById('cardNumber').value = c.number || '';
+        document.getElementById('cardProvider').value = c.provider || '';
+        document.getElementById('cardVehicle').value = c.vehicle || '';
+        document.getElementById('cardExpiry').value = c.expiry || '';
+        document.getElementById('cardLimit').value = c.limit || '';
+        document.getElementById('cardStatus').value = c.status || 'aktiv';
+        document.getElementById('cardNote').value = c.note || '';
+      }
+    }
+
+    function closeCardModal() {
+      document.getElementById('cardModal').classList.remove('active');
+    }
+
+    function saveCard(e) {
+      e.preventDefault();
+      const id = document.getElementById('cardEditId').value || uid();
+      const data = {
+        id,
+        number: document.getElementById('cardNumber').value.trim(),
+        provider: document.getElementById('cardProvider').value.trim(),
+        vehicle: document.getElementById('cardVehicle').value,
+        expiry: document.getElementById('cardExpiry').value || null,
+        limit: document.getElementById('cardLimit').value.trim(),
+        status: document.getElementById('cardStatus').value,
+        note: document.getElementById('cardNote').value.trim()
+      };
+      const idx = fuelCards.findIndex(c => c.id === id);
+      if (idx >= 0) fuelCards[idx] = data;
+      else fuelCards.push(data);
+      save();
+      closeCardModal();
+      refresh();
+    }
+
+    function editCard(id) { openCardModal(id); }
+
+    function deleteCard(id) {
+      if (!confirm('Biztosan törlöd ezt a tankolókártyát?')) return;
+      fuelCards = fuelCards.filter(c => c.id !== id);
+      save();
+      refresh();
+    }
+
+    // Close card modal on overlay
+    document.getElementById('cardModal').addEventListener('click', (e) => {
+      if (e.target.id === 'cardModal') closeCardModal();
+    });
+
+    function showReports() {
+      const today = new Date();
+      let html = '';
+
+      // 1. Összesítő
+      const total = vehicles.length;
+      const byStatus = {};
+      vehicles.forEach(v => {
+        byStatus[v.status] = (byStatus[v.status] || 0) + 1;
+      });
+      html += `<h3>Flotta összesítő</h3>
+        <p><strong>Összes jármű:</strong> ${total}</p>
+        <ul>${Object.entries(byStatus).map(([s,c]) => `<li>${statusLabel(s)}: ${c}</li>`).join('')}</ul>`;
+
+      // 2. Közelgő / lejárt lejáratok
+      const expiries = [];
+      vehicles.forEach(v => {
+        [['biztositasLejarat','Biztosítás'],['muszakiLejarat','Műszaki'],['cascoLejarat','Casco']].forEach(([k,l]) => {
+          const d = daysUntil(v[k]);
+          if (d !== null && d <= 60) expiries.push({ rendszam: v.rendszam, label: l, days: d, date: v[k] });
+        });
+      });
+      expiries.sort((a,b) => a.days - b.days);
+      html += `<h3>Lejáratok (60 napon belül / lejárt)</h3>`;
+      if (expiries.length === 0) html += '<p>Nincs közelgő lejárat.</p>';
+      else html += '<ul>' + expiries.map(e => `<li><strong>${e.rendszam}</strong> – ${e.label}: ${e.days < 0 ? 'Lejárt ' + Math.abs(e.days) + ' napja' : e.days + ' nap múlva'} (${e.date})</li>`).join('') + '</ul>';
+
+      // 3. Hosszú ideje nem üzemelő
+      const longDown = vehicles.filter(v => {
+        if ((v.status === 'szerviz' || v.status === 'leallitott') && v.statusSince) {
+          const days = Math.abs(daysUntil(v.statusSince) || 0);
+          return days >= 14;
+        }
+        return false;
+      });
+      html += `<h3>Hosszú ideje nem üzemelő (14+ nap)</h3>`;
+      if (longDown.length === 0) html += '<p>Nincs ilyen jármű.</p>';
+      else html += '<ul>' + longDown.map(v => {
+        const days = Math.abs(daysUntil(v.statusSince) || 0);
+        return `<li><strong>${v.rendszam}</strong> – ${statusLabel(v.status)} ${days} napja (${v.statusSince})</li>`;
+      }).join('') + '</ul>';
+
+      // 4. Tankolókártyák
+      html += `<h3>Tankolókártyák</h3>`;
+      if (fuelCards.length === 0) html += '<p>Nincs kártya.</p>';
+      else html += '<ul>' + fuelCards.map(c => `<li><strong>${c.number}</strong> (${c.provider || '—'}) → ${c.vehicle || 'nincs hozzárendelve'} – ${c.status}</li>`).join('') + '</ul>';
+
+      // 5. Utolsó előzmények röviden
+      html += `<h3>Legutóbbi átadások / események</h3>`;
+      const allHist = [];
+      vehicles.forEach(v => {
+        (v.history || []).forEach(h => allHist.push({ ...h, rendszam: v.rendszam }));
+      });
+      allHist.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+      const recent = allHist.slice(0, 15);
+      if (recent.length === 0) html += '<p>Nincs rögzített előzmény.</p>';
+      else html += '<ul>' + recent.map(h => `<li>${h.date} – <strong>${h.rendszam}</strong>: ${h.type} ${h.who ? '('+h.who+')' : ''} ${h.note || ''}</li>`).join('') + '</ul>';
+
+      document.getElementById('reportsContent').innerHTML = html;
+      document.getElementById('reportsModal').classList.add('active');
+    }
+
+    function closeReports() {
+      document.getElementById('reportsModal').classList.remove('active');
+    }
+
+    function downloadReports() {
+      const content = document.getElementById('reportsContent').innerHTML;
+      const fullHtml = `<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flotta Riport</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 800px; margin: 0 auto; line-height: 1.5; }
+    h1 { color: #1e40af; font-size: 1.4rem; }
+    h3 { color: #1e40af; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 1.5rem; }
+    ul { line-height: 1.6; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>Flotta Riport – ${new Date().toLocaleDateString('hu-HU')}</h1>
+  ${content}
+  <p style="margin-top:2rem;color:#6b7280;font-size:0.85rem;">Generálva: ${new Date().toLocaleString('hu-HU')}</p>
+</body>
+</html>`;
+
+      // Mobile-friendly: open in new window (user can share/save from there)
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.write(fullHtml);
+        win.document.close();
+        // Also try download as fallback
+        try {
+          const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `flotta-riport-${new Date().toISOString().slice(0,10)}.html`;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          }, 100);
+        } catch (e) {}
+      } else {
+        alert('A böngésző blokkolta az új ablakot. Engedélyezd a felugró ablakokat, vagy használd a Nyomtatás gombot.');
+      }
+    }
+
+    function downloadPDF() {
+      const content = document.getElementById('reportsContent').innerHTML;
+      const fullHtml = `<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flotta Riport</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+    h1 { color: #1e40af; }
+    h3 { color: #1e40af; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 1.5rem; }
+    ul { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>Flotta Riport – ${new Date().toLocaleDateString('hu-HU')}</h1>
+  ${content}
+</body>
+</html>`;
+      const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `flotta-riport-${new Date().toISOString().slice(0,10)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+
+    function printReports() {
+      const content = document.getElementById('reportsContent').innerHTML;
+      const win = window.open('', '_blank');
+      win.document.write(`
+        <html><head><title>Flotta Riport</title>
+        <style>body{font-family:system-ui;padding:20px;} h3{color:#1e40af;border-bottom:1px solid #ccc;padding-bottom:4px;} ul{line-height:1.6;}</style>
+        </head><body>
+        <h1>Flotta Riport – ${new Date().toLocaleDateString('hu-HU')}</h1>
+        ${content}
+        </body></html>`);
+      win.document.close();
+      win.print();
+    }
+
+    document.getElementById('reportsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'reportsModal') closeReports();
+    });
+
+    function populateVehicleSelect() {
+      const sel = document.getElementById('hovVehicle');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">Válassz járművet...</option>' +
+        vehicles.map(v => `<option value="${v.id}">${v.rendszam} – ${v.gyartmany || ''} ${v.modell || ''} (${statusLabel(v.status)})</option>`).join('');
+      if (current) sel.value = current;
+    }
+
+    function filterHandoverVehicles() {
+      const type = document.getElementById('hovType').value;
+      const sel = document.getElementById('hovVehicle');
+      if (!sel) return;
+
+      let list = vehicles;
+      if (type === 'szervizbol_vissza') {
+        list = vehicles.filter(v => v.status === 'szerviz');
+      } else if (type === 'szerviz') {
+        list = vehicles.filter(v => v.status === 'aktiv');
+      } else if (type === 'atadas') {
+        list = vehicles.filter(v => v.status === 'aktiv');
+      } else if (type === 'visszaadas') {
+        list = vehicles.filter(v => v.status === 'aktiv');
+      } else {
+        list = vehicles.filter(v => v.status === 'aktiv');
+      }
+
+      const current = sel.value;
+      sel.innerHTML = '<option value="">Válassz járművet...</option>' +
+        list.map(v => `<option value="${v.id}">${v.rendszam} – ${v.gyartmany || ''} ${v.modell || ''} (${statusLabel(v.status)})</option>`).join('');
+      if (current && list.some(v => v.id === current)) sel.value = current;
+    }
+
+    function openHandoverModal() {
+      document.getElementById('handoverForm').reset();
+      document.getElementById('hovDate').value = new Date().toISOString().slice(0,10);
+      document.getElementById('handoverModal').classList.add('active');
+      filterHandoverVehicles(); // initial filter
+      // also populate drivers
+      const driverSel = document.getElementById('hovWho');
+      if (driverSel) {
+        driverSel.innerHTML = '<option value="">Válassz sofőrt...</option>' +
+          drivers.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+      }
+    }
+
+    function closeHandoverModal() {
+      document.getElementById('handoverModal').classList.remove('active');
+    }
+
+    function saveHandover(e) {
+      e.preventDefault();
+      const vehicleId = document.getElementById('hovVehicle').value;
+      if (!vehicleId) { alert('Válassz járművet!'); return; }
+      const v = vehicles.find(x => x.id === vehicleId);
+      if (!v) return;
+      ensureHistory(v);
+
+      const entry = {
+        id: uid(),
+        type: document.getElementById('hovType').value,
+        who: document.getElementById('hovWho').value.trim(),
+        date: document.getElementById('hovDate').value,
+        km: document.getElementById('hovKm').value ? Number(document.getElementById('hovKm').value) : null,
+        note: document.getElementById('hovNote').value.trim(),
+        recordedAt: new Date().toISOString()
+      };
+
+      // 1 autó = 1 sofőr – csak figyelmeztetés, nem automatikus
+      if (entry.type === 'atadas') {
+        // Sofőrnek már van autója?
+        const existing = vehicles.find(other => other.id !== v.id && other.currentDriver === entry.who);
+        if (existing) {
+          alert(`A sofőr (${entry.who}) már használja a(z) ${existing.rendszam} autót.\nElőször vissza kell adnia azt, mielőtt újat vehet fel.`);
+          return;
+        }
+        // Az autón már van sofőr?
+        if (v.currentDriver && v.currentDriver !== entry.who) {
+          alert(`A(z) ${v.rendszam} autót jelenleg ${v.currentDriver} használja.\nElőször vissza kell adnia, mielőtt más vehetné át.`);
+          return;
+        }
+      }
+
+      v.history.push(entry);
+      if (entry.km) v.km = entry.km;
+
+      if (entry.type === 'atadas') {
+        v.currentDriver = entry.who;
+        v.currentSince = new Date().toISOString();
+      } else if (entry.type === 'visszaadas') {
+        v.currentDriver = null;
+        v.currentSince = null;
+      }
+
+      // Optional: update status based on type
+      if (entry.type === 'szerviz') {
+        v.status = 'szerviz';
+        v.statusSince = entry.date;
+      } else if (entry.type === 'szervizbol_vissza') {
+        v.status = 'aktiv';
+        v.statusSince = entry.date;
+      }
+
+      save();
+      closeHandoverModal();
+      refresh();
+      alert('Rögzítve!');
+    }
+
+    document.getElementById('handoverModal').addEventListener('click', (e) => {
+      if (e.target.id === 'handoverModal') closeHandoverModal();
+    });
+
+    function ensureHistory(v) {
+      if (!v.history) v.history = [];
+      return v;
+    }
+
+    function showHistory(id) {
+      const v = vehicles.find(x => x.id === id);
+      if (!v) return;
+      ensureHistory(v);
+      document.getElementById('historyTitle').textContent = `Előzmények – ${v.rendszam}`;
+
+      const container = document.getElementById('historyContent');
+      if (v.history.length === 0) {
+        container.innerHTML = '<p style="color:#64748b;">Még nincs rögzített előzmény.</p>';
+      } else {
+        const sorted = [...v.history].sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+        container.innerHTML = sorted.map(h => {
+          const typeMap = {
+            atadas: 'Átadás',
+            visszaadas: 'Visszaadás',
+            szerviz: 'Szervizbe került',
+            szervizbol_vissza: 'Szervizből vissza érkezett',
+            megjegyzes: 'Megjegyzés',
+            status: 'Állapotváltozás'
+          };
+          return `<div style="padding:0.75rem 0;border-bottom:1px solid #e2e8f0;">
+            <strong>${h.date || '—'}</strong> · ${typeMap[h.type] || h.type}
+            ${h.who ? ` · <em>${h.who}</em>` : ''}
+            ${h.km ? ` · ${Number(h.km).toLocaleString('hu-HU')} km` : ''}
+            ${h.note ? `<div style="margin-top:0.25rem;color:#475569;">${h.note}</div>` : ''}
+          </div>`;
+        }).join('');
+      }
+      document.getElementById('historyModal').classList.add('active');
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.remove('active');
+    }
+
+    function addHistoryEntry(e) {
+      e.preventDefault();
+      const rawId = document.getElementById('historyVehicleId').value;
+      const isDriver = rawId.startsWith('driver:');
+      const id = isDriver ? rawId.replace('driver:', '') : rawId;
+
+      if (isDriver) {
+        const d = drivers.find(x => x.id === id);
+        if (!d) return;
+        ensureDriverHistory(d);
+        const entry = {
+          id: uid(),
+          type: document.getElementById('histType').value,
+          date: document.getElementById('histDate').value,
+          note: document.getElementById('histNote').value.trim(),
+          recordedAt: new Date().toISOString()
+        };
+        d.history.push(entry);
+        save();
+        showDriverHistory(id);
+        document.getElementById('historyForm').reset();
+        document.getElementById('histDate').value = new Date().toISOString().slice(0,10);
+        refresh();
+        return;
+      }
+
+      // Vehicle history (original)
+      const v = vehicles.find(x => x.id === id);
+      if (!v) return;
+      ensureHistory(v);
+
+      const entry = {
+        id: uid(),
+        type: document.getElementById('histType').value,
+        who: document.getElementById('histWho').value.trim(),
+        date: document.getElementById('histDate').value,
+        km: document.getElementById('histKm').value ? Number(document.getElementById('histKm').value) : null,
+        note: document.getElementById('histNote').value.trim(),
+        recordedAt: new Date().toISOString()
+      };
+      v.history.push(entry);
+      if (entry.km) v.km = entry.km;
+
+      save();
+      showHistory(id);
+      document.getElementById('historyForm').reset();
+      document.getElementById('histDate').value = new Date().toISOString().slice(0,10);
+      refresh();
+    }
+
+    document.getElementById('historyModal').addEventListener('click', (e) => {
+      if (e.target.id === 'historyModal') closeHistoryModal();
+    });
+
+    function refresh() {
+      renderStats();
+      renderTable();
+      renderAlerts();
+      renderCards();
+      renderDrivers();
+      populateSelects();
+    }
+
+    function openModal(id = null) {
+      populateSelects();
+      document.getElementById('modal').classList.add('active');
+      document.getElementById('vehicleForm').reset();
+      document.getElementById('editId').value = '';
+      document.getElementById('modalTitle').textContent = 'Új jármű';
+      if (id) {
+        const v = vehicles.find(x => x.id === id);
+        if (!v) return;
+        document.getElementById('modalTitle').textContent = 'Jármű szerkesztése';
+        document.getElementById('editId').value = v.id;
+        document.getElementById('rendszam').value = v.rendszam || '';
+        document.getElementById('status').value = v.status || 'aktiv';
+        document.getElementById('gyartmany').value = v.gyartmany || '';
+        document.getElementById('modell').value = v.modell || '';
+        document.getElementById('evjarat').value = v.evjarat || '';
+        document.getElementById('alvazszam').value = v.alvazszam || '';
+        document.getElementById('km').value = v.km || '';
+        document.getElementById('biztositasSzam').value = v.biztositasSzam || '';
+        document.getElementById('helyszin').value = v.helyszin || '';
+        document.getElementById('biztositasLejarat').value = v.biztositasLejarat || '';
+        document.getElementById('muszakiLejarat').value = v.muszakiLejarat || '';
+        document.getElementById('cascoLejarat').value = v.cascoLejarat || '';
+        document.getElementById('kovetkezoSzervizKm').value = v.kovetkezoSzervizKm || '';
+        document.getElementById('kovetkezoSzervizDatum').value = v.kovetkezoSzervizDatum || '';
+        document.getElementById('gumicsere').value = v.gumicsere || '';
+        document.getElementById('berbeado').value = v.berbeado || '';
+        document.getElementById('currentDriver').value = v.currentDriver || '';
+        document.getElementById('megjegyzes').value = v.megjegyzes || '';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.remove('active');
+    }
+
+    function saveVehicle(e) {
+      e.preventDefault();
+      const id = document.getElementById('editId').value || uid();
+      const data = {
+        id,
+        rendszam: document.getElementById('rendszam').value.trim().toUpperCase(),
+        status: document.getElementById('status').value,
+        gyartmany: document.getElementById('gyartmany').value.trim(),
+        modell: document.getElementById('modell').value.trim(),
+        evjarat: document.getElementById('evjarat').value || null,
+        alvazszam: document.getElementById('alvazszam').value.trim(),
+        km: document.getElementById('km').value ? Number(document.getElementById('km').value) : null,
+        biztositasSzam: document.getElementById('biztositasSzam').value.trim(),
+        helyszin: document.getElementById('helyszin').value.trim(),
+        biztositasLejarat: document.getElementById('biztositasLejarat').value || null,
+        muszakiLejarat: document.getElementById('muszakiLejarat').value || null,
+        cascoLejarat: document.getElementById('cascoLejarat').value || null,
+        kovetkezoSzervizKm: document.getElementById('kovetkezoSzervizKm').value ? Number(document.getElementById('kovetkezoSzervizKm').value) : null,
+        kovetkezoSzervizDatum: document.getElementById('kovetkezoSzervizDatum').value || null,
+        gumicsere: document.getElementById('gumicsere').value || '',
+        berbeado: document.getElementById('berbeado').value.trim(),
+        currentDriver: document.getElementById('currentDriver').value.trim() || null,
+        megjegyzes: document.getElementById('megjegyzes').value.trim(),
+        statusSince: null
+      };
+
+      // Track status change date and log history
+      const existing = vehicles.find(v => v.id === id);
+      if (!existing || existing.status !== data.status) {
+        data.statusSince = new Date().toISOString().slice(0,10);
+        if (!data.history) data.history = existing ? (existing.history || []) : [];
+        data.history.push({
+          id: uid(),
+          type: 'status',
+          who: '',
+          date: data.statusSince,
+          km: data.km,
+          note: `Állapot változott: ${statusLabel(data.status)}`,
+          recordedAt: new Date().toISOString()
+        });
+      } else {
+        data.statusSince = existing.statusSince || new Date().toISOString().slice(0,10);
+        data.history = existing.history || [];
+      }
+
+      // Unique rendszám check (except itself)
+      if (vehicles.some(v => v.rendszam === data.rendszam && v.id !== id)) {
+        alert('Ez a rendszám már létezik!');
+        return;
+      }
+
+      const idx = vehicles.findIndex(v => v.id === id);
+      if (idx >= 0) vehicles[idx] = data;
+      else vehicles.push(data);
+
+      save();
+      closeModal();
+      refresh();
+    }
+
+    function editVehicle(id) { openModal(id); }
+
+    function deleteVehicle(id) {
+      if (!confirm('Biztosan törlöd ezt a járművet?')) return;
+      vehicles = vehicles.filter(v => v.id !== id);
+      save();
+      refresh();
+    }
+
+    function downloadShareable() {
+      const currentData = {
+        vehicles: vehicles,
+        fuelCards: fuelCards,
+        drivers: drivers
+      };
+      const dataJson = JSON.stringify(currentData, null, 2);
+
+      // Próbáljuk meg a jelenlegi HTML-t beolvasni és módosítani
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', window.location.href, true);
+      xhr.onload = function() {
+        if (xhr.status === 200 || xhr.status === 0) { // 0 for file://
+          let html = xhr.responseText;
+          const marker = 'const EMBEDDED_DATA = ';
+          const start = html.indexOf(marker);
+          if (start === -1) {
+            alert('Hiba: nem található a beágyazási pont. Használd az Export JSON-t.');
+            return;
+          }
+          // Keressük a következő pontosvesszőt a marker után (egyszerű, de működik)
+          let end = html.indexOf(';\n', start);
+          if (end === -1) end = html.indexOf(';', start);
+          if (end === -1) {
+            alert('Hiba a beágyazáskor.');
+            return;
+          }
+          const newHtml = html.substring(0, start) + 
+            'const EMBEDDED_DATA = ' + dataJson + 
+            html.substring(end);
+          
+          const blob = new Blob([newHtml], { type: 'text/html;charset=utf-8' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `flotta-megoszthato-${new Date().toISOString().slice(0,10)}.html`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          alert('Megosztható verzió letöltve!\nEzt a fájlt küldd el vagy oszd meg – a másik azonnal látni fogja az összes adatot és az összegzőt.');
+        } else {
+          alert('Nem sikerült beolvasni a fájlt. Használd az Export JSON-t, vagy töltsd fel a HTML-t egy webes helyre (pl. Google Drive, Dropbox).');
+        }
+      };
+      xhr.onerror = function() {
+        alert('Helyi fájl esetén a böngésző korlátozhatja. Töltsd fel a HTML-t egy webes tárhelyre, vagy használd az Export JSON + Import módszert.');
+      };
+      xhr.send();
+    }
+
+    function loadSampleData() {
+      alert('Minta adatok ki vannak kapcsolva. A rendszer a valós flotta adatokat használja.');
+    }
+
+    function exportData() {
+      const blob = new Blob([JSON.stringify({ vehicles, fuelCards, drivers, contacts }, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `flotta-export-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function importData(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (imported.vehicles) {
+            vehicles = imported.vehicles;
+            fuelCards = imported.fuelCards || [];
+            drivers = imported.drivers || [];
+          } else if (Array.isArray(imported)) {
+            vehicles = imported;
+            fuelCards = [];
+            drivers = [];
+          } else throw new Error('Ismeretlen formátum');
+          if (!confirm('Importálod az adatokat? A jelenlegi adatok felülíródnak.')) return;
+          save();
+          refresh();
+          alert('Sikeres import!');
+        } catch (err) {
+          alert('Hibás fájl: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    }
+
+    // Init
+    setLang(currentLang);
+    load();
+    document.getElementById('search').addEventListener('input', () => {
+      currentStatFilter = null;
+      renderTable();
+    });
+
+    // Close modal on overlay click
+    document.getElementById('modal').addEventListener('click', (e) => {
+      if (e.target.id === 'modal') closeModal();
+    });
+  </script>
+</body>
+</html>
