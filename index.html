@@ -1360,17 +1360,21 @@
     function parseCSV(text) {
       const lines = text.trim().split('\n');
       if (lines.length < 2) return [];
-      const headers = lines[0].split(',').map(h => h.trim());
-      return lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim());
+      // Remove quotes from headers
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      return lines.slice(1).filter(l => l.trim()).map(line => {
+        // Simple quote-aware split
+        const values = [];
+        let current = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') { inQuotes = !inQuotes; }
+          else if (c === ',' && !inQuotes) { values.push(current.trim()); current = ''; }
+          else { current += c; }
+        }
+        values.push(current.trim());
         const obj = {};
-        headers.forEach((h, i) => {
-          obj[h] = values[i] || '';
-        });
-        // Convert numbers
-        if (obj.km) obj.km = Number(obj.km) || null;
-        if (obj.evjarat) obj.evjarat = Number(obj.evjarat) || null;
-        if (obj.kovetkezoSzervizKm) obj.kovetkezoSzervizKm = Number(obj.kovetkezoSzervizKm) || null;
+        headers.forEach((h, i) => { obj[h] = values[i] || ''; });
         return obj;
       });
     }
