@@ -891,6 +891,20 @@
         const patterns=currentLang==='en' ? DYNAMIC_HU_EN : DYNAMIC_EN_HU;
         for (const [pattern,replacement] of patterns) result=result.replace(pattern,replacement);
       }
+      if (currentLang==='en') {
+        // Existing audit-history labels remain in the original records;
+        // translate only their displayed system-generated wording.
+        if (/^(?:Status:|Status changed:|Státusz:|Állapot változott:)/.test(result)) {
+          result=result.replace(/\bAktív\b/g,'Active')
+            .replace(/\bSzervizben\b/g,'In service')
+            .replace(/\bInaktív\b/g,'Inactive')
+            .replace(/\bLeállított\b/g,'Stopped')
+            .replace(/\bLezárt\b/g,'Closed')
+            .replace(/\bIdőpont:/g,'Appointment:');
+        }
+        result=result.replace(/([0-9]+) napja(?=\b|\s|\()/g,'$1 days ago')
+          .replace(/([0-9]+) nap múlva(?=\b|\s|\()/g,'$1 days away');
+      }
       return leading+result+trailing;
     }
     function localizeInterface(root=document.body) {
@@ -921,7 +935,7 @@
       } finally {uiTranslating=false;}
     }
     function translateDialogMessage(text) {
-      const str=localizedString(String(text));
+      const str=String(text).split('\n').map(line=>localizedString(line)).join('\n');
       if(currentLang!=='en') return str;
       return str.replace(/Ismeretlen formátum/g, 'Unknown format')
         .replace(/A sofőr \((.*?)\) már használja a\(z\) (.*?) autót\.\s*Először vissza kell adnia azt, mielőtt újat vehet fel\./g,
