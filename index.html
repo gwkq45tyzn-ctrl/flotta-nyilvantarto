@@ -1440,9 +1440,8 @@
     }
 
     function init() {
-      // Always load from sheet (shared source of truth)
       loadFromSheets();
-      setInterval(loadFromSheets, 30000);
+      // Auto-refresh kikapcsolva – ne írja felül a beírt adatokat
     }
 
     function load() {
