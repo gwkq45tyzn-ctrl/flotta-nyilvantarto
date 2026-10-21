@@ -1408,36 +1408,30 @@
             history: []
           }));
         }
-        if (cRes.ok) {
-          const cText = await cRes.text();
-          if (!cText.includes('<html') && cText.includes('KÁRTYASZÁM')) {
-            const cParsed = parseCSV(cText);
-            if (cParsed.length > 0) {
-              fuelCards = cParsed.map((r, i) => ({
-                id: 'c' + (i+1),
-                number: r.KÁRTYASZÁM || '',
-                provider: r.SZOLGÁLTATÓ || 'MOL',
-                vehicle: r.JÁRMŰ || '',
-                note: r.PIN ? 'PIN: ' + r.PIN : '',
-                status: r.STÁTUSZ || 'aktiv'
-              }));
-            }
-          }
-        }
-        if (kRes.ok) {
-          const kText = await kRes.text();
-          if (!kText.includes('<html') && kText.includes('CÉG')) {
-            const kParsed = parseCSV(kText);
-            if (kParsed.length > 0) {
-              contacts = kParsed.map((r, i) => ({
-                id: 'k' + (i+1),
-                ceg: r.CÉG || '',
-                nev: r.NÉV || '',
-                telefon: r.TELEFON || ''
-              }));
-            }
-          }
-        }
+        // Cards and contacts are embedded (sheet gids don't match)
+        fuelCards = [
+          {id:'c1', number:'7080059206485702', provider:'MOL', vehicle:'AALO562', note:'PIN: 5729', status:'aktiv'},
+          {id:'c2', number:'7080059206724985', provider:'MOL', vehicle:'AOFS814', note:'', status:'aktiv'},
+          {id:'c3', number:'7080059206824983', provider:'MOL', vehicle:'AOJT264', note:'PIN: 8353', status:'aktiv'},
+          {id:'c4', number:'7080059206818944', provider:'MOL', vehicle:'AOJT265', note:'PIN: 8707', status:'aktiv'},
+          {id:'c5', number:'7080059007556040', provider:'MOL', vehicle:'AOKF960', note:'PIN: 641', status:'aktiv'},
+          {id:'c6', number:'7080059206850152', provider:'MOL', vehicle:'AOKF961', note:'PIN: 4597', status:'aktiv'},
+          {id:'c7', number:'70800', provider:'MOL', vehicle:'AOML734', note:'', status:'aktiv'},
+          {id:'c8', number:'7080059206450540', provider:'MOL', vehicle:'AOML735', note:'', status:'aktiv'},
+          {id:'c9', number:'7080059206724928', provider:'MOL', vehicle:'PHW651', note:'PIN: 7414', status:'aktiv'},
+          {id:'c10', number:'7080059206724969', provider:'MOL', vehicle:'PHW683', note:'', status:'aktiv'},
+          {id:'c11', number:'7080059206724944', provider:'MOL', vehicle:'PHW803', note:'', status:'aktiv'},
+          {id:'c12', number:'7080059206825899', provider:'MOL', vehicle:'PPE951', note:'PIN: 1367', status:'aktiv'},
+          {id:'c13', number:'7080059206786505', provider:'MOL', vehicle:'RXR311', note:'PIN: 2238', status:'aktiv'},
+          {id:'c14', number:'7080059206485686', provider:'MOL', vehicle:'TGW763', note:'', status:'aktiv'}
+        ];
+        contacts = [
+          {id:'k1', ceg:'PACSA', nev:'NAGY GÁBOR', telefon:'+36209373867'},
+          {id:'k2', ceg:'DAM', nev:'CSABA SÁNDOR', telefon:'+36203256210'},
+          {id:'k3', ceg:'FLOTTA CAR', nev:'ISTVÁN', telefon:'+36303921418'},
+          {id:'k4', ceg:'', nev:'?', telefon:'+36307898057'},
+          {id:'k5', ceg:'OPEL', nev:'FADL GÁBOR', telefon:'+36709300923'}
+        ];
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
         refresh();
       } catch (e) {
