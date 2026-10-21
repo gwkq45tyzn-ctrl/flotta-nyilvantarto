@@ -923,7 +923,8 @@
     function translateDialogMessage(text) {
       const str=localizedString(String(text));
       if(currentLang!=='en') return str;
-      return str.replace(/A sofőr \((.*?)\) már használja a\(z\) (.*?) autót\.\s*Először vissza kell adnia azt, mielőtt újat vehet fel\./g,
+      return str.replace(/Ismeretlen formátum/g, 'Unknown format')
+        .replace(/A sofőr \((.*?)\) már használja a\(z\) (.*?) autót\.\s*Először vissza kell adnia azt, mielőtt újat vehet fel\./g,
         'Driver ($1) is already assigned to vehicle $2. Return that vehicle before assigning another.')
         .replace(/A\(z\) (.*?) autót jelenleg (.*?) használja\.\s*Először vissza kell adnia, mielőtt más vehetné át\./g,
           'Vehicle $1 is currently used by $2. It must be returned before anyone else can collect it.');
@@ -1106,7 +1107,9 @@
         hasznalatban: t('statusHasznalatban'),
         szerviz: t('statusSzerviz'),
         leallitott: t('statusLeallitott'),
-        eladva: t('statusEladva')
+        eladva: t('statusEladva'),
+        inaktiv: t('statusInactive'),
+        lezart: currentLang === 'en' ? 'Closed' : 'Lezárt'
       };
       return map[s] || s;
     }
@@ -1700,7 +1703,7 @@
           <td>${c.provider || '—'}</td>
           <td>${c.vehicle || '—'}</td>
           <td>${dateBadge(c.expiry)}</td>
-          <td>${c.limit || '—'}<br><span class="badge ${c.status === 'aktiv' ? 'ok' : 'leallitott'}">${c.status}</span></td>
+          <td>${c.limit || '—'}<br><span class="badge ${c.status === 'aktiv' ? 'ok' : 'leallitott'}">${statusLabel(c.status)}</span></td>
           <td class="actions">
             <button onclick="editCard('${c.id}')">${t('edit')}</button>
             <button class="danger" onclick="deleteCard('${c.id}')">${t('delete')}</button>
@@ -1814,7 +1817,7 @@
       // 4. Tankolókártyák
       html += `<h3>Tankolókártyák</h3>`;
       if (fuelCards.length === 0) html += '<p>Nincs kártya.</p>';
-      else html += '<ul>' + fuelCards.map(c => `<li><strong>${c.number}</strong> (${c.provider || '—'}) → ${c.vehicle || 'nincs hozzárendelve'} – ${c.status}</li>`).join('') + '</ul>';
+      else html += '<ul>' + fuelCards.map(c => `<li><strong>${c.number}</strong> (${c.provider || '—'}) → ${c.vehicle || 'nincs hozzárendelve'} – ${statusLabel(c.status)}</li>`).join('') + '</ul>';
 
       // 5. Utolsó előzmények röviden
       html += `<h3>Legutóbbi átadások / események</h3>`;
@@ -1838,7 +1841,7 @@
     function downloadReports() {
       const content = document.getElementById('reportsContent').innerHTML;
       const fullHtml = `<!DOCTYPE html>
-<html lang="hu">
+<html lang="${currentLang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1884,7 +1887,7 @@
     function downloadPDF() {
       const content = document.getElementById('reportsContent').innerHTML;
       const fullHtml = `<!DOCTYPE html>
-<html lang="hu">
+<html lang="${currentLang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
