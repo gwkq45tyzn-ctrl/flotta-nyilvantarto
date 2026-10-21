@@ -1351,7 +1351,7 @@
     };
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztQjM7PhEweyEupuBWgOlp414J5vI81yJ8Om_-8BePIE8Bo3-0G5hJNhPRbXaG3Y91/exec';
 
-    const STORAGE_KEY = 'flotta_nyilvantarto_v10';
+    const STORAGE_KEY = 'flotta_nyilvantarto_v11';
     let vehicles = [];
     let fuelCards = [];
     let drivers = [];
@@ -1442,31 +1442,7 @@
     }
 
     function init() {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const data = JSON.parse(saved);
-          if (data.vehicles && data.vehicles.length > 0) {
-            vehicles = data.vehicles;
-            drivers = data.drivers || [];
-            fuelCards = data.fuelCards || [];
-            contacts = data.contacts || [];
-          } else {
-            vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
-            drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
-            fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
-            contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
-          }
-        } else {
-          vehicles = JSON.parse(JSON.stringify(EMBEDDED_DATA.vehicles));
-          drivers = JSON.parse(JSON.stringify(EMBEDDED_DATA.drivers));
-          fuelCards = JSON.parse(JSON.stringify(EMBEDDED_DATA.fuelCards));
-          contacts = JSON.parse(JSON.stringify(EMBEDDED_DATA.contacts || []));
-        }
-        refresh();
-      } catch (e) {
-        refresh();
-      }
+      // Always load from sheet (shared source of truth)
       loadFromSheets();
       setInterval(loadFromSheets, 30000);
     }
