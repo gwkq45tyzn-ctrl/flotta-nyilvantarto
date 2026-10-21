@@ -267,6 +267,7 @@
   </header>
 
   <div class="container">
+    <div style="margin:0.6rem 0 1rem;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 2px 5px #0001;display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><strong id="syncStatus" role="status" aria-live="polite">Kapcsolódás...</strong><button type="button" class="secondary" onclick="configureBackend()">⚙️ Központi mentés beállítása</button><button type="button" class="secondary" onclick="exportData()">↓ JSON biztonsági mentés</button></div>
     <div class="stats" id="stats"></div>
 
     <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem;">
@@ -829,529 +830,11 @@
       });
     }
 
-    const EMBEDDED_DATA = {
-      vehicles: [
-        {
-                "id": "v1",
-                "rendszam": "AALO562",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "KECSKÉS LÁSZLÓ",
-                "currentSince": null,
-                "gyartmany": "SEAT",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "rent car for Laszlo",
-                "history": []
-        },
-        {
-                "id": "v2",
-                "rendszam": "AIIW449",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "KEVIN",
-                "currentSince": null,
-                "gyartmany": "TOYOTA",
-                "modell": "YARIS",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "rent car for Kevin",
-                "history": []
-        },
-        {
-                "id": "v3",
-                "rendszam": "AOFS814",
-                "berbeado": "LOGIXPRESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "CDC LineHaul CAR",
-                "currentSince": null,
-                "gyartmany": "OPEL",
-                "modell": "3.5T",
-                "evjarat": null,
-                "alvazszam": "VXEYCF6FXSG029086",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "2030-01-15",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "2026-02-11T12:00",
-                "megjegyzes": "11.02. 12:00-ra megy szervízbe. 0w30-as olaj kell bele",
-                "history": []
-        },
-        {
-                "id": "v6",
-                "rendszam": "AOJT264",
-                "berbeado": "PACSA PLUSZ",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "RENAULT",
-                "modell": "DOKKER",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.07.27 to 2026.10.27",
-                "history": []
-        },
-        {
-                "id": "v7",
-                "rendszam": "AOJT265",
-                "berbeado": "PACSA PLUSZ",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "RENAULT",
-                "modell": "DOKKER",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.07.27 to 2026.10.27",
-                "history": []
-        },
-        {
-                "id": "v8",
-                "rendszam": "AOKF960",
-                "berbeado": "PACSA PLUSZ",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "TOYOTA",
-                "modell": "PROACE",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.08.17 to 2026.11.17",
-                "history": []
-        },
-        {
-                "id": "v9",
-                "rendszam": "AOKF961",
-                "berbeado": "PACSA PLUSZ",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "TOYOTA",
-                "modell": "PROACE",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.08.18 to 2026.11.18",
-                "history": []
-        },
-        {
-                "id": "v10",
-                "rendszam": "AOML734",
-                "berbeado": "",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "MIRA",
-                "currentSince": null,
-                "gyartmany": "TOYOTA",
-                "modell": "YARIS",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile own car",
-                "history": []
-        },
-        {
-                "id": "v11",
-                "rendszam": "AOML735",
-                "berbeado": "",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "PETER PAN",
-                "currentSince": null,
-                "gyartmany": "TOYOTA",
-                "modell": "YARIS",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile own car",
-                "history": []
-        },
-        {
-                "id": "v12",
-                "rendszam": "PHW651",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "VOLKWAGEN",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "WV1ZZZ2KZHX157959",
-                "km": null,
-                "helyszin": "IKA",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "2027-11-26",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "HÁTSÓ LÁMPA KIÉGETT, JOBB TÜKÖR TÖRÖTT",
-                "history": []
-        },
-        {
-                "id": "v13",
-                "rendszam": "PHW683",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "IKA depot",
-                "currentSince": null,
-                "gyartmany": "VOLKWAGEN",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "WV1ZZZ2KZHX155586",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "2027-11-21",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.06.22 to 2026.09.22",
-                "history": []
-        },
-        {
-                "id": "v14",
-                "rendszam": "PHW803",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "IKA depot",
-                "currentSince": null,
-                "gyartmany": "VOLKWAGEN",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.06.22 to 2026.09.22",
-                "history": []
-        },
-        {
-                "id": "v15",
-                "rendszam": "PPE951",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "FORD",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "WF0RXXGAKREJ43894",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "2028-06-29",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "iMile rent car from 2026.08.19 to 2026.11.19",
-                "history": []
-        },
-        {
-                "id": "v16",
-                "rendszam": "RXR311",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "AKE Depot",
-                "currentSince": null,
-                "gyartmany": "FORD",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "WF0RXXGAKRFJ86120",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "2028-02-17",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "OLAJCSERE SZÜKSÉGES",
-                "history": []
-        },
-        {
-                "id": "v17",
-                "rendszam": "TGW763",
-                "berbeado": "FLOTTA BUSINESS",
-                "gumicsere": "",
-                "status": "aktiv",
-                "statusSince": "2026-10-01",
-                "currentDriver": "MISKI FERENC",
-                "currentSince": null,
-                "gyartmany": "SEAT",
-                "modell": "",
-                "evjarat": null,
-                "alvazszam": "",
-                "km": null,
-                "helyszin": "",
-                "biztositasLejarat": "",
-                "muszakiLejarat": "",
-                "cascoLejarat": "",
-                "biztositasSzam": "",
-                "kovetkezoSzervizKm": null,
-                "kovetkezoSzervizDatum": "",
-                "megjegyzes": "téli gumicsere kész",
-                "history": []
-        }
-],
-      drivers: [],
-      fuelCards: [
-        {
-                "id": "c1",
-                "number": "7080059206485702",
-                "provider": "MOL",
-                "vehicle": "AALO562",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 5729"
-        },
-        {
-                "id": "c2",
-                "number": "7080059206724985",
-                "provider": "MOL",
-                "vehicle": "AOFS814",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        },
-        {
-                "id": "c5",
-                "number": "7080059206824983",
-                "provider": "MOL",
-                "vehicle": "AOJT264",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 8353"
-        },
-        {
-                "id": "c6",
-                "number": "7080059206818944",
-                "provider": "MOL",
-                "vehicle": "AOJT265",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 8707"
-        },
-        {
-                "id": "c7",
-                "number": "7080059007556040",
-                "provider": "MOL",
-                "vehicle": "AOKF960",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 641"
-        },
-        {
-                "id": "c8",
-                "number": "7080059206850152",
-                "provider": "MOL",
-                "vehicle": "AOKF961",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 4597"
-        },
-        {
-                "id": "c9",
-                "number": "70800",
-                "provider": "MOL",
-                "vehicle": "AOML734",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        },
-        {
-                "id": "c10",
-                "number": "7080059206450540",
-                "provider": "MOL",
-                "vehicle": "AOML735",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        },
-        {
-                "id": "c11",
-                "number": "7080059206724928",
-                "provider": "MOL",
-                "vehicle": "PHW651",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 7414"
-        },
-        {
-                "id": "c12",
-                "number": "7080059206724969",
-                "provider": "MOL",
-                "vehicle": "PHW683",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        },
-        {
-                "id": "c13",
-                "number": "7080059206724944",
-                "provider": "MOL",
-                "vehicle": "PHW803",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        },
-        {
-                "id": "c14",
-                "number": "7080059206825899",
-                "provider": "MOL",
-                "vehicle": "PPE951",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 1367"
-        },
-        {
-                "id": "c15",
-                "number": "7080059206786505",
-                "provider": "MOL",
-                "vehicle": "RXR311",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": "PIN: 2238"
-        },
-        {
-                "id": "c16",
-                "number": "7080059206485686",
-                "provider": "MOL",
-                "vehicle": "TGW763",
-                "expiry": "",
-                "limit": "",
-                "status": "aktiv",
-                "note": ""
-        }
-],
-      contacts: [
-        {id:"k1",ceg:"PACSA",telefon:"+36209373867",nev:"NAGY GÁBOR"},
-        {id:"k2",ceg:"DAM",telefon:"+36203256210",nev:"CSABA SÁNDOR"},
-        {id:"k3",ceg:"FLOTTA CAR",telefon:"+36303921418",nev:"ISTVÁN"},
-        {id:"k4",ceg:"",telefon:"+36307898057",nev:"?"},
-        {id:"k5",ceg:"OPEL",telefon:"+36709300923",nev:"FADL GÁBOR"}
-      ]
-    };
+    const EMBEDDED_DATA = {"vehicles":[{"id":"v1","rendszam":"AALO562","gyartmany":"SEAT","modell":"","currentDriver":"KECSKÉS LÁSZLÓ","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-22T09:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v2","rendszam":"AIIW449","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"KEVIN","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v3","rendszam":"AOFS814","gyartmany":"OPEL","modell":"3.5T","currentDriver":"CDC LineHaul CAR","berbeado":"LOGIXPRESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-11-02T12:00","megjegyzes":"0w30-as olaj kell bele","alvazszam":"VXEYCF6FXSG029086","history":[]},{"id":"v4","rendszam":"AOJT264","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v5","rendszam":"AOJT265","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v6","rendszam":"AOKF960","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v7","rendszam":"AOKF961","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v8","rendszam":"AOML734","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"MIRA","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v9","rendszam":"AOML735","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"PETER PAN","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v10","rendszam":"PHW651","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"IKA","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-26T13:00","megjegyzes":"HÁTSÓ LÁMPA KIÉGETT, JOBB TÜKÖR TÖRÖTT","alvazszam":"WV1ZZZ2KZHX157959","history":[]},{"id":"v11","rendszam":"PHW683","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-27T10:00","megjegyzes":"","alvazszam":"WV1ZZZ2KZHX155586","history":[]},{"id":"v12","rendszam":"PHW803","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-30T13:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v13","rendszam":"PPE951","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-29T13:00","megjegyzes":"","alvazszam":"WF0RXXGAKREJ43894","history":[]},{"id":"v14","rendszam":"RXR311","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-28T13:00","megjegyzes":"OLAJCSERE SZÜKSÉGES","alvazszam":"WF0RXXGAKRFJ86120","history":[]},{"id":"v15","rendszam":"TGW763","gyartmany":"SEAT","modell":"","currentDriver":"MISKI FERENC","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"téli gumicsere kész","alvazszam":"","history":[]}],"fuelCards":[{"id":"c1","number":"7080059206485702","provider":"MOL","vehicle":"AALO562","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c2","number":"7080059206724985","provider":"MOL","vehicle":"AOFS814","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c3","number":"7080059206824983","provider":"MOL","vehicle":"AOJT264","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c4","number":"7080059206818944","provider":"MOL","vehicle":"AOJT265","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c5","number":"7080059007556040","provider":"MOL","vehicle":"AOKF960","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c6","number":"7080059206850152","provider":"MOL","vehicle":"AOKF961","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c7","number":"7080059206450532","provider":"MOL","vehicle":"AOML734","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c8","number":"7080059206450540","provider":"MOL","vehicle":"AOML735","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c9","number":"7080059206724928","provider":"MOL","vehicle":"PHW651","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c10","number":"7080059206724969","provider":"MOL","vehicle":"PHW683","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c11","number":"7080059206724944","provider":"MOL","vehicle":"PHW803","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c12","number":"7080059206825899","provider":"MOL","vehicle":"PPE951","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c13","number":"7080059206786505","provider":"MOL","vehicle":"RXR311","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c14","number":"7080059206485686","provider":"MOL","vehicle":"TGW763","status":"aktiv","note":"","expiry":"","limit":""}],"drivers":[],"contacts":[{"id":"k1","ceg":"PACSA","nev":"NAGY GÁBOR","telefon":"+36209373867"},{"id":"k2","ceg":"DAM","nev":"CSABA SÁNDOR","telefon":"+36203256210"},{"id":"k3","ceg":"FLOTTA CAR","nev":"ISTVÁN","telefon":"+36303921418"},{"id":"k4","ceg":"","nev":"?","telefon":"+36307898057"},{"id":"k5","ceg":"OPEL","nev":"FADL GÁBOR","telefon":"+36709300923"}]};
 
-    const SHEET_URLS = {
-      vehicles: 'https://docs.google.com/spreadsheets/d/1CoTK4nszSSqfdFNrkARMXTXV6Bzlz2aqmSuKyytNx3U/gviz/tq?tqx=out:csv&gid=0',
-      cards: 'https://docs.google.com/spreadsheets/d/1CoTK4nszSSqfdFNrkARMXTXV6Bzlz2aqmSuKyytNx3U/gviz/tq?tqx=out:csv&gid=1',
-      contacts: 'https://docs.google.com/spreadsheets/d/1CoTK4nszSSqfdFNrkARMXTXV6Bzlz2aqmSuKyytNx3U/gviz/tq?tqx=out:csv&gid=2'
-    };
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztQjM7PhEweyEupuBWgOlp414J5vI81yJ8Om_-8BePIE8Bo3-0G5hJNhPRbXaG3Y91/exec';
+    const SHEET_URLS = {};
 
-    const STORAGE_KEY = 'flotta_nyilvantarto_v11';
+    const STORAGE_KEY = 'flotta_nyilvantarto_v16';
     let vehicles = [];
     let fuelCards = [];
     let drivers = [];
@@ -1360,102 +843,134 @@
     function parseCSV(text) {
       const lines = text.trim().split('\n');
       if (lines.length < 2) return [];
-      // Remove quotes from headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-      return lines.slice(1).filter(l => l.trim()).map(line => {
-        // Simple quote-aware split
-        const values = [];
-        let current = '', inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-          const c = line[i];
-          if (c === '"') { inQuotes = !inQuotes; }
-          else if (c === ',' && !inQuotes) { values.push(current.trim()); current = ''; }
-          else { current += c; }
-        }
-        values.push(current.trim());
+      const headers = lines[0].split(',').map(h => h.trim());
+      return lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
         const obj = {};
-        headers.forEach((h, i) => { obj[h] = values[i] || ''; });
+        headers.forEach((h, i) => {
+          obj[h] = values[i] || '';
+        });
+        // Convert numbers
+        if (obj.km) obj.km = Number(obj.km) || null;
+        if (obj.evjarat) obj.evjarat = Number(obj.evjarat) || null;
+        if (obj.kovetkezoSzervizKm) obj.kovetkezoSzervizKm = Number(obj.kovetkezoSzervizKm) || null;
         return obj;
       });
     }
 
-    async function loadFromSheets() {
+    // Flotta központi szinkronizálás – v16; PIN-eket nem tartalmaz.
+    const CLOUD_URL_KEY = 'flotta_backend_url_v16';
+    const PENDING_KEY = 'flotta_pending_v16';
+    const VERSION_KEY = 'flotta_version_v16';
+    const DEFAULT_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby-k2gEFShA4ULWiuQC80Rrgy29c7D4pZLkv7B9PjEAV_m6IdGuIspgKnW5eF9qcUDK/exec';
+    let backendUrl = (DEFAULT_BACKEND_URL.startsWith('https://') ? DEFAULT_BACKEND_URL : '') || localStorage.getItem(CLOUD_URL_KEY) || '';
+    let remoteVersion = Number(localStorage.getItem(VERSION_KEY)||'0');
+    let syncInProgress = false, dirty = false;
+    let pendingTimer = null;
+    function statusMessage(text, error=false) {
+      const el=document.getElementById('syncStatus');
+      if (el) { el.textContent=text; el.style.color=error?'#b91c1c':'#065f46'; }
+    }
+    function snapshot() { return JSON.parse(JSON.stringify({vehicles,fuelCards,drivers,contacts})); }
+    function applySnapshot(d) {
+      vehicles=d.vehicles||[]; fuelCards=d.fuelCards||[]; drivers=d.drivers||[]; contacts=d.contacts||[];
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot())); refresh();
+    }
+    function safeJsonp(url) {
+      return new Promise((resolve,reject)=>{
+        const callback='flottaCb'+Math.random().toString(36).slice(2);
+        const script=document.createElement('script');
+        const timeout=setTimeout(()=>{finish();reject(Error('A központi adatkapcsolat időtúllépés miatt megszakadt.'));},12000);
+        function finish(){ clearTimeout(timeout); delete window[callback]; script.remove(); }
+        window[callback]=(value)=>{finish();resolve(value);};
+        script.onerror=()=>{finish();reject(Error('A szerver nem érhető el.'));};
+        script.src=url+(url.includes('?')?'&':'?')+'callback='+callback+'&_='+Date.now();
+        document.head.appendChild(script);
+      });
+    }
+    async function pullRemote(silent=false) {
+      if(!backendUrl || syncInProgress || dirty) return;
       try {
-        const [vRes, cRes, kRes] = await Promise.all([
-          fetch(SHEET_URLS.vehicles),
-          fetch(SHEET_URLS.cards),
-          fetch(SHEET_URLS.contacts)
-        ]);
-        if (!vRes.ok) throw new Error('vehicles');
-        const vText = await vRes.text();
-        if (vText.includes('<!DOCTYPE') || vText.includes('<html')) throw new Error('not public');
-        const vParsed = parseCSV(vText);
-        if (vParsed.length > 0) {
-          vehicles = vParsed.map((r, i) => ({
-            id: r.id || 'v' + (i+1),
-            rendszam: r.RENDSZÁM || '',
-            gyartmany: (r.TÍPUS || '').split(' ')[0] || '',
-            modell: (r.TÍPUS || '').split(' ').slice(1).join(' ') || '',
-            currentDriver: r.HASZNÁLÓ || null,
-            berbeado: r.BÉRBEADÓ || '',
-            helyszin: r.HELY || '',
-            status: r.ÁLLAPOT || 'aktiv',
-            gumicsere: r.GUMICSERE || '',
-            muszakiLejarat: r.MŰSZAKI_LEJÁRAT || '',
-            kovetkezoSzervizDatum: r.KÖVETKEZŐ_SZERVIZ || '',
-            megjegyzes: r.MEGJEGYZÉS || '',
-            alvazszam: r.VIN || '',
-            history: []
-          }));
+        const reply=await safeJsonp(backendUrl);
+        if(!reply.ok) throw Error(reply.error||'Betöltési hiba');
+        if(Number(reply.version)>remoteVersion){
+          applySnapshot(reply.data);
+          remoteVersion=Number(reply.version);
+          localStorage.setItem(VERSION_KEY,String(remoteVersion));
         }
-        // Cards and contacts are embedded (sheet gids don't match)
-        fuelCards = [
-          {id:'c1', number:'7080059206485702', provider:'MOL', vehicle:'AALO562', note:'PIN: 5729', status:'aktiv'},
-          {id:'c2', number:'7080059206724985', provider:'MOL', vehicle:'AOFS814', note:'', status:'aktiv'},
-          {id:'c3', number:'7080059206824983', provider:'MOL', vehicle:'AOJT264', note:'PIN: 8353', status:'aktiv'},
-          {id:'c4', number:'7080059206818944', provider:'MOL', vehicle:'AOJT265', note:'PIN: 8707', status:'aktiv'},
-          {id:'c5', number:'7080059007556040', provider:'MOL', vehicle:'AOKF960', note:'PIN: 641', status:'aktiv'},
-          {id:'c6', number:'7080059206850152', provider:'MOL', vehicle:'AOKF961', note:'PIN: 4597', status:'aktiv'},
-          {id:'c7', number:'70800', provider:'MOL', vehicle:'AOML734', note:'', status:'aktiv'},
-          {id:'c8', number:'7080059206450540', provider:'MOL', vehicle:'AOML735', note:'', status:'aktiv'},
-          {id:'c9', number:'7080059206724928', provider:'MOL', vehicle:'PHW651', note:'PIN: 7414', status:'aktiv'},
-          {id:'c10', number:'7080059206724969', provider:'MOL', vehicle:'PHW683', note:'', status:'aktiv'},
-          {id:'c11', number:'7080059206724944', provider:'MOL', vehicle:'PHW803', note:'', status:'aktiv'},
-          {id:'c12', number:'7080059206825899', provider:'MOL', vehicle:'PPE951', note:'PIN: 1367', status:'aktiv'},
-          {id:'c13', number:'7080059206786505', provider:'MOL', vehicle:'RXR311', note:'PIN: 2238', status:'aktiv'},
-          {id:'c14', number:'7080059206485686', provider:'MOL', vehicle:'TGW763', note:'', status:'aktiv'}
-        ];
-        contacts = [
-          {id:'k1', ceg:'PACSA', nev:'NAGY GÁBOR', telefon:'+36209373867'},
-          {id:'k2', ceg:'DAM', nev:'CSABA SÁNDOR', telefon:'+36203256210'},
-          {id:'k3', ceg:'FLOTTA CAR', nev:'ISTVÁN', telefon:'+36303921418'},
-          {id:'k4', ceg:'', nev:'?', telefon:'+36307898057'},
-          {id:'k5', ceg:'OPEL', nev:'FADL GÁBOR', telefon:'+36709300923'}
-        ];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
-        refresh();
-      } catch (e) {
-        console.warn('Sheets load failed, using local', e);
+        if(!silent) statusMessage('Központi kapcsolat aktív · verzió '+remoteVersion);
+      } catch(err){statusMessage('Nincs központi kapcsolat: '+err.message,true);}
+    }
+    function configureBackend() {
+      const url=prompt('Illeszd be a Google Apps Script webalkalmazás /exec végű címét:',backendUrl);
+      if(url===null) return;
+      const value=url.trim();
+      if(value && !/^https:\/\/script\.google\.com\/macros\/s\/[^/?]+\/exec(?:\?.*)?$/.test(value)) {
+        alert('Hibás Apps Script URL.');return;
       }
+      backendUrl=value;localStorage.setItem(CLOUD_URL_KEY,value);
+      remoteVersion=0;localStorage.removeItem(VERSION_KEY);
+      if(!value){statusMessage('Csak helyi mentés – megosztás nem aktív',true);return;}
+      if(dirty){statusMessage('Nem mentett helyi módosítás; előbb mentsd a JSON biztonsági másolatot.',true);return;}
+      pullRemote();
     }
-
-    function init() {
-      loadFromSheets();
-      // Auto-refresh kikapcsolva – ne írja felül a beírt adatokat
-    }
-
-    function load() {
-      init();
-    }
-
     function save() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ vehicles, fuelCards, drivers, contacts }));
-      if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes('YOUR')) {
-        fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'vehicles', rows: vehicles.map(v => [v.rendszam||'', ((v.gyartmany||'')+' '+(v.modell||'')).trim(), v.currentDriver||'', v.berbeado||'', v.helyszin||'', v.status||'', v.gumicsere||'', v.muszakiLejarat||'', v.kovetkezoSzervizDatum||'', v.megjegyzes||'', v.alvazszam||'']) }) }).catch(()=>{});
-        fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'cards', rows: fuelCards.map(c => [c.number||'', c.provider||'', c.vehicle||'', (c.note||'').replace('PIN: ',''), c.status||'', '']) }) }).catch(()=>{});
-        fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ type: 'contacts', rows: contacts.map(c => [c.ceg||'', c.nev||'', c.telefon||'']) }) }).catch(()=>{});
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot()));
+      dirty=true;localStorage.setItem(PENDING_KEY,JSON.stringify(snapshot()));
+      statusMessage('Helyi mentés kész · központi mentés folyamatban…');
+      if(pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer=setTimeout(pushRemote,350);
+    }
+    async function pushRemote() {
+      if(!backendUrl){statusMessage('Csak helyi mentés – központi mentés nincs beállítva',true);return;}
+      if(syncInProgress) {pendingTimer=setTimeout(pushRemote,1200);return;}
+      syncInProgress=true;
+      const draft=snapshot();
+      const payload={action:'save',baseVersion:remoteVersion,requestId:'r'+Date.now()+'_'+Math.random().toString(36).slice(2),data:draft};
+      try{
+        // no-cors POST response is opaque; success is confirmed separately through JSONP readback.
+        await fetch(backendUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(payload)});
+        let confirmed=false;
+        for(let attempt=0;attempt<5;attempt++){
+          await new Promise(r=>setTimeout(r,550+attempt*500));
+          const check=await safeJsonp(backendUrl);
+          if(check.ok && check.requestId===payload.requestId){
+            confirmed=true;remoteVersion=Number(check.version);
+            localStorage.setItem(VERSION_KEY,String(remoteVersion));
+            // Another local edit may have occurred while this request was in flight.
+            if(JSON.stringify(snapshot())===JSON.stringify(draft)){
+              dirty=false;localStorage.removeItem(PENDING_KEY);
+              statusMessage('Minden módosítás elmentve a központi adatbázisba ✓');
+            }
+            break;
+          }
+          if(check.ok && Number(check.version)>remoteVersion){
+            statusMessage('Ütközés: más is módosította az adatokat. A helyi változat megmaradt; exportáld a JSON-t, majd egyeztesd az eltérést.',true);
+            return;
+          }
+        }
+        if(!confirmed) throw Error('A szerver nem igazolta a mentést.');
+      }catch(err){statusMessage('A központi mentés nem sikerült; a helyi másolat megmaradt: '+err.message,true);}
+      finally{
+        syncInProgress=false;
+        if(dirty && !localStorage.getItem(PENDING_KEY)) dirty=false;
       }
     }
+    function init() {
+      try{
+        const saved=localStorage.getItem(STORAGE_KEY);
+        const backup=localStorage.getItem(PENDING_KEY);
+        const d=backup?JSON.parse(backup):(saved?JSON.parse(saved):EMBEDDED_DATA);
+        applySnapshot(d);
+        dirty=Boolean(backup);
+        if(dirty)statusMessage('Van nem szinkronizált helyi módosítás. A JSON exporttal mentsd el, mielőtt frissítenél.',true);
+        else if(backendUrl)pullRemote();
+        else statusMessage('Helyi működés · a központi kapcsolat beállításra vár',true);
+      }catch(err){applySnapshot(EMBEDDED_DATA);statusMessage('Helyi visszaállítás szükséges: '+err.message,true);}
+      setInterval(()=>{if(!dirty)pullRemote(true);},7000);
+      window.addEventListener('focus',()=>{if(!dirty)pullRemote(true);});
+    }
+    function load(){init();}
 
     function uid() {
       return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -2682,7 +2197,7 @@
     }
 
     function exportData() {
-      const blob = new Blob([JSON.stringify({ vehicles, fuelCards, drivers }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ vehicles, fuelCards, drivers, contacts }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `flotta-export-${new Date().toISOString().slice(0,10)}.json`;
