@@ -904,6 +904,23 @@
         }
         result=result.replace(/([0-9]+) napja(?=\b|\s|\()/g,'$1 days ago')
           .replace(/([0-9]+) nap múlva(?=\b|\s|\()/g,'$1 days away');
+        // Embedded system labels following a plate, event date or dash.
+        result=result.replace(/(^|[—–·:]\s*)(Tankolókártya)(?=\s+[0-9])/g,'$1Fuel card')
+          .replace(/(^|[—–·:]\s*)(Jogosítvány)(?=\s|$)/g,'$1Driving licence')
+          .replace(/(^|[—–·:]\s*)(Biztosítás)(?=\s|:|$)/g,'$1Insurance')
+          .replace(/(^|[—–·:]\s*)(Műszaki)(?=\s|:|$)/g,'$1Inspection')
+          .replace(/(^|[—–·:]\s*)(Szervizbe került)(?=\s|$)/g,'$1Sent for service')
+          .replace(/(^|[—–·:]\s*)(Szervizből vissza érkezett)(?=\s|$)/g,'$1Returned from service')
+          .replace(/(^|[—–·:]\s*)(Átadás)(?=\s|$)/g,'$1Handover')
+          .replace(/(^|[—–·:]\s*)(Visszaadás)(?=\s|$)/g,'$1Return');
+        if (/^(?:Cloud save failed|No cloud connection|Local recovery required|Invalid file)/.test(result)) {
+          for (const hu of [
+            'A központi adatkapcsolat időtúllépés miatt megszakadt.',
+            'A szerver nem érhető el.',
+            'A szerver nem igazolta a mentést.',
+            'Betöltési hiba'
+          ]) result=result.replace(hu,UI_EN[hu]||hu);
+        }
       }
       return leading+result+trailing;
     }
