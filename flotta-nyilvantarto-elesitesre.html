@@ -308,6 +308,7 @@
               <th data-i18n="vehicle">Jármű</th>
               <th data-i18n="driver">Használó</th>
               <th>Bérbeadó</th>
+              <th data-i18n="rentalContract">Bérleti szerződés lejárata</th>
               <th>Gumicsere</th>
               <th>VIN</th>
               <th data-i18n="status">Állapot</th>
@@ -385,8 +386,8 @@
           <div class="form-group">
             <label>Állapot</label>
             <select id="status">
-              <option value="aktiv">Aktív</option>
-              <option value="szerviz">Szervizben</option>
+              <option value="aktiv" data-i18n="operationActive">Operáció (aktív)</option>
+              <option value="szerviz" data-i18n="serviceInactive">Szerviz (inaktív)</option>
             </select>
           </div>
           <div class="form-group">
@@ -448,6 +449,10 @@
           <div class="form-group">
             <label>Bérbeadó</label>
             <input type="text" id="berbeado" placeholder="pl. FLOTTA BUSINESS">
+          </div>
+          <div class="form-group">
+            <label data-i18n="rentalContract">Bérleti szerződés lejárata</label>
+            <input type="date" id="berletiSzerzodesLejarat">
           </div>
           <div class="form-group">
             <label>Ki használja</label>
@@ -640,8 +645,8 @@
           <div class="form-group">
             <label>Új státusz</label>
             <select id="newStatus" required>
-              <option value="aktiv">Aktív</option>
-              <option value="szerviz">Szervizben</option>
+              <option value="aktiv" data-i18n="operationActive">Operáció (aktív)</option>
+              <option value="szerviz" data-i18n="serviceInactive">Szerviz (inaktív)</option>
             </select>
           </div>
           <div class="form-group">
@@ -680,6 +685,9 @@
         search: 'Keresés rendszám, gyártmány, modell...',
         allStatus: 'Minden állapot',
         reports: 'Riportok',
+        rentalContract: 'Bérleti szerződés lejárata',
+        operationActive: 'Operáció (aktív)',
+        serviceInactive: 'Szerviz (inaktív)',
         shareable: 'Megosztható verzió letöltése',
         sample: 'Minta adatok',
         export: 'Export JSON',
@@ -743,6 +751,9 @@
         search: 'Search plate, make, model...',
         allStatus: 'All statuses',
         reports: 'Reports',
+        rentalContract: 'Rental contract expiry',
+        operationActive: 'Operations (active)',
+        serviceInactive: 'Service (inactive)',
         shareable: 'Download shareable version',
         sample: 'Sample data',
         export: 'Export JSON',
@@ -835,7 +846,7 @@
 
     // Complete Hungarian / English interface localisation. Stored fleet records
     // (names, plates, comments) are not translated or modified.
-    const UI_EN = {"Flotta Nyilvántartó":"Fleet Manager","Járművek nyilvántartása, állapot követés és lejárati dátumok figyelése":"Vehicle records, status tracking and expiry monitoring","Kapcsolódás...":"Connecting...","⚙️ Központi mentés beállítása":"⚙️ Configure cloud storage","↓ JSON biztonsági mentés":"↓ Download JSON backup","📊 Riportok":"📊 Reports","⚠️ Lejárati és állapot figyelmeztetések":"⚠️ Expiry and status alerts","📝 Átadás / Visszaadás rögzítése":"📝 Record handover / return","+ Új átadás / visszaadás":"+ New handover / return","Itt rögzítheted, hogy ki vette át vagy adta le a járművet. A legutóbbi esemény megjelenik a jármű táblázatban is.":"Record who collected or returned a vehicle. The most recent event is also shown in the vehicle table.","Járművek":"Vehicles","+ Új jármű":"+ New vehicle","Rendszám":"License plate","Jármű":"Vehicle","Használó":"Assigned driver","Bérbeadó":"Leasing company","Gumicsere":"Tyre change","VIN":"VIN","Állapot":"Status","Hely":"Location","Műszaki":"Inspection","Következő szerviz":"Next service","Megjegyzés":"Notes","Műveletek":"Actions","Tankolókártyák":"Fuel cards","+ Új kártya":"+ New card","Kártyaszám":"Card number","Szolgáltató":"Provider","Lejárat":"Expiry","Limit / Státusz":"Limit / Status","Sofőrök":"Drivers","+ Új sofőr":"+ New driver","Név":"Name","Telefon":"Phone","Jogosítvány":"Driving licence","Státusz":"Status","Mióta":"Since","Új jármű":"New vehicle","Rendszám *":"License plate *","Aktív":"Active","Szervizben":"In service","Gyártmány":"Make","Modell":"Model","Évjárat":"Model year","Alvázszám (VIN)":"Vehicle identification number (VIN)","Aktuális km":"Current mileage (km)","Biztosítás száma":"Insurance policy number","Helyszín / Telephely":"Site / Depot","Kötelező biztosítás lejárata":"Third-party insurance expiry","Műszaki vizsga lejárata":"Inspection expiry","Casco lejárata":"Comprehensive insurance expiry","Következő szerviz (km)":"Next service (km)","Következő szerviz (dátum és idő)":"Next service (date and time)","Gumicsere megtörtént":"Tyres changed","Igen":"Yes","Nem":"No","Ki használja":"Assigned to","Mégse":"Cancel","Mentés":"Save","Új sofőr":"New driver","Név *":"Name *","Jogosítvány lejárat":"Driving licence expiry","Inaktív":"Inactive","Új tankolókártya":"New fuel card","Kártyaszám *":"Card number *","Hozzárendelt jármű":"Assigned vehicle","— nincs —":"— none —","Havi limit (Ft / liter)":"Monthly limit (HUF / litres)","Lezárt":"Closed","Riportok":"Reports","Bezárás":"Close","Letöltés":"Download","Átadás / Visszaadás rögzítése":"Record handover / return","Jármű *":"Vehicle *","Válassz járművet...":"Select a vehicle...","Típus *":"Type *","Átadás (felvette)":"Handover (collected)","Visszaadás (leadta)":"Return (handed back)","Szervizbe került":"Sent for service","Szervizből vissza érkezett":"Returned from service","Ki vette át / adta le *":"Collected / returned by *","Válassz sofőrt...":"Select a driver...","Dátum *":"Date *","Km állás":"Odometer reading","Rögzítés":"Record","Előzmények":"History","Státusz módosítása":"Change status","Új státusz":"New status","Szerviz időpont (dátum és óra)":"Service appointment (date and time)","Keresés rendszám, gyártmány, modell...":"Search by plate, make or model...","pl. Volkswagen":"e.g. Volkswagen","pl. Golf":"e.g. Golf","pl. 123456789":"e.g. 123456789","pl. FLOTTA BUSINESS":"e.g. FLOTTA BUSINESS","pl. KEVIN":"e.g. KEVIN","pl. MOL, Shell, OMV":"e.g. MOL, Shell, OMV","pl. 150 000 Ft":"e.g. HUF 150,000","Opcionális":"Optional","Cél, állapot, megjegyzés...":"Purpose, condition, notes...","Miért változik a státusz? (pl. szerviz kész, fékcsere, stb.)":"Reason for status change (e.g. service complete, brake replacement)","Nincs kapcsolat.":"No contacts.","Nincs tankolókártya.":"No fuel cards.","Nincs sofőr.":"No drivers.","Nincs találat.":"No results.","Nincs sofőr. Adj hozzá egyet.":"No drivers yet. Add one.","Nincs tankolókártya. Adj hozzá egyet.":"No fuel cards yet. Add one.","Nincs jármű. Adj hozzá egyet.":"No vehicles yet. Add one.","Nincs közelgő lejárat vagy hosszú ideje nem üzemelő jármű.":"No upcoming expiries or vehicles out of service for an extended period.","Nincs közelgő lejárat.":"No upcoming expiries.","Még nincs előzmény.":"No history recorded yet.","Még nincs rögzített előzmény.":"No history recorded yet.","Cég / Szolgáltató":"Company / Provider","Sofőr":"Driver","Kártya":"Fuel card","Biztosítás":"Insurance","Dátum":"Date","Összes jármű":"Total vehicles","30 napon belül lejár":"Expiring within 30 days","Lejárt":"Expired","Szerviz":"Service","Átvette":"Collected","Leadta":"Returned","Szervizbe":"To service","Szervizből vissza":"Returned from service","Átadás":"Handover","Visszaadás":"Return","Állapotváltozás":"Status change","Státuszváltozás":"Status change","Sofőr szerkesztése":"Edit driver","Kártya szerkesztése":"Edit fuel card","Jármű szerkesztése":"Edit vehicle","Tankolókártya":"Fuel card","Jár mű":"Vehicle","Állapot változott:":"Status changed:","Státusz:":"Status:","Időpont:":"Appointment:","Flotta összesítő":"Fleet summary","Összes jármű:":"Total vehicles:","Lejáratok (60 napon belül / lejárt)":"Expiries (within 60 days / overdue)","Hosszú ideje nem üzemelő (14+ nap)":"Out of service for 14+ days","Legutóbbi átadások / események":"Recent handovers / events","Nincs ilyen jármű.":"No such vehicles.","Nincs kártya.":"No cards.","nincs hozzárendelve":"not assigned","Nincs rögzített előzmény.":"No history recorded.","Flotta Riport":"Fleet Report","Generálva:":"Generated:","Helyi mentés kész · központi mentés folyamatban…":"Saved locally · syncing to cloud…","A központi mentés nem sikerült; a helyi másolat megmaradt:":"Cloud save failed; your local copy is preserved:","Minden módosítás elmentve a központi adatbázisba ✓":"All changes saved to cloud ✓","Központi kapcsolat aktív · verzió":"Cloud connection active · version","Nincs központi kapcsolat:":"No cloud connection:","Csak helyi mentés – központi mentés nincs beállítva":"Local saving only – cloud storage is not configured","Csak helyi mentés – megosztás nem aktív":"Local saving only – sharing is not active","Helyi működés · a központi kapcsolat beállításra vár":"Local mode · cloud connection is not configured","A központi adatkapcsolat időtúllépés miatt megszakadt.":"Cloud connection timed out.","A szerver nem érhető el.":"The server is unavailable.","Betöltési hiba":"Loading error","A szerver nem igazolta a mentést.":"The server did not confirm the save.","Van nem szinkronizált helyi módosítás. A JSON exporttal mentsd el, mielőtt frissítenél.":"There are unsynced local changes. Export a JSON backup before refreshing.","Nem mentett helyi módosítás; előbb mentsd a JSON biztonsági másolatot.":"Unsaved local changes; export a JSON backup first.","Helyi visszaállítás szükséges:":"Local recovery required:","Ütközés: más is módosította az adatokat. A helyi változat megmaradt; exportáld a JSON-t, majd egyeztesd az eltérést.":"Conflict: someone else changed the data. Your local copy is preserved; export JSON and reconcile the differences.","Illeszd be a Google Apps Script webalkalmazás /exec végű címét:":"Paste the Google Apps Script web app URL ending in /exec:","Hibás Apps Script URL.":"Invalid Apps Script URL.","Válassz járművet!":"Select a vehicle!","Rögzítve!":"Recorded!","Ez a rendszám már létezik!":"This license plate already exists!","Biztosan törlöd ezt a járművet?":"Are you sure you want to delete this vehicle?","Biztosan törlöd ezt a sofőrt?":"Are you sure you want to delete this driver?","Biztosan törlöd ezt a tankolókártyát?":"Are you sure you want to delete this fuel card?","Importálod az adatokat? A jelenlegi adatok felülíródnak.":"Import the data? Existing data will be replaced.","Sikeres import!":"Data imported successfully!","Hibás fájl:":"Invalid file:","Hiba: nem található a beágyazási pont. Használd az Export JSON-t.":"Error: embedded data marker not found. Use Export JSON.","Hiba a beágyazáskor.":"Error embedding the data.","Megosztható verzió letöltve!":"Shareable version downloaded!","Nem sikerült beolvasni a fájlt. Használd az Export JSON-t, vagy töltsd fel a HTML-t egy webes helyre (pl. Google Drive, Dropbox).":"Could not read the file. Use Export JSON or host the HTML online (e.g. Google Drive or Dropbox).","Helyi fájl esetén a böngésző korlátozhatja. Töltsd fel a HTML-t egy webes tárhelyre, vagy használd az Export JSON + Import módszert.":"Your browser may restrict local files. Host the HTML online or use Export JSON + Import.","Minta adatok ki vannak kapcsolva. A rendszer a valós flotta adatokat használja.":"Sample data are disabled. The app uses actual fleet data.","A böngésző blokkolta az új ablakot. Engedélyezd a felugró ablakokat, vagy használd a Nyomtatás gombot.":"The browser blocked the popup. Allow popups or use Print.","Ezt a fájlt küldd el vagy oszd meg – a másik azonnal látni fogja az összes adatot és az összegzőt.":"Share this file so others can see the data and summary."};
+    const UI_EN = {"Flotta Nyilvántartó":"Fleet Manager","Járművek nyilvántartása, állapot követés és lejárati dátumok figyelése":"Vehicle records, status tracking and expiry monitoring","Kapcsolódás...":"Connecting...","⚙️ Központi mentés beállítása":"⚙️ Configure cloud storage","↓ JSON biztonsági mentés":"↓ Download JSON backup","📊 Riportok":"📊 Reports","⚠️ Lejárati és állapot figyelmeztetések":"⚠️ Expiry and status alerts","📝 Átadás / Visszaadás rögzítése":"📝 Record handover / return","+ Új átadás / visszaadás":"+ New handover / return","Itt rögzítheted, hogy ki vette át vagy adta le a járművet. A legutóbbi esemény megjelenik a jármű táblázatban is.":"Record who collected or returned a vehicle. The most recent event is also shown in the vehicle table.","Járművek":"Vehicles","+ Új jármű":"+ New vehicle","Rendszám":"License plate","Jármű":"Vehicle","Használó":"Assigned driver","Bérbeadó":"Leasing company","Gumicsere":"Tyre change","VIN":"VIN","Állapot":"Status","Hely":"Location","Műszaki":"Inspection","Következő szerviz":"Next service","Megjegyzés":"Notes","Műveletek":"Actions","Tankolókártyák":"Fuel cards","+ Új kártya":"+ New card","Kártyaszám":"Card number","Szolgáltató":"Provider","Lejárat":"Expiry","Limit / Státusz":"Limit / Status","Sofőrök":"Drivers","+ Új sofőr":"+ New driver","Név":"Name","Telefon":"Phone","Jogosítvány":"Driving licence","Státusz":"Status","Mióta":"Since","Új jármű":"New vehicle","Rendszám *":"License plate *","Aktív":"Active","Szervizben":"In service","Gyártmány":"Make","Modell":"Model","Évjárat":"Model year","Alvázszám (VIN)":"Vehicle identification number (VIN)","Aktuális km":"Current mileage (km)","Biztosítás száma":"Insurance policy number","Helyszín / Telephely":"Site / Depot","Kötelező biztosítás lejárata":"Third-party insurance expiry","Műszaki vizsga lejárata":"Inspection expiry","Casco lejárata":"Comprehensive insurance expiry","Következő szerviz (km)":"Next service (km)","Következő szerviz (dátum és idő)":"Next service (date and time)","Gumicsere megtörtént":"Tyres changed","Igen":"Yes","Nem":"No","Ki használja":"Assigned to","Mégse":"Cancel","Mentés":"Save","Új sofőr":"New driver","Név *":"Name *","Jogosítvány lejárat":"Driving licence expiry","Inaktív":"Inactive","Új tankolókártya":"New fuel card","Kártyaszám *":"Card number *","Hozzárendelt jármű":"Assigned vehicle","— nincs —":"— none —","Havi limit (Ft / liter)":"Monthly limit (HUF / litres)","Lezárt":"Closed","Riportok":"Reports","Bezárás":"Close","Letöltés":"Download","Átadás / Visszaadás rögzítése":"Record handover / return","Jármű *":"Vehicle *","Válassz járművet...":"Select a vehicle...","Típus *":"Type *","Átadás (felvette)":"Handover (collected)","Visszaadás (leadta)":"Return (handed back)","Szervizbe került":"Sent for service","Szervizből vissza érkezett":"Returned from service","Ki vette át / adta le *":"Collected / returned by *","Válassz sofőrt...":"Select a driver...","Dátum *":"Date *","Km állás":"Odometer reading","Rögzítés":"Record","Előzmények":"History","Státusz módosítása":"Change status","Új státusz":"New status","Szerviz időpont (dátum és óra)":"Service appointment (date and time)","Keresés rendszám, gyártmány, modell...":"Search by plate, make or model...","pl. Volkswagen":"e.g. Volkswagen","pl. Golf":"e.g. Golf","pl. 123456789":"e.g. 123456789","pl. FLOTTA BUSINESS":"e.g. FLOTTA BUSINESS","pl. KEVIN":"e.g. KEVIN","pl. MOL, Shell, OMV":"e.g. MOL, Shell, OMV","pl. 150 000 Ft":"e.g. HUF 150,000","Opcionális":"Optional","Cél, állapot, megjegyzés...":"Purpose, condition, notes...","Miért változik a státusz? (pl. szerviz kész, fékcsere, stb.)":"Reason for status change (e.g. service complete, brake replacement)","Nincs kapcsolat.":"No contacts.","Nincs tankolókártya.":"No fuel cards.","Nincs sofőr.":"No drivers.","Nincs találat.":"No results.","Nincs sofőr. Adj hozzá egyet.":"No drivers yet. Add one.","Nincs tankolókártya. Adj hozzá egyet.":"No fuel cards yet. Add one.","Nincs jármű. Adj hozzá egyet.":"No vehicles yet. Add one.","Nincs közelgő lejárat vagy hosszú ideje nem üzemelő jármű.":"No upcoming expiries or vehicles out of service for an extended period.","Nincs közelgő lejárat.":"No upcoming expiries.","Még nincs előzmény.":"No history recorded yet.","Még nincs rögzített előzmény.":"No history recorded yet.","Cég / Szolgáltató":"Company / Provider","Sofőr":"Driver","Kártya":"Fuel card","Biztosítás":"Insurance","Dátum":"Date","Összes jármű":"Total vehicles","30 napon belül lejár":"Expiring within 30 days","Lejárt":"Expired","Szerviz":"Service","Átvette":"Collected","Leadta":"Returned","Szervizbe":"To service","Szervizből vissza":"Returned from service","Átadás":"Handover","Visszaadás":"Return","Állapotváltozás":"Status change","Státuszváltozás":"Status change","Sofőr szerkesztése":"Edit driver","Kártya szerkesztése":"Edit fuel card","Jármű szerkesztése":"Edit vehicle","Tankolókártya":"Fuel card","Jár mű":"Vehicle","Állapot változott:":"Status changed:","Státusz:":"Status:","Időpont:":"Appointment:","Flotta összesítő":"Fleet summary","Összes jármű:":"Total vehicles:","Lejáratok (60 napon belül / lejárt)":"Expiries (within 60 days / overdue)","Hosszú ideje nem üzemelő (14+ nap)":"Out of service for 14+ days","Legutóbbi átadások / események":"Recent handovers / events","Nincs ilyen jármű.":"No such vehicles.","Nincs kártya.":"No cards.","nincs hozzárendelve":"not assigned","Nincs rögzített előzmény.":"No history recorded.","Flotta Riport":"Fleet Report","Generálva:":"Generated:","Helyi mentés kész · központi mentés folyamatban…":"Saved locally · syncing to cloud…","A központi mentés nem sikerült; a helyi másolat megmaradt:":"Cloud save failed; your local copy is preserved:","Minden módosítás elmentve a központi adatbázisba ✓":"All changes saved to cloud ✓","Központi kapcsolat aktív · verzió":"Cloud connection active · version","Nincs központi kapcsolat:":"No cloud connection:","Csak helyi mentés – központi mentés nincs beállítva":"Local saving only – cloud storage is not configured","Csak helyi mentés – megosztás nem aktív":"Local saving only – sharing is not active","Helyi működés · a központi kapcsolat beállításra vár":"Local mode · cloud connection is not configured","A központi adatkapcsolat időtúllépés miatt megszakadt.":"Cloud connection timed out.","A szerver nem érhető el.":"The server is unavailable.","Betöltési hiba":"Loading error","A szerver nem igazolta a mentést.":"The server did not confirm the save.","Van nem szinkronizált helyi módosítás. A JSON exporttal mentsd el, mielőtt frissítenél.":"There are unsynced local changes. Export a JSON backup before refreshing.","Nem mentett helyi módosítás; előbb mentsd a JSON biztonsági másolatot.":"Unsaved local changes; export a JSON backup first.","Helyi visszaállítás szükséges:":"Local recovery required:","Ütközés: más is módosította az adatokat. A helyi változat megmaradt; exportáld a JSON-t, majd egyeztesd az eltérést.":"Conflict: someone else changed the data. Your local copy is preserved; export JSON and reconcile the differences.","Illeszd be a Google Apps Script webalkalmazás /exec végű címét:":"Paste the Google Apps Script web app URL ending in /exec:","Hibás Apps Script URL.":"Invalid Apps Script URL.","Válassz járművet!":"Select a vehicle!","Rögzítve!":"Recorded!","Ez a rendszám már létezik!":"This license plate already exists!","Biztosan törlöd ezt a járművet?":"Are you sure you want to delete this vehicle?","Biztosan törlöd ezt a sofőrt?":"Are you sure you want to delete this driver?","Biztosan törlöd ezt a tankolókártyát?":"Are you sure you want to delete this fuel card?","Importálod az adatokat? A jelenlegi adatok felülíródnak.":"Import the data? Existing data will be replaced.","Sikeres import!":"Data imported successfully!","Hibás fájl:":"Invalid file:","Hiba: nem található a beágyazási pont. Használd az Export JSON-t.":"Error: embedded data marker not found. Use Export JSON.","Hiba a beágyazáskor.":"Error embedding the data.","Megosztható verzió letöltve!":"Shareable version downloaded!","Nem sikerült beolvasni a fájlt. Használd az Export JSON-t, vagy töltsd fel a HTML-t egy webes helyre (pl. Google Drive, Dropbox).":"Could not read the file. Use Export JSON or host the HTML online (e.g. Google Drive or Dropbox).","Helyi fájl esetén a böngésző korlátozhatja. Töltsd fel a HTML-t egy webes tárhelyre, vagy használd az Export JSON + Import módszert.":"Your browser may restrict local files. Host the HTML online or use Export JSON + Import.","Minta adatok ki vannak kapcsolva. A rendszer a valós flotta adatokat használja.":"Sample data are disabled. The app uses actual fleet data.","A böngésző blokkolta az új ablakot. Engedélyezd a felugró ablakokat, vagy használd a Nyomtatás gombot.":"The browser blocked the popup. Allow popups or use Print.","Ezt a fájlt küldd el vagy oszd meg – a másik azonnal látni fogja az összes adatot és az összegzőt.":"Share this file so others can see the data and summary.","Bérleti szerződés lejárata":"Rental contract expiry","Operáció (aktív)":"Operations (active)","Szerviz (inaktív)":"Service (inactive)"};
     const UI_HU = Object.fromEntries(Object.entries(UI_EN).map(([hu,en])=>[en,hu]));
     const translatedNodes = new WeakMap();
     const translatedAttributes = new WeakMap();
@@ -1152,7 +1163,7 @@
       let overdue = 0;
       let soon = 0;
       vehicles.forEach(v => {
-        ['biztositasLejarat','muszakiLejarat','cascoLejarat'].forEach(k => {
+        ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].forEach(k => {
           const d = daysUntil(v[k]);
           if (d !== null) {
             if (d < 0) overdue++;
@@ -1289,7 +1300,7 @@
         title = 'Szervizben';
       } else if (type === 'soon') {
         filtered = vehicles.filter(v => {
-          return ['biztositasLejarat','muszakiLejarat','cascoLejarat'].some(k => {
+          return ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].some(k => {
             const d = daysUntil(v[k]);
             return d !== null && d >= 0 && d <= 30;
           });
@@ -1297,7 +1308,7 @@
         title = '30 napon belül lejár';
       } else if (type === 'overdue') {
         filtered = vehicles.filter(v => {
-          return ['biztositasLejarat','muszakiLejarat','cascoLejarat'].some(k => {
+          return ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].some(k => {
             const d = daysUntil(v[k]);
             return d !== null && d < 0;
           });
@@ -1324,6 +1335,7 @@
                   ${showDriver ? '<th>Sofőr</th><th>Dátum</th>' : ''}
                   <th>Biztosítás</th>
                   <th>Műszaki</th>
+                  <th data-i18n="rentalContract">Bérleti szerződés lejárata</th>
                   <th>Kártya</th>
                 </tr>
               </thead>
@@ -1341,6 +1353,7 @@
                     ${showDriver ? `<td>${driverName}</td><td>${dateInfo}</td>` : ''}
                     <td>${dateBadge(v.biztositasLejarat)}</td>
                     <td>${dateBadge(v.muszakiLejarat)}</td>
+                    <td>${dateBadge(v.berletiSzerzodesLejarat)}</td>
                     <td>${card ? card.number + '<br><small>' + (card.provider || '') + '</small>' : '—'}</td>
                   </tr>`;
                 }).join('')}
@@ -1381,7 +1394,7 @@
 
       const tbody = document.getElementById('vehicleTable');
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#6b7280;padding:2rem;">Nincs találat.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#6b7280;padding:2rem;">Nincs találat.</td></tr>';
         return;
       }
 
@@ -1391,6 +1404,7 @@
           <td>${v.gyartmany || '—'} ${v.modell || ''}</td>
           <td>${v.currentDriver || '—'}</td>
           <td>${v.berbeado || '—'}</td>
+          <td>${dateBadge(v.berletiSzerzodesLejarat)}</td>
           <td>${v.gumicsere === 'igen' ? '<span class="badge ok">Igen</span>' : v.gumicsere === 'nem' ? '<span class="badge leallitott">Nem</span>' : '—'}</td>
           <td style="font-size:0.8rem;">${v.alvazszam || '—'}</td>
           <td><span class="badge ${v.status}">${statusLabel(v.status)}</span></td>
@@ -1421,6 +1435,13 @@
       document.getElementById('statusModal').classList.remove('active');
     }
 
+    function setVehicleOperatingStatus(v,newStatus) {
+      // Keep the completed service appointment recorded, but no longer pending.
+      if (v.status==='szerviz' && newStatus==='aktiv') v.utolsoLezartSzervizIdopont=v.kovetkezoSzervizDatum||null;
+      else if (newStatus==='szerviz') v.utolsoLezartSzervizIdopont=null;
+      v.status=newStatus;
+    }
+
     function saveStatusChange(e) {
       e.preventDefault();
       const id = document.getElementById('statusVehicleId').value;
@@ -1431,10 +1452,10 @@
       const note = document.getElementById('statusNote').value.trim();
       const serviceTime = document.getElementById('statusServiceTime').value;
 
-      v.status = newStatus;
+      setVehicleOperatingStatus(v,newStatus);
       v.statusSince = new Date().toISOString().slice(0,10);
       if (note) v.megjegyzes = note;
-      if (serviceTime) v.kovetkezoSzervizDatum = serviceTime;
+      if (serviceTime && serviceTime!==v.kovetkezoSzervizDatum){v.kovetkezoSzervizDatum=serviceTime;v.utolsoLezartSzervizIdopont=null;}
 
       ensureHistory(v);
       v.history.push({
@@ -1458,7 +1479,8 @@
       const v = vehicles.find(x => x.id === id);
       if (!v) return;
       const oldStatus = v.status;
-      v.status = newStatus;
+      if (!['aktiv','szerviz'].includes(newStatus) || newStatus===oldStatus) return;
+      setVehicleOperatingStatus(v,newStatus);
       v.statusSince = new Date().toISOString().slice(0,10);
       ensureHistory(v);
       v.history.push({
@@ -1482,11 +1504,13 @@
           { key: 'biztositasLejarat', label: t('insurance') },
           { key: 'muszakiLejarat', label: t('technical') },
           { key: 'cascoLejarat', label: 'Casco' },
+          { key: 'berletiSzerzodesLejarat', label: t('rentalContract') },
           { key: 'kovetkezoSzervizDatum', label: t('service') }
         ];
         checks.forEach(c => {
           const days = daysUntil(v[c.key]);
-          if (days !== null && days <= 60) {
+          const completedService = c.key==='kovetkezoSzervizDatum' && v.status==='aktiv' && v.utolsoLezartSzervizIdopont && v.utolsoLezartSzervizIdopont===v.kovetkezoSzervizDatum;
+          if (!completedService && days !== null && days <= 60) {
             items.push({
               type: 'expiry',
               id: v.id,
@@ -1499,20 +1523,13 @@
           }
         });
 
-        if ((v.status === 'szerviz' || v.status === 'leallitott') && v.statusSince) {
-          const daysSince = Math.abs(daysUntil(v.statusSince) || 0);
-          if (daysSince >= LONG_DAYS) {
-            items.push({
-              type: 'downtime',
-              id: v.id,
-              rendszam: v.rendszam,
-              status: statusLabel(v.status),
-              label: `${daysSince} ${t('daysAgo')}`,
-              reason: v.megjegyzes || '',
-              days: daysSince,
-              date: v.statusSince,
-              priority: 100 + daysSince
-            });
+        // Szerviz azonnal feladatot jelent; operációra váltva megszűnik.
+        if(v.status==='szerviz'||(v.status==='leallitott'&&v.statusSince)){
+          const daysSince=v.statusSince?Math.max(0,-(daysUntil(v.statusSince)||0)):0;
+          if(v.status==='szerviz'||daysSince>=LONG_DAYS){
+            items.push({type:'downtime',id:v.id,rendszam:v.rendszam,
+              status:statusLabel(v.status),reason:v.megjegyzes||'',
+              days:daysSince,date:v.statusSince||'',priority:-100});
           }
         }
       });
@@ -1554,17 +1571,31 @@
         container.innerHTML = '<p style="color:#6b7280;">Nincs közelgő lejárat vagy hosszú ideje nem üzemelő jármű.</p>';
         return;
       }
-      container.innerHTML = items.map(i => {
+      const alertStatusSelect=(id,alertIndex)=>{
+        const v=vehicles.find(x=>x.id===id);
+        if(!v)return '';
+        return `<div class="alert-status" style="display:flex;flex-direction:column;gap:.2rem;">
+          <label for="alert-status-${v.id}-${alertIndex}" style="font-size:.8rem;font-weight:600;">${t('status')}</label>
+          <select id="alert-status-${v.id}-${alertIndex}" aria-label="${t('status')}" onchange="quickStatusChange('${v.id}',this.value)"
+          style="padding:.45rem;border:1px solid #cbd5e1;border-radius:8px;min-width:165px;">
+            <option value="szerviz" ${v.status==='szerviz'?'selected':''}>${t('serviceInactive')}</option>
+            <option value="aktiv" ${v.status!=='szerviz'?'selected':''}>${t('operationActive')}</option>
+          </select></div>`;
+      };
+      container.innerHTML = items.map((i,alertIndex) => {
         if (i.type === 'downtime') {
           return `<div class="alert-item" style="background:#fff7ed;">
             <div style="flex:1;">
               <strong>${i.rendszam}</strong> — ${i.status} 
-              <span class="badge soon">${i.days} ${t('daysAgo')}</span>
+              <span class="badge soon">${t('serviceInactive')}</span>
+              ${i.date ? `<small>${i.days} ${t('daysAgo')}</small>` : ''}
               ${i.reason ? `<div style="margin-top:0.25rem;color:#92400e;font-size:0.9rem;">${i.reason}</div>` : ''}
             </div>
             <small style="color:#6b7280;margin-right:1rem;">${i.date}</small>
             <div class="actions" style="display:flex;gap:0.4rem;">
-              <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
+              ${alertStatusSelect(i.id,alertIndex)}
+              ${alertStatusSelect(i.id,alertIndex)}
+            <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
             </div>
           </div>`;
         }
@@ -1820,7 +1851,7 @@
       // 2. Közelgő / lejárt lejáratok
       const expiries = [];
       vehicles.forEach(v => {
-        [['biztositasLejarat','Biztosítás'],['muszakiLejarat','Műszaki'],['cascoLejarat','Casco']].forEach(([k,l]) => {
+        [['biztositasLejarat','Biztosítás'],['muszakiLejarat','Műszaki'],['cascoLejarat','Casco'],['berletiSzerzodesLejarat',t('rentalContract')]].forEach(([k,l]) => {
           const d = daysUntil(v[k]);
           if (d !== null && d <= 60) expiries.push({ rendszam: v.rendszam, label: l, days: d, date: v[k] });
         });
@@ -2058,10 +2089,10 @@
 
       // Optional: update status based on type
       if (entry.type === 'szerviz') {
-        v.status = 'szerviz';
+        setVehicleOperatingStatus(v,'szerviz');
         v.statusSince = entry.date;
       } else if (entry.type === 'szervizbol_vissza') {
-        v.status = 'aktiv';
+        setVehicleOperatingStatus(v,'aktiv');
         v.statusSince = entry.date;
       }
 
@@ -2205,6 +2236,7 @@
         document.getElementById('kovetkezoSzervizDatum').value = v.kovetkezoSzervizDatum || '';
         document.getElementById('gumicsere').value = v.gumicsere || '';
         document.getElementById('berbeado').value = v.berbeado || '';
+        document.getElementById('berletiSzerzodesLejarat').value = v.berletiSzerzodesLejarat || '';
         document.getElementById('currentDriver').value = v.currentDriver || '';
         document.getElementById('megjegyzes').value = v.megjegyzes || '';
       }
@@ -2235,6 +2267,7 @@
         kovetkezoSzervizDatum: document.getElementById('kovetkezoSzervizDatum').value || null,
         gumicsere: document.getElementById('gumicsere').value || '',
         berbeado: document.getElementById('berbeado').value.trim(),
+        berletiSzerzodesLejarat: document.getElementById('berletiSzerzodesLejarat').value || null,
         currentDriver: document.getElementById('currentDriver').value.trim() || null,
         megjegyzes: document.getElementById('megjegyzes').value.trim(),
         statusSince: null
@@ -2242,6 +2275,10 @@
 
       // Track status change date and log history
       const existing = vehicles.find(v => v.id === id);
+      data.utolsoLezartSzervizIdopont=existing?.utolsoLezartSzervizIdopont||null;
+      if(existing && existing.kovetkezoSzervizDatum!==data.kovetkezoSzervizDatum) data.utolsoLezartSzervizIdopont=null;
+      if(existing?.status==='szerviz' && data.status==='aktiv') data.utolsoLezartSzervizIdopont=data.kovetkezoSzervizDatum||null;
+      if(data.status==='szerviz') data.utolsoLezartSzervizIdopont=null;
       if (!existing || existing.status !== data.status) {
         data.statusSince = new Date().toISOString().slice(0,10);
         if (!data.history) data.history = existing ? (existing.history || []) : [];
