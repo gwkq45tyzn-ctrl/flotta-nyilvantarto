@@ -42,5 +42,65 @@
     card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.showInUseFleetTile();}};
     document.getElementById('stats').appendChild(card);
   };
+
+  // An existing driver name may be a legacy assignment, not a handover.
+  // Filter and validate against actual unmatched handovers instead.
+  filterHandoverVehicles=function(){
+    const type=document.getElementById('hovType').value;
+    const select=document.getElementById('hovVehicle');
+    if(!select)return;
+    const all=vehicles;
+    let available;
+    if(type==='szervizbol_vissza')available=all.filter(v=>v.status==='szerviz');
+    else if(type==='szerviz')available=all.filter(v=>v.status==='aktiv');
+    else if(type==='atadas')available=all.filter(v=>v.status==='aktiv'&&!activeHandover(v));
+    else if(type==='visszaadas')available=all.filter(v=>Boolean(activeHandover(v)));
+    else available=all.filter(v=>v.status==='aktiv');
+    const selected=select.value;
+    select.innerHTML='<option value="">'+label('Válassz járművet...','Select a vehicle...')+'</option>'+
+      available.map(v=>'<option value="'+escapeText(v.id)+'">'+escapeText(v.rendszam)+
+      ' – '+escapeText(v.gyartmany||'')+' '+escapeText(v.modell||'')+'</option>').join('');
+    if(selected&&available.some(v=>v.id===selected))select.value=selected;
+  };
+  saveHandover=function(e){
+    e.preventDefault();
+    const get=id=>document.getElementById(id)?.value||'';
+    const vehicle=vehicles.find(v=>v.id===get('hovVehicle'));
+    if(!vehicle){alert(label('Válassz járművet!','Select a vehicle!'));return;}
+    const entry={
+      id:uid(),type:get('hovType'),who:get('hovWho').trim(),date:get('hovDate'),
+      km:get('hovKm')?Number(get('hovKm')):null,note:get('hovNote').trim(),
+      recordedAt:new Date().toISOString()
+    };
+    if(!entry.who||!entry.date){alert(label('Válassz átvevőt és dátumot!','Select a driver and date!'));return;}
+    if(entry.type==='atadas'){
+      if(vehicle.status!=='aktiv'){alert(label('Az autó nincs operációban.','The vehicle is not in operations.'));return;}
+      if(activeHandover(vehicle)){
+        alert(label('Ez az autó még nincs visszaadva.','This car has not been returned yet.'));return;
+      }
+      const duplicate=vehicles.find(v=>v.id!==vehicle.id &&
+        activeHandover(v)?.who.toLocaleLowerCase('hu')===entry.who.toLocaleLowerCase('hu'));
+      if(duplicate){
+        alert(label('Az átvevő már használja ezt az autót: ','The driver already has vehicle: ')+duplicate.rendszam);return;
+      }
+    }else if(entry.type==='visszaadas'&&!activeHandover(vehicle)){
+      alert(label('Ehhez az autóhoz nincs nyitott átvétel.','No open handover for this vehicle.'));return;
+    }
+    if(!Array.isArray(vehicle.history))vehicle.history=[];
+    vehicle.history.push(entry);
+    if(Number.isFinite(entry.km)&&entry.km!==null)vehicle.km=entry.km;
+    if(entry.type==='atadas'){
+      vehicle.currentDriver=entry.who;vehicle.currentSince=entry.date;
+    }else if(entry.type==='visszaadas'){
+      vehicle.currentDriver=null;vehicle.currentSince=null;
+    }else if(entry.type==='szerviz'){
+      setVehicleOperatingStatus(vehicle,'szerviz');vehicle.statusSince=entry.date;
+    }else if(entry.type==='szervizbol_vissza'){
+      setVehicleOperatingStatus(vehicle,'aktiv');vehicle.statusSince=entry.date;
+    }
+    save();closeHandoverModal();refresh();
+    alert(label('Rögzítve!','Recorded!'));
+  };
+
   renderStats();
 })();
