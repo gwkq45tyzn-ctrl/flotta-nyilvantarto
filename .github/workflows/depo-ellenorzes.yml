@@ -1,0 +1,27 @@
+name: DepóKapacitás - kód és biztonsági ellenőrzés
+
+on:
+  push:
+    paths:
+      - 'depokapacitas/**'
+      - '.github/workflows/depo-ellenorzes.yml'
+  pull_request:
+    paths:
+      - 'depokapacitas/**'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Webalkalmazás alapellenőrzés
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kód lekérése
+        uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript szintaxis és alapellenőrzés
+        run: node depokapacitas/tests/check.mjs
