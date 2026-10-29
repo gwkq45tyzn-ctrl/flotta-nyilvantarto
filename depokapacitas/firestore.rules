@@ -64,7 +64,15 @@ service cloud.firestore {
       allow read: if member();
       allow create: if editor()
         && request.resource.data.keys().hasOnly(['date','vehicleId','driverId','district','status','capacity'])
+        && request.resource.data.date is string
+        && request.resource.data.vehicleId is string
+        && request.resource.data.driverId is string
+        && request.resource.data.district is string
+        && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
+        && request.resource.data.status in ['planned','confirmed']
         && request.resource.data.capacity is int && request.resource.data.capacity >= 0
+        && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
+        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId;
       allow update: if false;
       allow delete: if editor()
@@ -73,8 +81,12 @@ service cloud.firestore {
     match /driverClaims/{key} {
       allow read: if member();
       allow create: if editor()
-        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
-        && request.resource.data.date is string;
+        && request.resource.data.keys().hasOnly(['date','driverId','bookingId'])
+        && request.resource.data.date is string
+        && request.resource.data.driverId is string
+        && request.resource.data.bookingId is string
+        && key == request.resource.data.date + '__' + request.resource.data.driverId
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId;
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
