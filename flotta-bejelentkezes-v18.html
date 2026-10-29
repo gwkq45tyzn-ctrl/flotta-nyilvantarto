@@ -1453,7 +1453,7 @@ body.flotta-authenticated #flottaLogin{display:none!important}
     }
 
     function showDriversList() {
-      document.getElementById('filterModalTitle').textContent = `Sofőrök (${drivers.length})`;
+      document.getElementById('filterModalTitle').textContent = `${t("drivers")} (${drivers.length})`;
       const container = document.getElementById('filterModalContent');
       if (drivers.length === 0) {
         container.innerHTML = '<p style="color:#6b7280;text-align:center;padding:2rem;">Nincs sofőr.</p>';
@@ -1463,7 +1463,9 @@ body.flotta-authenticated #flottaLogin{display:none!important}
             <table>
               <thead>
                 <tr>
-                  <th>Név</th>
+                  <th>${t("name")}</th>
+                  <th>${t("daCode")}</th>
+                  <th>${t("agency")}</th>
                   <th>Telefon</th>
                   <th>Jogosítvány</th>
                   <th>Státusz</th>
@@ -1474,9 +1476,11 @@ body.flotta-authenticated #flottaLogin{display:none!important}
                 ${drivers.map(d => `
                   <tr>
                     <td><strong>${d.name}</strong></td>
+                    <td><code>${d.daCode||"—"}</code></td>
+                    <td style="max-width:230px;white-space:normal;">${d.agency||"—"}</td>
                     <td>${d.phone || '—'}</td>
                     <td>${dateBadge(d.licenseExpiry)}</td>
-                    <td><span class="badge ${d.status === 'aktiv' ? 'ok' : 'leallitott'}">${d.status === 'aktiv' ? t('statusAktiv') : t('statusInactive')}</span></td>
+                    <td><span class="badge ${d.status === 'aktiv' ? 'ok' : 'leallitott'}">${driverStatusLabel(d.status)}</span></td>
                     <td>${d.since || '—'}</td>
                   </tr>
                 `).join('')}
