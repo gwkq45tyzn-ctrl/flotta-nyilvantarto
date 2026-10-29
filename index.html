@@ -1051,8 +1051,8 @@
 
     // Light-weight client-side access gate. Login accounts have equal edit access.
     // The Apps Script endpoint remains independently accessible until a backend auth upgrade.
-    const FLOTTA_GATE_USERS = Object.freeze({"admin":{"salt":"97650ec85b8d050a9fd4dbbd1c2a9fe1","digest":"e2bb9e5a5d7af3606e37fedda248644129719d09750a345ab0711f6847a60ad4"},"munkatars":{"salt":"8c6f1c8c498d564fdbe8245acef3db62","digest":"435ca5bcf8222e9e20d15856b37400fc6c62810dcf85ea1fee56ea503cfcdba9"}});
-    const FLOTTA_GATE_SESSION = 'flotta_simple_session_v21';
+    const FLOTTA_GATE_USERS = Object.freeze({"fleetmanager":{"salt":"24f9c72b4be99590b39da034c25f3760","digest":"33084c27349e9db51be9e46fce4a03ede8f2dc7fcda462cd58dd7f2a2d3189a2"}});
+    const FLOTTA_GATE_SESSION = 'flotta_simple_session_v22';
     const FLOTTA_GATE_MAX_AGE = 12 * 60 * 60 * 1000;
     let flottaHasLoaded = false;
 
