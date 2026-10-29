@@ -1571,18 +1571,18 @@
         container.innerHTML = '<p style="color:#6b7280;">Nincs közelgő lejárat vagy hosszú ideje nem üzemelő jármű.</p>';
         return;
       }
-      const alertStatusSelect=id=>{
+      const alertStatusSelect=(id,alertIndex)=>{
         const v=vehicles.find(x=>x.id===id);
         if(!v)return '';
         return `<div class="alert-status" style="display:flex;flex-direction:column;gap:.2rem;">
-          <label for="alert-status-${v.id}" style="font-size:.8rem;font-weight:600;">${t('status')}</label>
-          <select id="alert-status-${v.id}" aria-label="${t('status')}" onchange="quickStatusChange('${v.id}',this.value)"
+          <label for="alert-status-${v.id}-${alertIndex}" style="font-size:.8rem;font-weight:600;">${t('status')}</label>
+          <select id="alert-status-${v.id}-${alertIndex}" aria-label="${t('status')}" onchange="quickStatusChange('${v.id}',this.value)"
           style="padding:.45rem;border:1px solid #cbd5e1;border-radius:8px;min-width:165px;">
             <option value="szerviz" ${v.status==='szerviz'?'selected':''}>${t('serviceInactive')}</option>
             <option value="aktiv" ${v.status!=='szerviz'?'selected':''}>${t('operationActive')}</option>
           </select></div>`;
       };
-      container.innerHTML = items.map(i => {
+      container.innerHTML = items.map((i,alertIndex) => {
         if (i.type === 'downtime') {
           return `<div class="alert-item" style="background:#fff7ed;">
             <div style="flex:1;">
@@ -1593,8 +1593,8 @@
             </div>
             <small style="color:#6b7280;margin-right:1rem;">${i.date}</small>
             <div class="actions" style="display:flex;gap:0.4rem;">
-              ${alertStatusSelect(i.id)}
-              ${alertStatusSelect(i.id)}
+              ${alertStatusSelect(i.id,alertIndex)}
+              ${alertStatusSelect(i.id,alertIndex)}
             <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
             </div>
           </div>`;
