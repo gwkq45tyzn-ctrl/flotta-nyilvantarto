@@ -31,6 +31,9 @@
   const original=renderStats;
   renderStats=function(){
     original();
+    // Operational status is not the same as a confirmed vehicle handover.
+    const activeHeading=document.getElementById('stats')?.querySelector?.('.stat-card.success h3');
+    if(activeHeading)activeHeading.textContent=label('Operációban (aktív)','In operations (active)');
     const entries=items();
     const card=document.createElement('div');
     card.className='stat-card';
