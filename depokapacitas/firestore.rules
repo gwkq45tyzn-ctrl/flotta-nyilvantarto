@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function member() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.active == true;
+    }
+    function admin() { return member() && get(userPath()).data.role == 'admin'; }
+    function editor() {
+      return member() && get(userPath()).data.role in ['admin', 'editor'];
+    }
+
+    match /users/{uid} {
+      // First admin must be created in the Firebase Console. No self-registration.
+      allow get: if signedIn() && (request.auth.uid == uid || admin());
+      allow list: if admin();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['name','role','active'])
+        && request.resource.data.role in ['admin','editor','viewer']
+        && request.resource.data.active is bool;
+      allow delete: if admin() && uid != request.auth.uid;
+    }
+
+    match /drivers/{driverId} {
+      allow read: if member();
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['name','daCode','vendor','capacity','active'])
+        && request.resource.data.name is string
+        && request.resource.data.daCode is string
+        && request.resource.data.capacity is int
+        && request.resource.data.capacity >= 0
+        && request.resource.data.capacity <= 10000;
+      allow delete: if editor();
+    }
+    match /vehicles/{vehicleId} {
+      allow read: if member();
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['plate','model','status'])
+        && request.resource.data.plate is string
+        && request.resource.data.status in ['Elérhető','Szerviz','Leállított'];
+      allow delete: if editor();
+    }
+    match /demands/{id} {
+      allow read: if member();
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['date','district','newCount','retryCount'])
+        && request.resource.data.newCount is int && request.resource.data.retryCount is int
+        && request.resource.data.newCount >= 0 && request.resource.data.retryCount >= 0;
+      allow delete: if editor();
+    }
+    match /results/{id} {
+      allow read: if member();
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['date','driverId','district','picked','success','failed'])
+        && request.resource.data.picked is int
+        && request.resource.data.success is int && request.resource.data.failed is int
+        && request.resource.data.picked >= 0 && request.resource.data.success >= 0
+        && request.resource.data.failed >= 0
+        && request.resource.data.success + request.resource.data.failed <= request.resource.data.picked;
+      allow delete: if editor();
+    }
+    match /bookings/{bookingId} {
+      allow read: if member();
+      allow create: if editor()
+        && request.resource.data.keys().hasOnly(['date','vehicleId','driverId','district','status','capacity'])
+        && request.resource.data.capacity is int && request.resource.data.capacity >= 0
+        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId;
+      allow update: if false;
+      allow delete: if editor()
+        && !existsAfter(/databases/$(database)/documents/driverClaims/$(resource.data.date + '__' + resource.data.driverId));
+    }
+    match /driverClaims/{key} {
+      allow read: if member();
+      allow create: if editor()
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
+        && request.resource.data.date is string;
+      allow update: if false;
+      allow delete: if editor()
+        && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
+    }
+    match /attendance/{id} {
+      allow read: if member();
+      // Attendance is imported by a trusted, IAM-authorized Google Apps Script.
+      // Manual import from the logged-in web app is permitted for editors.
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['eventTime','eventDate','timeKnown','daCode','driverName','vendor','type','status','photoFront','photoLeft','photoRight','photoBack','source'])
+        && request.resource.data.type in ['Log In','Log Out'];
+      allow delete: if admin();
+    }
+    match /sourceRows/{id} {
+      allow read: if member();
+      allow create, update: if editor()
+        && request.resource.data.keys().hasOnly(['source','content','importedAt'])
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 18000;
+      allow delete: if admin();
+    }
+    match /{path=**} { allow read, write: if false; }
+  }
+}
