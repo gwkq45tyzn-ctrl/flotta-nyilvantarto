@@ -1106,6 +1106,7 @@
         document.getElementById('flottaPassword').value='';
         fleetGateDisplay();
         if(!flottaHasLoaded){flottaHasLoaded=true;load();}
+        else { refresh(); pullRemote(); }
       }catch(err){
         error.textContent=currentLang==='en'?'Invalid username or password.':'Hibás felhasználónév vagy jelszó.';
       }finally{button.disabled=false;}
@@ -2581,6 +2582,8 @@
     setLang(currentLang);
     if(fleetGateDisplay()){flottaHasLoaded=true;load();}
     else document.getElementById('flottaUsername').focus();
+    // Re-lock an expired session without requiring a page reload.
+    setInterval(()=>fleetGateDisplay(),60000);
     document.getElementById('search').addEventListener('input', () => {
       currentStatFilter = null;
       renderTable();
