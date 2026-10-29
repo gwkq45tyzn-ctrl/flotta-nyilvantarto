@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light">
+  <title>DepóKapacitás | iMile belső rendszer</title>
+  <style>
+    :root{font-family:Segoe UI,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:#17243b;background:#f0f4fa}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:linear-gradient(155deg,#ecf4ff 0%,#f5f7fb 56%,#ecf0f6 100%)}
+    header{background:linear-gradient(110deg,#14387c,#2464d2);color:white;padding:28px max(20px,calc((100vw - 1060px)/2));}
+    .brand{display:flex;align-items:center;gap:14px;max-width:1060px;margin:auto}
+    .brand-icon{display:grid;place-items:center;height:48px;width:48px;border-radius:14px;background:#ffffff24;font-size:27px}
+    h1{font-size:clamp(22px,4.2vw,32px);line-height:1.14;margin:0 0 7px}
+    header p{margin:0;color:#dceaff;font-size:14px}
+    main{max-width:1060px;margin:30px auto 0;padding:0 18px 55px}
+    .layout{display:grid;grid-template-columns:1.35fr 0.9fr;gap:18px;align-items:start}
+    .card{background:white;border:1px solid #dfe6f0;border-radius:18px;box-shadow:0 8px 30px #1736650f;padding:25px}
+    .eyebrow{text-transform:uppercase;letter-spacing:1px;color:#667993;font-size:12px;font-weight:700}
+    h2{margin:11px 0;font-size:24px}
+    p{font-size:15px;line-height:1.6;color:#4d5e75}
+    .status{display:flex;align-items:flex-start;gap:12px;border:1px solid #f1dda7;background:#fff9ea;border-radius:12px;padding:15px;margin:20px 0}
+    .dot{flex:none;margin-top:5px;height:10px;width:10px;background:#d99417;border-radius:50%}
+    .status strong{display:block;color:#7e581b;margin-bottom:4px}
+    .status small{display:block;color:#806e4d;line-height:1.5}
+    .status.live{background:#eafbef;border-color:#bce5c8}
+    .status.live .dot{background:#23894a}
+    .status.live strong{color:#185d33}
+    .status.live small{color:#386449}
+    button{font:inherit;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;background:#1959c5;color:#fff;min-height:46px}
+    button:hover:not(:disabled){background:#1348a8}
+    button:disabled{background:#a4b2c5;cursor:not-allowed}
+    .helper{font-size:13px;color:#748298;margin-top:12px}
+    .modules{display:grid;gap:12px;margin:18px 0 0}
+    .module{display:flex;align-items:flex-start;gap:12px;border:1px solid #e8edf4;background:#fbfcff;padding:12px 14px;border-radius:12px}
+    .symbol{width:26px;text-align:center;font-size:19px;flex:none}
+    .module b{display:block;font-size:14px}
+    .module span{display:block;color:#637188;font-size:13px;margin-top:2px}
+    footer{margin:20px 0;text-align:center;color:#7b879a;font-size:12px}
+    @media (max-width:740px){main{margin-top:18px}.layout{grid-template-columns:1fr}header{padding:24px 20px}.card{padding:20px}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">▦</div>
+      <div><h1>DepóKapacitás</h1><p>iMile · belső kapacitás- és depóinformációs rendszer</p></div>
+    </div>
+  </header>
+  <main>
+    <div class="layout">
+      <section class="card" aria-labelledby="main-title">
+        <div class="eyebrow">Önálló alkalmazás</div>
+        <h2 id="main-title">Depóadatok egy helyen</h2>
+        <p>Futár- és autóhozzárendelések, kapacitástervezés, jelenlét, csomagszámok és napi–heti–havi riportok. A flottanyilvántartótól külön működik, önálló adatbázissal és jogosultságokkal.</p>
+        <div class="status" id="status" role="status" aria-live="polite">
+          <span class="dot"></span>
+          <div><strong id="status-title">A védett alkalmazás telepítése folyamatban</strong><small id="status-detail">Ez a GitHub Pages-oldal csak biztonságos indítófelület. Nincsenek itt futáradatok, csomagadatok vagy jelszavak. A bejelentkezéshez külön hitelesített alkalmazásszerver szükséges.</small></div>
+        </div>
+        <button type="button" id="open" disabled>Belépés a rendszerbe</button>
+        <div class="helper" id="help">A belépési gomb az alkalmazásszerver biztonságos üzembe helyezése után aktiválódik. A jelszót kizárólag a védett bejelentkezési oldalon szabad megadni.</div>
+      </section>
+      <aside class="card" aria-labelledby="modules-title">
+        <div class="eyebrow">Tervezett modulok</div>
+        <h2 id="modules-title" style="font-size:19px">Munkafelületek</h2>
+        <div class="modules">
+          <div class="module"><div class="symbol">▦</div><div><b>Dashboard és riportok</b><span>Napi adatok, eltérések, teljesítmény</span></div></div>
+          <div class="module"><div class="symbol">▤</div><div><b>Kerületi csomagtervezés</b><span>Új és újrakézbesítendő csomagok</span></div></div>
+          <div class="module"><div class="symbol">▣</div><div><b>Futár–autó foglalás</b><span>Beosztások és ütközésellenőrzés</span></div></div>
+          <div class="module"><div class="symbol">◷</div><div><b>Attendance és autófotók</b><span>Védett Google Sheets-kapcsolat</span></div></div>
+          <div class="module"><div class="symbol">▥</div><div><b>Adatimport</b><span>Excel, CSV, lekérdezhető táblák</span></div></div>
+        </div>
+      </aside>
+    </div>
+    <footer>DepóKapacitás · Külön rendszer a Flotta Nyilvántartótól · A GitHub Pages nem tárol éles üzemi adatokat</footer>
+  </main>
+  <script>
+    (async function(){
+      const button=document.getElementById('open');
+      try {
+        const response=await fetch('./config.json',{cache:'no-store'});
+        if(!response.ok) return;
+        const config=await response.json();
+        const url=new URL(config.appUrl||'',location.href);
+        if(!config.appUrl || url.protocol!=='https:' || !['https:'].includes(url.protocol) || url.hostname.endsWith('github.io')) return;
+        button.disabled=false;
+        button.textContent='Védett bejelentkezés megnyitása';
+        document.getElementById('status').classList.add('live');
+        document.getElementById('status-title').textContent='Belépési cím beállítva';
+        document.getElementById('status-detail').textContent='A rendszer védett bejelentkezési oldalra irányít. A hozzáféréshez belső felhasználói jogosultság szükséges.';
+        document.getElementById('help').textContent='Az alkalmazás tényleges rendelkezésre állását és hozzáférésvédelmét a külön szerver kezeli.';
+        button.addEventListener('click',()=>{location.href=url.href});
+      } catch(error) { /* Az alapállapot biztonságosan kikapcsolva marad. */ }
+    })();
+  </script>
+</body>
+</html>
