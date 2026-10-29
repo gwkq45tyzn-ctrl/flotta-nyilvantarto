@@ -254,9 +254,54 @@
       th, td { padding: 0.5rem 0.4rem; }
       .actions button { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
     }
-  </style>
+  
+    /* Simple login gate: keeps the interface hidden until a session is established.
+       This is NOT a substitute for server-side authorization. */
+    body.flotta-locked > header,
+    body.flotta-locked > .container,
+    body.flotta-locked > .modal-overlay {display:none !important}
+    #flottaLoginScreen { display:none; min-height:100vh; padding:24px; align-items:center;
+      justify-content:center; background:linear-gradient(145deg,#0f2557,#2457a6 65%,#468ee8);}
+    body.flotta-locked #flottaLoginScreen {display:flex}
+    #flottaLoginCard{width:min(100%,430px);background:white;border-radius:20px;
+      box-shadow:0 22px 55px rgba(0,0,0,.22);padding:34px 30px;color:#172554}
+    #flottaLoginCard h1{font-size:1.7rem;margin:0 0 5px;font-weight:800}
+    #flottaLoginCard p{margin:0 0 22px;color:#64748b;font-size:.96rem}
+    #flottaLoginCard label{display:block;margin:15px 0 6px;font-weight:700;font-size:.9rem}
+    #flottaLoginCard input{display:block;width:100%;padding:12px 13px;border:1px solid #cbd5e1;
+      border-radius:10px;background:#f8fafc;font-size:1rem;color:#0f172a}
+    #flottaLoginCard input:focus{outline:2px solid #60a5fa;outline-offset:1px}
+    #flottaLoginCard button[type="submit"]{display:block;width:100%;padding:13px;margin-top:22px}
+    #flottaLoginMessage{color:#b91c1c;margin-top:12px;min-height:20px;font-size:.88rem}
+    #flottaLoginLangs{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
+    #flottaLoginLangs button{background:#e2e8f0;color:#1e3a8a;padding:6px 12px;box-shadow:none}
+    #flottaLoginLangs button.active{background:#1d4ed8;color:white}
+    .flotta-session-header{display:flex;align-items:center;justify-content:flex-end;gap:10px;
+      padding:.6rem 0 1rem;font-size:.9rem}
+    .flotta-session-header button{background:#334155;padding:7px 12px;font-size:.85rem}
+</style>
 </head>
-<body>
+<body class="flotta-locked">
+
+  <section id="flottaLoginScreen" role="region" aria-label="Fleet sign in">
+    <div id="flottaLoginCard">
+      <div id="flottaLoginLangs">
+        <button type="button" id="loginHu" onclick="setLang('hu')">HU</button>
+        <button type="button" id="loginEn" onclick="setLang('en')">EN</button>
+      </div>
+      <h1 id="flottaLoginTitle">Flotta Nyilvántartó</h1>
+      <p id="flottaLoginSubtitle">Jelentkezz be a folytatáshoz</p>
+      <form id="flottaLoginForm" onsubmit="fleetSimpleLogin(event)">
+        <label id="flottaUsernameLabel" for="flottaUsername">Felhasználónév</label>
+        <input id="flottaUsername" type="text" spellcheck="false" autocapitalize="none"
+          autocomplete="username" required minlength="3" maxlength="40">
+        <label id="flottaPasswordLabel" for="flottaPassword">Jelszó</label>
+        <input id="flottaPassword" type="password" autocomplete="current-password" required>
+        <button id="flottaLoginSubmit" type="submit">Bejelentkezés</button>
+      </form>
+      <div id="flottaLoginMessage" role="alert" aria-live="polite"></div>
+    </div>
+  </section>
   <header>
     <div class="lang-switch">
       <button id="btnHu" class="active" onclick="setLang('hu')">HU</button>
@@ -267,6 +312,10 @@
   </header>
 
   <div class="container">
+    <div class="flotta-session-header">
+      <span id="flottaSessionName"></span>
+      <button type="button" onclick="fleetSimpleLogout()" id="flottaLogout">Kijelentkezés</button>
+    </div>
     <div style="margin:0.6rem 0 1rem;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 2px 5px #0001;display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><strong id="syncStatus" role="status" aria-live="polite">Kapcsolódás...</strong><button type="button" class="secondary" onclick="configureBackend()">⚙️ Központi mentés beállítása</button><button type="button" class="secondary" onclick="exportData()">↓ JSON biztonsági mentés</button></div>
     <div class="stats" id="stats"></div>
 
@@ -842,6 +891,8 @@
       document.getElementById('btnHu').classList.toggle('active', lang === 'hu');
       document.getElementById('btnEn').classList.toggle('active', lang === 'en');
       applyTranslations();
+      fleetGateLocale();
+      fleetGateDisplay();
       refresh();
     }
 
@@ -997,7 +1048,75 @@
     const uiObserver=new MutationObserver(()=>localizeInterface());
     uiObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
 
-    const EMBEDDED_DATA = {"vehicles":[{"id":"v1","rendszam":"AALO562","gyartmany":"SEAT","modell":"","currentDriver":"KECSKÉS LÁSZLÓ","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-22T09:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v2","rendszam":"AIIW449","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"KEVIN","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v3","rendszam":"AOFS814","gyartmany":"OPEL","modell":"3.5T","currentDriver":"CDC LineHaul CAR","berbeado":"LOGIXPRESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-11-02T12:00","megjegyzes":"0w30-as olaj kell bele","alvazszam":"VXEYCF6FXSG029086","history":[]},{"id":"v4","rendszam":"AOJT264","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v5","rendszam":"AOJT265","gyartmany":"RENAULT","modell":"DOKKER","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v6","rendszam":"AOKF960","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v7","rendszam":"AOKF961","gyartmany":"TOYOTA","modell":"PROACE","currentDriver":"AKE Depot","berbeado":"PACSA PLUSZ","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v8","rendszam":"AOML734","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"MIRA","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v9","rendszam":"AOML735","gyartmany":"TOYOTA","modell":"YARIS","currentDriver":"PETER PAN","berbeado":"","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"","alvazszam":"","history":[]},{"id":"v10","rendszam":"PHW651","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"IKA","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-26T13:00","megjegyzes":"HÁTSÓ LÁMPA KIÉGETT, JOBB TÜKÖR TÖRÖTT","alvazszam":"WV1ZZZ2KZHX157959","history":[]},{"id":"v11","rendszam":"PHW683","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-27T10:00","megjegyzes":"","alvazszam":"WV1ZZZ2KZHX155586","history":[]},{"id":"v12","rendszam":"PHW803","gyartmany":"VOLKWAGEN","modell":"","currentDriver":"IKA depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-30T13:00","megjegyzes":"","alvazszam":"","history":[]},{"id":"v13","rendszam":"PPE951","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-29T13:00","megjegyzes":"","alvazszam":"WF0RXXGAKREJ43894","history":[]},{"id":"v14","rendszam":"RXR311","gyartmany":"FORD","modell":"","currentDriver":"AKE Depot","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"2026-10-28T13:00","megjegyzes":"OLAJCSERE SZÜKSÉGES","alvazszam":"WF0RXXGAKRFJ86120","history":[]},{"id":"v15","rendszam":"TGW763","gyartmany":"SEAT","modell":"","currentDriver":"MISKI FERENC","berbeado":"FLOTTA BUSINESS","helyszin":"","status":"aktiv","gumicsere":"","muszakiLejarat":"","kovetkezoSzervizDatum":"","megjegyzes":"téli gumicsere kész","alvazszam":"","history":[]}],"fuelCards":[{"id":"c1","number":"7080059206485702","provider":"MOL","vehicle":"AALO562","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c2","number":"7080059206724985","provider":"MOL","vehicle":"AOFS814","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c3","number":"7080059206824983","provider":"MOL","vehicle":"AOJT264","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c4","number":"7080059206818944","provider":"MOL","vehicle":"AOJT265","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c5","number":"7080059007556040","provider":"MOL","vehicle":"AOKF960","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c6","number":"7080059206850152","provider":"MOL","vehicle":"AOKF961","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c7","number":"7080059206450532","provider":"MOL","vehicle":"AOML734","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c8","number":"7080059206450540","provider":"MOL","vehicle":"AOML735","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c9","number":"7080059206724928","provider":"MOL","vehicle":"PHW651","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c10","number":"7080059206724969","provider":"MOL","vehicle":"PHW683","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c11","number":"7080059206724944","provider":"MOL","vehicle":"PHW803","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c12","number":"7080059206825899","provider":"MOL","vehicle":"PPE951","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c13","number":"7080059206786505","provider":"MOL","vehicle":"RXR311","status":"aktiv","note":"","expiry":"","limit":""},{"id":"c14","number":"7080059206485686","provider":"MOL","vehicle":"TGW763","status":"aktiv","note":"","expiry":"","limit":""}],"drivers":[],"contacts":[{"id":"k1","ceg":"PACSA","nev":"NAGY GÁBOR","telefon":"+36209373867"},{"id":"k2","ceg":"DAM","nev":"CSABA SÁNDOR","telefon":"+36203256210"},{"id":"k3","ceg":"FLOTTA CAR","nev":"ISTVÁN","telefon":"+36303921418"},{"id":"k4","ceg":"","nev":"?","telefon":"+36307898057"},{"id":"k5","ceg":"OPEL","nev":"FADL GÁBOR","telefon":"+36709300923"}]};
+
+    // Light-weight client-side access gate. Login accounts have equal edit access.
+    // The Apps Script endpoint remains independently accessible until a backend auth upgrade.
+    const FLOTTA_GATE_USERS = Object.freeze({"admin":{"salt":"97650ec85b8d050a9fd4dbbd1c2a9fe1","digest":"e2bb9e5a5d7af3606e37fedda248644129719d09750a345ab0711f6847a60ad4"},"munkatars":{"salt":"8c6f1c8c498d564fdbe8245acef3db62","digest":"435ca5bcf8222e9e20d15856b37400fc6c62810dcf85ea1fee56ea503cfcdba9"}});
+    const FLOTTA_GATE_SESSION = 'flotta_simple_session_v21';
+    const FLOTTA_GATE_MAX_AGE = 12 * 60 * 60 * 1000;
+    let flottaHasLoaded = false;
+
+    function fleetGateSession(){
+      try{
+        const entry=JSON.parse(sessionStorage.getItem(FLOTTA_GATE_SESSION)||'null');
+        if(!entry || !FLOTTA_GATE_USERS[entry.user] || Date.now()-entry.at>FLOTTA_GATE_MAX_AGE || entry.at>Date.now()) return null;
+        return entry;
+      }catch(e){return null;}
+    }
+    function fleetGateLocale(){
+      const en=currentLang==='en';
+      const tx=(id,hu,english)=>{const el=document.getElementById(id);if(el)el.textContent=en?english:hu;};
+      tx('flottaLoginTitle','Flotta Nyilvántartó','Fleet Manager');
+      tx('flottaLoginSubtitle','Jelentkezz be a folytatáshoz','Sign in to continue');
+      tx('flottaUsernameLabel','Felhasználónév','Username');
+      tx('flottaPasswordLabel','Jelszó','Password');
+      tx('flottaLoginSubmit','Bejelentkezés','Sign in');
+      tx('flottaLogout','Kijelentkezés','Sign out');
+      document.getElementById('loginHu')?.classList.toggle('active',!en);
+      document.getElementById('loginEn')?.classList.toggle('active',en);
+    }
+    function fleetGateDisplay(){
+      const entry=fleetGateSession();
+      document.body.classList.toggle('flotta-locked',!entry);
+      if(entry){
+        document.getElementById('flottaSessionName').textContent =
+          (currentLang==='en'?'Signed in: ':'Bejelentkezve: ')+entry.user;
+      } else {
+        document.getElementById('flottaSessionName').textContent='';
+      }
+      return Boolean(entry);
+    }
+    function fleetGateHex(bytes){
+      return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    async function fleetSimpleLogin(event){
+      event.preventDefault();
+      const name=document.getElementById('flottaUsername').value.trim().toLowerCase();
+      const password=document.getElementById('flottaPassword').value;
+      const error=document.getElementById('flottaLoginMessage');
+      const button=document.getElementById('flottaLoginSubmit');
+      button.disabled=true;error.textContent='';
+      try{
+        const expected=FLOTTA_GATE_USERS[name];
+        if(!expected || !window.crypto?.subtle) throw Error('invalid');
+        const bytes=new TextEncoder().encode(name+'|'+password+'|'+expected.salt);
+        const hash=fleetGateHex(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));
+        if(hash!==expected.digest)throw Error('invalid');
+        sessionStorage.setItem(FLOTTA_GATE_SESSION,JSON.stringify({user:name,at:Date.now()}));
+        document.getElementById('flottaPassword').value='';
+        fleetGateDisplay();
+        if(!flottaHasLoaded){flottaHasLoaded=true;load();}
+      }catch(err){
+        error.textContent=currentLang==='en'?'Invalid username or password.':'Hibás felhasználónév vagy jelszó.';
+      }finally{button.disabled=false;}
+    }
+    function fleetSimpleLogout(){
+      sessionStorage.removeItem(FLOTTA_GATE_SESSION);
+      document.getElementById('flottaPassword').value='';
+      fleetGateDisplay();
+    }
+
+    const EMBEDDED_DATA = {"vehicles":[],"fuelCards":[],"drivers":[],"contacts":[]};
 
     const SHEET_URLS = {};
 
@@ -1056,7 +1175,7 @@
       });
     }
     async function pullRemote(silent=false) {
-      if(!backendUrl || syncInProgress || dirty) return;
+      if(!fleetGateSession() || !backendUrl || syncInProgress || dirty) return;
       try {
         const reply=await safeJsonp(backendUrl);
         if(!reply.ok) throw Error(reply.error||'Betöltési hiba');
@@ -1082,6 +1201,7 @@
       pullRemote();
     }
     function save() {
+      if(!fleetGateSession())return;
       localStorage.setItem(STORAGE_KEY,JSON.stringify(snapshot()));
       dirty=true;localStorage.setItem(PENDING_KEY,JSON.stringify(snapshot()));
       statusMessage('Helyi mentés kész · központi mentés folyamatban…');
@@ -1127,6 +1247,7 @@
       try{
         const saved=localStorage.getItem(STORAGE_KEY);
         const backup=localStorage.getItem(PENDING_KEY);
+        if(!saved && !backup)remoteVersion=0;
         const d=backup?JSON.parse(backup):(saved?JSON.parse(saved):EMBEDDED_DATA);
         applySnapshot(d);
         dirty=Boolean(backup);
@@ -2456,9 +2577,10 @@
       e.target.value = '';
     }
 
-    // Init
+    // Init: never fetch fleet data before a login session exists.
     setLang(currentLang);
-    load();
+    if(fleetGateDisplay()){flottaHasLoaded=true;load();}
+    else document.getElementById('flottaUsername').focus();
     document.getElementById('search').addEventListener('input', () => {
       currentStatFilter = null;
       renderTable();
