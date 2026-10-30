@@ -136,3 +136,19 @@ A Work által feltárt problémákra a staging ágon javítás készült:
 - Az első valódi admin belépési fiókot Firebase Authenticationben felhasználó által jóváhagyott e-mail címmel létrehozni; a hozzá tartozó users/{UID} dokumentumot adminisztratív Console-hozzáféréssel hozzáadni. **Jelszó, OAuth-token, privát kulcs GitHubba vagy chatbe nem kerülhet.**
 - Tesztadatot kizárólag külön szintetikus ID-kkal szabad létrehozni; az éles flottát, a main ágat és az eredeti Attendance táblát nem érintheti.
 - Csak a sikeres teszteket követően állapítható meg, hogy a DepóKapacitás készen áll a belső staging-belépésre. Élesítés és valódi adatimport továbbra is tiltva.
+
+
+## 2026-10-30 – Work 65 emulátoros próbájából 4 hiba javítása
+
+A Work az előző szabályfájlt sikeresen lefordította, majd a 65 izolált Firestore-emulátoros tesztből 61-et sikeresen futtatott. A négy hiba:
+- 2 teszt: ismeretlen \`users/{uid}.role\` esetén az aktív fiók olvashatta/listázhatta a drivers gyűjteményt;
+- 1 teszt: az attendance elfogadta a lehetetlen órát/percet/másodpercet;
+- 1 teszt: az attendance elfogadta a lehetetlen naptári dátumot, pl. február 31.
+
+A staging \`depokapacitas/firestore.rules\` fájlban:
+- A \`member()\` csak \`admin\`, \`editor\` vagy \`viewer\` szereppel enged jogosultságot.
+- A \`validDay()\` 1900–2199 közötti valódi naptári dátumot fogad el, ideértve a Gergely-naptár szökőéveit.
+- A \`validEventTime()\` a dátummal azonos napot és a 00–23 óra, 00–59 perc/másodperc tartományokat követeli meg.
+- A szabályokhoz igazított \`rules-contract.test.mjs\` és az új \`rules-calendar.test.mjs\` szerepel a GitHub Actions staging ellenőrzéseiben.
+
+**Lokális kódszintű ellenőrzés:** 111 600 naptári kombinációból 111 600 helyes egyezés, forráskód-szerződés ellenőrzése PASS. **Nem Firebase-emulátoros újrateszt**: a módosított szabályokat a Worknek újból le kell fordítania és a teljes 65 tesztet le kell futtatnia. Csak minden teszt sikeressége esetén lehet a \`imile-management-staging\` projekten publikálni. Az éles Flotta és a main ág változatlan.
