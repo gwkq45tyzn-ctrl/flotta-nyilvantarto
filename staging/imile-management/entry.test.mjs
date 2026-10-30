@@ -80,6 +80,7 @@ try{
    'staging/imile-management/index.html',
    'staging/imile-management/app.mjs',
    'staging/imile-management/session-policy.mjs',
+   'staging/imile-management/attendance-handover.mjs',
    'staging/imile-management/fleet/index.html',
    'staging/imile-management/fleet/app.mjs',
    'staging/imile-management/fleet/operations.html',
