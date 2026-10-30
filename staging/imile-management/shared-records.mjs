@@ -76,7 +76,7 @@ export function previewFleetMigration(data){
   }
   issues.push(...duplicateRecords(vehicles,'id','vehicle'),...duplicateRecords(drivers,'id','driver'));
   for(const driver of drivers)if(!driver.name)issues.push({type:'missing_name',target:'driver',id:driver.id});
-  const critical=issues.filter(x=>['duplicate','missing_or_invalid_plate','missing_or_invalid_da','invalid_row','missing_name'].includes(x.type));
+  const critical=issues.filter(x=>['duplicate','missing_or_invalid_plate','missing_or_invalid_da','invalid_row','missing_name','unknown_status'].includes(x.type));
   return {
     version:MIGRATION_VERSION,
     origin:'offline_fleet_json',
