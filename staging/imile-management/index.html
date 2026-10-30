@@ -1,20 +1,98 @@
 <!doctype html>
-<html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow"><title>iMile Management · Fejlesztői rendszerválasztó</title>
-<style>
-:root{font-family:system-ui,"Segoe UI",sans-serif;color:#152943;background:#eff4fa}
-*{box-sizing:border-box}body{margin:0;min-height:100vh}
-header{padding:26px 24px;background:linear-gradient(120deg,#143d82,#2c71d3);color:#fff}
-header>div,main{max-width:1040px;margin:auto}header h1{font-size:28px;margin:0}header p{margin:8px 0 0;color:#dce8ff}
-main{padding:30px 18px}.banner{border:1px solid #ecd19a;border-radius:12px;background:#fff8e8;color:#725017;padding:15px;margin-bottom:25px;font-size:14px}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:white;border:1px solid #d8e1ed;border-radius:18px;box-shadow:0 12px 32px #1529430d;padding:27px;display:flex;flex-direction:column;gap:12px}
-.card h2{font-size:22px;margin:0}.card p{color:#57687e;line-height:1.55;margin:0 0 15px}.symbol{font-size:35px}.card a,.card button{margin-top:auto;text-decoration:none;display:inline-block;text-align:center;padding:13px 18px;background:#215fc1;color:#fff;border:0;border-radius:10px;font-weight:700;font:inherit}.card button:disabled{background:#adbacd}
-.card.depo{border-top:5px solid #139c7b}.card.fleet{border-top:5px solid #2765bc}.muted{font-size:13px;color:#61748a}footer{text-align:center;color:#6e8199;font-size:12px;margin:25px}
-@media(max-width:650px){.cards{grid-template-columns:1fr}}
-</style></head>
-<body><header><div><h1>iMile Management</h1><p>Közös rendszerválasztó · elkülönített fejlesztői változat</p></div></header>
-<main><div class="banner"><strong>Fejlesztői előnézet.</strong> A jelenlegi flottanyilvántartó továbbra is az éles főoldalon működik. Ez a rendszerválasztó egyelőre nem veszi át a helyét, és nem kapcsolódik az éles flottaadatokhoz.</div>
-<div class="cards">
-<section class="card fleet"><div class="symbol" aria-hidden="true">🚙</div><h2>Flotta Nyilvántartó</h2><p>Autók, futárok, üzemeltetés, szerviz, biztosítások, tankolókártyák.</p><a href="../../index.html">Meglévő flottarendszer megnyitása</a><div class="muted">A jelenlegi rendszer változatlanul működik.</div></section>
-<section class="card depo"><div class="symbol" aria-hidden="true">📊</div><h2>DepóKapacitás</h2><p>Futárbeosztás, autófoglalás, kapacitástervezés, jelenlét, csomagszámok és riportok.</p><button disabled type="button">Élesítésig zárolva</button><div class="muted">A Firebase-adatbázis és a közös adatkapcsolat még nincs beállítva.</div></section>
-</div></main><footer>Staging · nem éles · nincs adatmásolás és adatmódosítás</footer></body></html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#123e82">
+  <title>iMile Management · Belépés és rendszerválasztó (staging)</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#162b46;background:#edf3fb}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh}
+    header{background:linear-gradient(110deg,#143a7b,#2368b9);color:white;padding:26px 20px}
+    header>div,main{max-width:1050px;margin:auto}
+    h1{font-size:clamp(24px,4vw,34px);margin:0}header p{margin:9px 0 0;color:#dceafa}
+    main{padding:32px 18px 45px}
+    .card,.notice{background:white;border:1px solid #d8e2ee;border-radius:18px;padding:24px;box-shadow:0 8px 28px #172c4210}
+    .notice{box-shadow:none;padding:13px 16px;margin-bottom:20px;font-size:14px;color:#58687c}
+    .auth{max-width:440px;margin:28px auto}
+    .auth h2,.menu h2{margin:0 0 10px}
+    .auth p,.menu p{color:#58687c;line-height:1.55}
+    form{display:grid;gap:14px;margin-top:20px}
+    label{display:grid;gap:6px;font-weight:600;font-size:14px}
+    input{border:1px solid #a8b7ca;border-radius:10px;padding:13px;font:inherit;width:100%}
+    button,.action{display:inline-block;text-align:center;background:#1756aa;color:white;border:0;border-radius:10px;padding:13px 18px;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}
+    button:disabled{opacity:.62;cursor:not-allowed}
+    .secondary{background:#edf2f9;color:#164577;border:1px solid #cbd8e8}
+    .menu{display:grid;gap:22px}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .toolbar p{margin:4px 0 0}
+    .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .module{display:flex;flex-direction:column;gap:12px}
+    .module h3{margin:0;font-size:21px}
+    .module p{margin:0 0 10px;flex:1}
+    .module .symbol{font-size:38px}
+    .module .footer{color:#62738a;font-size:13px}
+    .module.depo{border-top:5px solid #079b77}
+    .module.fleet{border-top:5px solid #2864b7}
+    .message{min-height:1.5em;font-size:14px;color:#a12424}
+    .status{color:#50627b}
+    [hidden]{display:none!important}
+    footer{margin-top:30px;text-align:center;color:#667a92;font-size:12px}
+    @media(max-width:650px){.cards{grid-template-columns:1fr}.card{padding:19px}}
+  </style>
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header><div><h1>iMile Management</h1><p>Közös bejelentkezés és rendszerválasztó · fejlesztői környezet</p></div></header>
+  <main>
+    <div class="notice"><strong>STAGING – nem éles.</strong> A Flotta Nyilvántartó jelenlegi éles felülete és adatai változatlanul megmaradnak. A közös flottaadat-kapcsolat fejlesztés alatt áll.</div>
+    <section id="loading" class="card auth" role="status" aria-live="polite">
+      <h2>Kapcsolódás…</h2><p>Firebase bejelentkezés ellenőrzése.</p>
+    </section>
+    <section id="login" class="card auth" hidden>
+      <h2>Bejelentkezés</h2>
+      <p>Azonosítsd magad az iMile Management staging felületének megnyitásához.</p>
+      <form id="loginForm">
+        <label>E-mail-cím<input name="email" type="email" autocomplete="username" required></label>
+        <label>Jelszó<input name="password" type="password" autocomplete="current-password" required></label>
+        <button id="loginSubmit" type="submit">Bejelentkezés</button>
+      </form>
+      <p id="loginError" class="message" role="alert" aria-live="polite"></p>
+    </section>
+    <section id="denied" class="card auth" hidden>
+      <h2>Hozzáférésre vár</h2>
+      <p>A bejelentkezés megtörtént, de ehhez a staging rendszerhez nincs aktív jogosultságod.</p>
+      <button id="deniedLogout" type="button" class="secondary">Kijelentkezés</button>
+    </section>
+    <section id="error" class="card auth" hidden>
+      <h2>Kapcsolati hiba</h2>
+      <p id="connectionMessage" class="message" role="alert"></p>
+      <button id="retry" class="secondary" type="button">Újrapróbálás</button>
+    </section>
+    <section id="menu" class="menu" hidden>
+      <div class="toolbar">
+        <div><h2>Válassz rendszert</h2><p id="userSummary" class="status"></p></div>
+        <button id="logout" type="button" class="secondary">Kijelentkezés</button>
+      </div>
+      <div class="cards">
+        <article class="card module fleet">
+          <span class="symbol" aria-hidden="true">🚙</span>
+          <h3>Flotta Nyilvántartó</h3>
+          <p>Autók, futárok, kiadások és visszavételek, szerviz, biztosítások.</p>
+          <div class="footer">A közös Firebase-belépés flottamodulhoz kapcsolása még nincs kész. Az éles flotta jelenleg külön belépéssel működik.</div>
+          <a class="action secondary" href="../../index.html" target="_blank" rel="noopener noreferrer">Meglévő flotta megnyitása (külön belépés)</a>
+        </article>
+        <article class="card module depo">
+          <span class="symbol" aria-hidden="true">📊</span>
+          <h3>DepóKapacitás</h3>
+          <p>Beosztás, autófoglalás, kapacitástervezés, jelenlét, csomagigény, futárteljesítmény.</p>
+          <div class="footer">Ugyanaz a Firebase Auth munkamenet; a depóalkalmazás ismét ellenőrzi a hozzáférést.</div>
+          <a class="action" href="../../depokapacitas/index.html" id="depoLink">DepóKapacitás megnyitása</a>
+        </article>
+      </div>
+    </section>
+    <footer>iMile Management · kizárólag elkülönített tesztkörnyezet · nincsen automatikus élő adatimport</footer>
+  </main>
+</body>
+</html>
