@@ -170,9 +170,16 @@ service cloud.firestore {
       allow read: if member();
       // Apps Script uses IAM; manual browser uploads are authorized for editors only.
       allow create, update: if editor()
-        && exactFields(request.resource.data,[
+        // Existing 16-column Attendance events remain valid. The optional
+        // vehicleId appears only after the Google source adds car selection.
+        && (exactFields(request.resource.data,[
           'eventTime','eventDate','timeKnown','daCode','driverName','vendor',
           'type','status','photoFront','photoLeft','photoRight','photoBack','source'])
+          || exactFields(request.resource.data,[
+          'eventTime','eventDate','timeKnown','daCode','driverName','vendor',
+          'type','status','photoFront','photoLeft','photoRight','photoBack','source','vehicleId']))
+        && (!('vehicleId' in request.resource.data)
+            || validVehiclePlate(request.resource.data.vehicleId))
         && validDay(request.resource.data.eventDate)
         && validEventTime(request.resource.data.eventTime,request.resource.data.eventDate)
         && request.resource.data.timeKnown is bool
