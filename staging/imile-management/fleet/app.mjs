@@ -4,15 +4,16 @@ import {getFirestore,doc,getDoc,collection,onSnapshot,runTransaction} from 'http
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
+import {deriveAttendanceHandovers} from '../attendance-handover.mjs';
 
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
 let unsubs=[],generation=0;
-const state={admin:false,uid:null,drivers:[],vehicles:[]};
+const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[]};
 function clear() {
   for(const un of unsubs)un();
   unsubs=[];
-  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];
+  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];
   $('fleetContent').hidden=true;
   $('adminVehiclePanel').hidden=true;
   $('adminDriverPanel').hidden=true;
@@ -74,10 +75,36 @@ function renderRows(target,rows,columns,kind){
   }
 }
 function render(){
+  const handovers=deriveAttendanceHandovers({
+    events:state.attendance,drivers:state.drivers,vehicles:state.vehicles,
+    manualBookings:state.bookings
+  });
+  const handoverBody=$('handoverBody');
+  handoverBody.replaceChildren();
+  const displayed=handovers.handovers.slice(-100).reverse();
+  for(const row of displayed){
+    const tr=document.createElement('tr');
+    for(const value of [
+      state.drivers.find(x=>x.id===row.driverId)?.name||row.driverId,
+      row.vehicleId,row.pickedUpAt.replace('T',' '),
+      row.returnedAt?.replace('T',' ')||'—',
+      row.status==='returned'?'Visszaadva':row.status==='return_review'?'Ellenőrzésre vár':'Futárnál'
+    ]){const td=document.createElement('td');td.textContent=String(value);tr.append(td);}
+    handoverBody.append(tr);
+  }
+  if(!displayed.length){
+    const tr=document.createElement('tr'),td=document.createElement('td');
+    td.colSpan=5;td.textContent='Még nincs rendszámmal ellátott Attendance-esemény.';
+    tr.append(td);handoverBody.append(tr);
+  }
+  $('attendanceHandoverStatus').textContent=handovers.openVehicleIds.length+
+    ' kiadott / ellenőrzésre váró autó · '+handovers.alerts.length+
+    ' feldolgozási figyelmeztetés. A foglalásokat a kapacitástervező külön kezeli.';
   $('driversCount').textContent=state.drivers.length;
   $('activeCount').textContent=state.drivers.filter(x=>x.active===true).length;
   $('vehiclesCount').textContent=state.vehicles.length;
-  $('availableCount').textContent=state.vehicles.filter(x=>x.status==='Elérhető').length;
+  $('availableCount').textContent=state.vehicles.filter(x=>
+    x.status==='Elérhető'&&!handovers.openVehicleIds.includes(x.id)).length;
   renderRows('driversBody',state.drivers.slice().sort((a,b)=>
     String(a.daCode||'').localeCompare(String(b.daCode||''))),[
       x=>x.daCode||x.id,x=>x.name,x=>x.vendor,x=>x.active===true?'Aktív':'Inaktív'
@@ -147,14 +174,14 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       $('driversActions').hidden=!state.admin;
       $('vehiclesActions').hidden=!state.admin;
       const loaded=new Set();
-      for(const name of ['drivers','vehicles']){
+      for(const name of ['drivers','vehicles','attendance','bookings']){
         const unsubscribe=onSnapshot(collection(db,name),snap=>{
           if(rev!==generation)return;
           state[name]=snap.docs.map(d=>({id:d.id,...d.data()}));
           loaded.add(name);
           render();
           $('fleetContent').hidden=false;
-          status(loaded.size===2
+          status(loaded.size===4
             ?'● Élő staging Firestore kapcsolat · '+(state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság')
             :'Adatok betöltése…');
         },error=>{
