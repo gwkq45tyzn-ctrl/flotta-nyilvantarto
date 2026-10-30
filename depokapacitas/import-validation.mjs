@@ -4,7 +4,7 @@
  */
 export function readNonNegativeCount(value, field) {
   if (typeof value === 'number') {
-    if (Number.isSafeInteger(value) && value >= 0) return value;
+    if (Number.isSafeInteger(value) && value >= 0 && value <= 10000000) return value;
     throw Error(field + ': csak nemnegatív egész szám fogadható el.');
   }
   const s = String(value ?? '').trim();
