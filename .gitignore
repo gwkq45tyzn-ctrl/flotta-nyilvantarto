@@ -1,0 +1,4 @@
+# iMile staging Firebase Hosting build output; never commit generated deploy files.
+/preview-imile-staging/
+/node_modules/
+*.log
