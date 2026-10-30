@@ -9,6 +9,17 @@ const entry=read('staging/imile-management/app.mjs');
 const depotHtml=read('depokapacitas/index.html');
 const depotJs=read('depokapacitas/app.js');
 const fleetJs=read('staging/imile-management/fleet/app.mjs');
+const qaJs=read('staging/imile-management/qa/app.mjs');
+const qaHtml=read('staging/imile-management/qa/index.html');
+assert.ok(qaJs.includes("firebaseConfig.projectId==='imile-management-staging'"));
+assert.ok(qaJs.includes("profile.data().role==='admin'"));
+assert.ok(qaJs.includes("tx.get(driverRef)"));
+assert.ok(qaJs.includes("tx.get(carRef)"));
+assert.ok(qaJs.includes('SYNTHETIC_TEST'));
+assert.ok(qaJs.includes('TESTCAR01'));
+assert.ok(qaJs.includes('window.confirm('));
+assert.ok(qaHtml.includes('csak'));
+assert.doesNotMatch(qaJs,/deleteDoc\(|tx\.delete\(/);
 assert.ok(fleetJs.includes("getDoc(doc(db,'users',user.uid))"));
 assert.ok(fleetJs.includes('onSnapshot(collection(db,name)'));
 assert.ok(fleetJs.includes('allowedProfile(profile)'));
@@ -23,6 +34,8 @@ assert.ok(entry.includes("signInWithEmailAndPassword(auth,loginEmail,"));
 assert.ok(menu.includes('id="menu"'));
 assert.ok(menu.includes('id="depoLink"'));
 assert.ok(menu.includes('id="fleetLink"'));
+assert.ok(menu.includes('id="qaLink" hidden'));
+assert.ok(entry.includes("$('qaLink').hidden=profile.role!=='admin'"));
 assert.ok(menu.includes('Flotta előnézet (csak olvasás)'));
 assert.doesNotMatch(menu,/FLOTTA_GATE_USERS|password.*digest|SECRET_ACCESS_KEY/);
 assert.ok(entry.includes("getDoc(doc(db,'users',user.uid))"));
@@ -49,6 +62,8 @@ try{
    'staging/imile-management/session-policy.mjs',
    'staging/imile-management/fleet/index.html',
    'staging/imile-management/fleet/app.mjs',
+   'staging/imile-management/qa/index.html',
+   'staging/imile-management/qa/app.mjs',
    'staging/imile-management/shared-import-plan.mjs',
    'staging/imile-management/shared-records.mjs',
    'depokapacitas/index.html','depokapacitas/app.js','depokapacitas/style.css',
