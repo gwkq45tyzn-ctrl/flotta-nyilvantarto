@@ -1,0 +1,35 @@
+name: iMile Management – staging-only integration tests
+
+on:
+  push:
+    branches: ['staging/imile-management-integration']
+    paths:
+      - 'staging/imile-management/**'
+      - 'depokapacitas/**'
+      - '.github/workflows/imile-staging.yml'
+  pull_request:
+    paths:
+      - 'staging/imile-management/**'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    name: Staging – offline schema and web checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Kötelező fájlok és Firebase klienskód ellenőrzése
+        run: node depokapacitas/tests/check.mjs
+      - name: Közös futár/autó törzs és duplikációs tesztek
+        run: node staging/imile-management/shared-records.test.mjs
+      - name: Fejlesztői JavaScript modul ellenőrzése
+        run: node --check staging/imile-management/shared-records.mjs
+      - name: A flotta belépési pontjának érintetlensége
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git diff --exit-code origin/main -- index.html
