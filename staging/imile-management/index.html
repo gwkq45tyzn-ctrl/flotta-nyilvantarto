@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>iMile Management · Fejlesztői rendszerválasztó</title>
+<style>
+:root{font-family:system-ui,"Segoe UI",sans-serif;color:#152943;background:#eff4fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}
+header{padding:26px 24px;background:linear-gradient(120deg,#143d82,#2c71d3);color:#fff}
+header>div,main{max-width:1040px;margin:auto}header h1{font-size:28px;margin:0}header p{margin:8px 0 0;color:#dce8ff}
+main{padding:30px 18px}.banner{border:1px solid #ecd19a;border-radius:12px;background:#fff8e8;color:#725017;padding:15px;margin-bottom:25px;font-size:14px}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:white;border:1px solid #d8e1ed;border-radius:18px;box-shadow:0 12px 32px #1529430d;padding:27px;display:flex;flex-direction:column;gap:12px}
+.card h2{font-size:22px;margin:0}.card p{color:#57687e;line-height:1.55;margin:0 0 15px}.symbol{font-size:35px}.card a,.card button{margin-top:auto;text-decoration:none;display:inline-block;text-align:center;padding:13px 18px;background:#215fc1;color:#fff;border:0;border-radius:10px;font-weight:700;font:inherit}.card button:disabled{background:#adbacd}
+.card.depo{border-top:5px solid #139c7b}.card.fleet{border-top:5px solid #2765bc}.muted{font-size:13px;color:#61748a}footer{text-align:center;color:#6e8199;font-size:12px;margin:25px}
+@media(max-width:650px){.cards{grid-template-columns:1fr}}
+</style></head>
+<body><header><div><h1>iMile Management</h1><p>Közös rendszerválasztó · elkülönített fejlesztői változat</p></div></header>
+<main><div class="banner"><strong>Fejlesztői előnézet.</strong> A jelenlegi flottanyilvántartó továbbra is az éles főoldalon működik. Ez a rendszerválasztó egyelőre nem veszi át a helyét, és nem kapcsolódik az éles flottaadatokhoz.</div>
+<div class="cards">
+<section class="card fleet"><div class="symbol" aria-hidden="true">🚙</div><h2>Flotta Nyilvántartó</h2><p>Autók, futárok, üzemeltetés, szerviz, biztosítások, tankolókártyák.</p><a href="../../index.html">Meglévő flottarendszer megnyitása</a><div class="muted">A jelenlegi rendszer változatlanul működik.</div></section>
+<section class="card depo"><div class="symbol" aria-hidden="true">📊</div><h2>DepóKapacitás</h2><p>Futárbeosztás, autófoglalás, kapacitástervezés, jelenlét, csomagszámok és riportok.</p><button disabled type="button">Élesítésig zárolva</button><div class="muted">A Firebase-adatbázis és a közös adatkapcsolat még nincs beállítva.</div></section>
+</div></main><footer>Staging · nem éles · nincs adatmásolás és adatmódosítás</footer></body></html>
