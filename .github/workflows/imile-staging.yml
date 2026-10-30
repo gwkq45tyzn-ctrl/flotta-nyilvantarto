@@ -54,7 +54,9 @@ jobs:
           node staging/imile-management/fleet/shared-capacity.integration.test.mjs
           node staging/imile-management/fleet/operations.test.mjs
       - name: Attendance-alapú automatikus autókiadás és visszavétel ellenőrzése
-        run: node staging/imile-management/attendance-handover.test.mjs
+        run: |
+          node staging/imile-management/attendance-handover.test.mjs
+          node staging/imile-management/attendance-integration.test.mjs
       - name: Közös belépés és izolált preview tesztje
         run: |
           node staging/imile-management/session-policy.test.mjs
