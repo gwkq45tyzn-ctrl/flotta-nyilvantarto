@@ -65,3 +65,21 @@ A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Googl
 A Firebase-bővítmény telepítettnek látszik, de a jelen ChatGPT-eszközkészlet nem biztosít közvetlen Firebase / Firestore projektműveleteket.
 Ezért **semmilyen állítás nem tehető** a Firestore szabályok tényleges publikálásáról, az Auth felhasználókról, az élő adatbázisról vagy a mentésekről.
 Kizárólag a staging ágon lehet majd megadni az engedélyezett Firebase-webkonfigurációt. Firestore Rules publikálás, első admin felvétele és Google IAM külön jogosultsági lépések.
+
+
+## 2026-10-30 – kapacitás és foglalás fejlesztői javítások
+
+A `depokapacitas/capacity-eligibility.mjs` megvizsgálja a futár és jármű közös törzsadatait:
+
+- **Mai/jövőbeli beosztás:** csak `active === true` futár és `status === 'Elérhető'` jármű kapacitása számít bele a tervezett összesenbe.
+- **Korábbi nap:** a korábban rögzített napi kapacitás a történeti kimutatás része marad, akkor is, ha a jármű azóta szervizbe került.
+- A hibás vagy hiányzó közös törzsrekordhoz tartozó foglalás kapacitása a mai és jövőbeli tervekben nulla.
+- Az áttekintés figyelmeztet a kapacitásból kizárt foglalásokra; a foglalási lista külön mutatja az elérhetőséget.
+- Foglalás mentésekor a Firebase tranzakció **ismét lekéri** a futárt, az autót és a külön kapacitásrekordot.
+- A staging `firestore.rules` fájlban a foglalás új létrehozását **szerveroldali** ellenőrzés is védi az inaktív futárral vagy szervizelt autóval szemben.
+- A `capacity-eligibility.test.mjs` a státuszok és a történeti adatok viselkedését teszteli.
+- Az új teszt bekerült a staging CI-munkafolyamatba.
+
+**Ellenőrzés:** 16/16 célzott logikai és kódintegritási teszt sikeres a beszélgetésben futtatott mintákon. Az éles Firebase jogosultságok, a GitHub Actions futás és a teljes böngészős integrációs teszt **még nincs igazolva**.
+
+**Élesítési állapot változatlan:** a Firebase webkonfiguráció GitHubon üres, és a jelenlegi éles Flotta Nyilvántartóhoz nem nyúltunk.
