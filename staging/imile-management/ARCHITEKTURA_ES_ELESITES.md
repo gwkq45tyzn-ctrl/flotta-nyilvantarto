@@ -37,3 +37,31 @@
 ## Jelenlegi technikai korlát
 
 A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Google Apps Script-tel. A DepóKapacitás jelenlegi webkódja Firebase/Firestore-alapú, a `firebase-config.js` még üres. Az igazi közös törzsadat és közös belépés **nem aktív**. Előbb működő Firebase-projekt és adat-migrációs teszt szükséges.
+
+
+## 2026-10-30 – végrehajtott staging-fejlesztés
+
+- Megjelent az **offline, kizárólag olvasó** flotta JSON-migrációs előnézet:
+  `staging/imile-management/migration-preview.html`.
+- DA-kód és rendszám normalizálás, státusztérkép, hiányzó / dupla azonosítók, ismeretlen státuszok ellenőrzése: `shared-records.mjs`.
+- Automatikus migráció **nincs**: a riportot csak a helyi böngésző dolgozza fel.
+- A DepóKapacitás fejlesztői ágán a `drivers` és `vehicles` közös törzsadatok **csak olvashatók**. A kapacitás külön `driverCapacities/{daCode}` dokumentumba kerül.
+- A foglalás ezt a külön kapacitást használja; az autó a közös flottaállapotot olvassa.
+- A staging Firestore-szabályok a közös törzs szerkesztését adminisztrátorra korlátozzák és a törlést tiltják.
+- GitHub Actions staging ellenőrzés `.github/workflows/imile-staging.yml`, `shared-records.test.mjs`.
+- **Még nincs éles Firebase adatbázis-jóváhagyás, beállított webkonfiguráció, migrált adat vagy közös belépés.**
+
+### Helyi migrációs próba
+
+1. Az éles Flotta Nyilvántartóban kattints a **JSON biztonsági mentés** gombra, és őrizd meg az eredeti fájlt.
+2. Külön, lokális tesztkörnyezetben indíts statikus HTTP-kiszolgálót a staging mappa felett (például `python -m http.server 8080` a repository gyökeréből).
+3. Nyisd meg a `http://localhost:8080/staging/imile-management/migration-preview.html` címet.
+4. Válaszd ki a korábban mentett flotta JSON-t, nézd meg a problémás rekordokat.
+5. A kapott ellenőrzési riportot **ne** töltsd fel nyilvános GitHubra. Személyes adatot tartalmazhat.
+6. A migráció csak az ellenőrzés és céges jogosultság után készíthető elő külön admin-műveletként.
+
+### Firebase valódi bekötése – hiányzó hozzáférés
+
+A Firebase-bővítmény telepítettnek látszik, de a jelen ChatGPT-eszközkészlet nem biztosít közvetlen Firebase / Firestore projektműveleteket.
+Ezért **semmilyen állítás nem tehető** a Firestore szabályok tényleges publikálásáról, az Auth felhasználókról, az élő adatbázisról vagy a mentésekről.
+Kizárólag a staging ágon lehet majd megadni az engedélyezett Firebase-webkonfigurációt. Firestore Rules publikálás, első admin felvétele és Google IAM külön jogosultsági lépések.
