@@ -36,7 +36,7 @@
 
 ## Jelenlegi technikai korlát
 
-A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Google Apps Script-tel. A DepóKapacitás jelenlegi webkódja Firebase/Firestore-alapú, a `firebase-config.js` még üres. Az igazi közös törzsadat és közös belépés **nem aktív**. Előbb működő Firebase-projekt és adat-migrációs teszt szükséges.
+A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Google Apps Script-tel. A DepóKapacitás webkódja Firebase/Firestore-alapú; a staging ágon a `firebase-config.js` már az `imile-management-staging` projektre mutat. A közös élő törzsadat és közös belépés **még nincs igazolva**. A Firestore jogosultsági, felhasználói és adat-migrációs tesztek továbbra is szükségesek.
 
 
 ## 2026-10-30 – végrehajtott staging-fejlesztés
@@ -49,7 +49,7 @@ A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Googl
 - A foglalás ezt a külön kapacitást használja; az autó a közös flottaállapotot olvassa.
 - A staging Firestore-szabályok a közös törzs szerkesztését adminisztrátorra korlátozzák és a törlést tiltják.
 - GitHub Actions staging ellenőrzés `.github/workflows/imile-staging.yml`, `shared-records.test.mjs`.
-- **Még nincs éles Firebase adatbázis-jóváhagyás, beállított webkonfiguráció, migrált adat vagy közös belépés.**
+- **A staging webkonfiguráció már megvan; a tényleges Firestore/Auth beállítások, jogosultságpróbák, migrált adatok és közös belépés még nincsenek igazolva.**
 
 ### Helyi migrációs próba
 
@@ -60,11 +60,11 @@ A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Googl
 5. A kapott ellenőrzési riportot **ne** töltsd fel nyilvános GitHubra. Személyes adatot tartalmazhat.
 6. A migráció csak az ellenőrzés és céges jogosultság után készíthető elő külön admin-műveletként.
 
-### Firebase valódi bekötése – hiányzó hozzáférés
+### Firebase Console – közvetlen hozzáférés nélkül
 
 A Firebase-bővítmény telepítettnek látszik, de a jelen ChatGPT-eszközkészlet nem biztosít közvetlen Firebase / Firestore projektműveleteket.
 Ezért **semmilyen állítás nem tehető** a Firestore szabályok tényleges publikálásáról, az Auth felhasználókról, az élő adatbázisról vagy a mentésekről.
-Kizárólag a staging ágon lehet majd megadni az engedélyezett Firebase-webkonfigurációt. Firestore Rules publikálás, első admin felvétele és Google IAM külön jogosultsági lépések.
+A felhasználó megadta a nyilvános Firebase webkonfigurációt, amelyet **kizárólag a staging ágon** beállítottunk. A Firestore Rules publikálás, az első admin felvétele és a Google IAM külön jogosultsági lépések; ezek állapotát a felhőkonzolban kell ellenőrizni.
 
 
 ## 2026-10-30 – kapacitás és foglalás fejlesztői javítások
@@ -82,7 +82,7 @@ A `depokapacitas/capacity-eligibility.mjs` megvizsgálja a futár és jármű k�
 
 **Ellenőrzés:** 16/16 célzott logikai és kódintegritási teszt sikeres a beszélgetésben futtatott mintákon. Az éles Firebase jogosultságok, a GitHub Actions futás és a teljes böngészős integrációs teszt **még nincs igazolva**.
 
-**Élesítési állapot változatlan:** a Firebase webkonfiguráció GitHubon üres, és a jelenlegi éles Flotta Nyilvántartóhoz nem nyúltunk.
+**Élesítési állapot:** a staging Firebase webkonfiguráció elkészült; a `main` ágon továbbra sincs bekötve. A jelenlegi éles Flotta Nyilvántartóhoz nem nyúltunk.
 
 ## 2026-10-30 – Importdátumok javítása
 
@@ -104,3 +104,12 @@ Az új dátumkezelés kód- és mintatesztjei sikeresek, de teljes Excel/Google 
 **Nem igazolt még:** Firestore Emulator jogosultsági próba, élő Firebase-integráció és jogosultságok publikálása, teljes Excel böngészős kipróbálás, GitHub Actions sikeres futás. A szabályfájl módosítása önmagában nem publikálja a Firestore-szabályokat.
 
 **Kiadási tiltás:** a régi flottarendszer változatlanul üzemel; az új iMile Management átállításához a korábbi GO/NO-GO ellenőrzési lista mindegyik kapuja szükséges.
+
+## 2026-10-30 – Staging Firebase webkonfiguráció beállítva
+
+- A megadott, **nyilvános Firebase webkonfiguráció** bekerült a `depokapacitas/firebase-config.js` fájlba kizárólag a `staging/imile-management-integration` ágon.
+- Projekt: `imile-management-staging`; `authDomain`: `imile-management-staging.firebaseapp.com`.
+- A `main` ág konfigurációja továbbra is üres, ezért az éles Flotta és az éles GitHub Pages nem állt át a staging Firebase-re.
+- A `depokapacitas/firebase-config.test.mjs` ellenőrzi a projektazonosítót, a webkonfiguráció szerkezetét és azt, hogy ne kerüljenek bele szerveroldali titkok. A staging CI-folyamat meghívja ezt a tesztet.
+- **Még ellenőrizendő a felhőben:** Authentication Email/Password bekapcsolva; Firestore adatbázis és európai régió; publikált Security Rules; jogosultsággal ellátott első admin; engedélyezett domain; bejelentkezés és valós időben olvasott tesztadatok.
+- Ne állítsuk át a `main` ágat és ne töltsünk be személyes futáradatokat, amíg az adatbázis jogosultságai és az izolált staging környezet nem vizsgázott sikeresen.
