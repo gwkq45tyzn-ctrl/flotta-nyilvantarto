@@ -72,7 +72,7 @@ jobs:
       - name: Staging Firebase Hosting feltételeinek ellenőrzése
         id: hosting_permission
         env:
-          FIREBASE_HOSTING_SA: \${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
+          FIREBASE_HOSTING_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
         run: |
           if [ -n "$FIREBASE_HOSTING_SA" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -86,7 +86,7 @@ jobs:
         id: deploy_preview
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          firebaseServiceAccount: \${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
           projectId: imile-management-staging
           channelId: imile-qa
           expires: 7d
@@ -94,7 +94,7 @@ jobs:
       - name: Hosting preview elérhetőségének megjelenítése
         if: steps.deploy_preview.outcome == 'success'
         env:
-          PREVIEW_URL: \${{ steps.deploy_preview.outputs.details_url }}
+          PREVIEW_URL: ${{ steps.deploy_preview.outputs.details_url }}
         run: |
           echo "### iMile Management staging preview" >> "$GITHUB_STEP_SUMMARY"
           echo "$PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
