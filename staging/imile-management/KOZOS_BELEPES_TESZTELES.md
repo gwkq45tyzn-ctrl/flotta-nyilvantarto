@@ -14,9 +14,9 @@
 Node.js 22 a tároló **fejlesztői ágának** gyökerében:
 
 \`\`\`sh
-node staging/imile-management/build-preview.mjs
 node staging/imile-management/session-policy.test.mjs
 node staging/imile-management/entry.test.mjs
+node staging/imile-management/build-preview.mjs
 \`\`\`
 
 A build a \`preview-imile-staging/\` mappába kizárólag a fájlok megadott fehérlistáját másolja. Nem csomagolja az eredeti \`index.html\` flottát, nem másolja a \`features/\` könyvtárat, és nem helyez el benne Google Apps Script forrást vagy valós adatokat. A build már létező kimeneti könyvtárat szándékosan nem ír felül.
