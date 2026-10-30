@@ -32,6 +32,7 @@ if (!ready) {
       if(!allowedProfile(profile)){ show('denied'); return; }
       const entries=menuEntries(profile);
       $('depoLink').hidden=!entries.some(x=>x.id==='depo'&&x.enabled);
+      $('fleetLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled&&x.readOnly===true);
       $('userSummary').textContent=(profile.name||user.email||'Belső felhasználó')+' · '+profile.role;
       show('menu');
     } catch(error) {
