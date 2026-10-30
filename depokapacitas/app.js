@@ -2,6 +2,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
+import {parseDay,parseTime} from './import-dates.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 
@@ -69,8 +70,6 @@ await setDoc(doc(db,col,id),obj,{merge:true});toast('Mentés sikeres.');}
 async function removeRow(col,id){if(!canWrite())throw Error('Nincs jogosultság.');if(!confirm('Biztosan törlöd a kiválasztott rekordot?'))return;if(col==='bookings')return;await deleteDoc(doc(db,col,id));toast('Törölve.');}
 async function cancelBooking(id){const ref=doc(db,'bookings',id);await runTransaction(db,async tx=>{const booking=await tx.get(ref);if(!booking.exists())throw Error('A foglalás már nem található.');const x=booking.data();tx.delete(ref);tx.delete(doc(db,'driverClaims',x.date+'__'+x.driverId));});toast('Foglalás feloldva.');}
 const lookup=(obj,...names)=>{const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();const entries=Object.entries(obj);for(const n of names){const f=entries.find(([k])=>normalize(k)===normalize(n));if(f)return f[1];}return '';};
-function parseDay(v){if(v instanceof Date)return v.toISOString().slice(0,10);const s=String(v||'').trim();if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);const m=s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})/);if(m)return m[3]+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');return '';}
-function parseTime(v){const s=String(v||'').trim();const d=parseDay(s);const mt=s.match(/(?:\s|T)(\d{1,2}):(\d{2})(?::(\d{2}))?/);return {date:d,timeKnown:!!mt,eventTime:d+'T'+(mt?(mt[1].padStart(2,'0')+':'+mt[2]+':'+(mt[3]||'00')):'00:00:00')};}
 function keyed(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return 'r'+(h>>>0).toString(36)+'_'+s.length;}
 async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});const target=type==='attendance'&&(wb.SheetNames.find(x=>x.toLowerCase().includes('mobile attendance')))||wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
 function rowToRecord(row,type,file){if(type==='demand'){const date=parseDay(lookup(row,'date','dátum','nap','work date'));const district=String(lookup(row,'district','kerület','area','zipcode')).trim().toUpperCase();if(!date||!district)return null;return {col:'demands',id:date+'__'+district,data:{date,district,newCount:number(lookup(row,'new','newcount','új csomag','új','new packages')),retryCount:number(lookup(row,'retry','retrycount','visszatérő','újrakézbesítendő','failed returns'))}};}
