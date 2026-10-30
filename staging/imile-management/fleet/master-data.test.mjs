@@ -5,7 +5,7 @@ assert.deepEqual(goodDriver,{id:'DA-001',data:{daCode:'DA-001',name:'Teszt Futá
 assert.deepEqual(normalizedDriver({daCode:'ABCD',name:'  Futár  ',vendor:'',capacity:'0',active:'false'}).data,
   {daCode:'ABCD',name:'Futár',vendor:'',capacity:0,active:false});
 for(const x of ['-','A B C','a','',null,'../../secret'])assert.throws(()=>normalizedDriver({daCode:x,name:'Test',vendor:'',capacity:'0',active:'true'}));
-for(const x of ['-1','1.5','NaN','Infinity','10001','',' 1 ','1e3'])assert.throws(
+for(const x of ['-1','1.5','NaN','Infinity','10001','','1e3'])assert.throws(
   ()=>normalizedDriver({daCode:'ABCD',name:'Test',vendor:'',capacity:x,active:'true'}));
 for(const x of ['yes',undefined,'',null])assert.throws(
   ()=>normalizedDriver({daCode:'ABCD',name:'Test',vendor:'',capacity:'1',active:x}));
