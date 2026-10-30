@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Staging Firebase webkonfiguráció ellenőrzése
+        run: node depokapacitas/firebase-config.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
         run: node depokapacitas/tests/check.mjs
       - name: Közös futár/autó törzs és duplikációs tesztek
