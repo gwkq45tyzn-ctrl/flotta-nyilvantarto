@@ -14,7 +14,8 @@ Secret nélkül nincs automatikus telepítés, de a tesztcsomag elkészül.
 Ne küldj jelszót vagy privát kulcsot a GitHub-kódba vagy chatbe.
 
 GitHub Actions:
-https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/actions/workflows/imile-staging.yml
+https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/actions
+(A staging-workflow az új ágon található; először az Actions futások között keresd.)
 
 EGYSZERI HELYI TELEPÍTÉS (WINDOWS POWERSHELL / MAC TERMINAL)
 A saját gépen Git, Node.js 22+ és internet szükséges.
