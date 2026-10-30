@@ -16,18 +16,21 @@ if(!isStaging) {
 } else {
   const firebase=initializeApp(firebaseConfig);
   const db=getFirestore(firebase),auth=getAuth(firebase);
-  let admin=false, busy=false, already=false, readyForRun=false;
+  let admin=false, busy=false, seedEligible=false, readyForRun=false;
   const driverRef=doc(db,'drivers',DRIVER_ID),carRef=doc(db,'vehicles',CAR_ID);
   const button=$('create'),runButton=$('runFlow');
   const refresh=async()=>{
     button.disabled=true;
     const [d,c]=await Promise.all([getDoc(driverRef),getDoc(carRef)]);
-    already=d.exists()||c.exists();
+    const validDriver=!d.exists()||correctQaMaster(d.data(),CAR);
+    const validCar=!c.exists()||correctQaMaster(DRIVER,c.data());
+    seedEligible=validDriver&&validCar&&(!d.exists()||!c.exists());
     readyForRun=d.exists()&&c.exists()&&correctQaMaster(d.data(),c.data());
-    $('existing').textContent=already
-      ? 'Már létezik a tesztfutár és/vagy tesztautó. Semmit nem írunk felül; ellenőrizd a meglévő rekordokat.'
-      : 'A két tesztazonosító még szabad.';
-    button.disabled=already||!admin||busy;
+    $('existing').textContent=!(validDriver&&validCar)
+      ? 'Legalább egy tesztrekord tartalma eltér a jóváhagyott mintától. Nincs automatikus felülírás.'
+      : readyForRun?'Mindkét mintarekord megfelelő; a foglalási teszt indítható.'
+      : 'A hiányzó mesterséges törzsrekordok létrehozhatók. Már létező mintarekordot nem írunk felül.';
+    button.disabled=!seedEligible||!admin||busy;
     runButton.disabled=!readyForRun||!admin||busy;
   };
   onAuthStateChanged(auth,async user=>{
@@ -60,17 +63,19 @@ if(!isStaging) {
     }
   });
     button.addEventListener('click',async()=>{
-    if(!admin||busy||already||!isStaging)return;
+    if(!admin||busy||!seedEligible||!isStaging)return;
     if(!window.confirm('Biztosan létrehozod a két szintetikus rekordot? A Firestore-szabályok szerint automatikusan nem törölhetők.'))return;
     busy=true;button.disabled=true;
     try{
       await runTransaction(db,async tx=>{
         const [d,c]=await Promise.all([tx.get(driverRef),tx.get(carRef)]);
-        if(d.exists()||c.exists())throw Error('Egyik tesztazonosító már foglalt. Nem írtunk felül rekordot.');
-        tx.set(driverRef,DRIVER);
-        tx.set(carRef,CAR);
+        if(d.exists()&&!correctQaMaster(d.data(),CAR))throw Error('A meglévő futár rekordja eltér; nincs felülírás.');
+        if(c.exists()&&!correctQaMaster(DRIVER,c.data()))throw Error('A meglévő autó rekordja eltér; nincs felülírás.');
+        if(d.exists()&&c.exists())throw Error('Mindkét mintarekord már létezik.');
+        if(!d.exists())tx.set(driverRef,DRIVER);
+        if(!c.exists())tx.set(carRef,CAR);
       });
-      $('result').textContent='Mindkét mesterséges törzsrekord létrejött. A DepóKapacitásban most beállítható a kapacitás és kipróbálható a beosztás.';
+      $('result').textContent='A hiányzó mesterséges rekordokat előkészítettük. Most indítható a teljes foglalási teszt.';
       await refresh();
     }catch(error){
       console.error('Synthetic staging seed failed',error);
