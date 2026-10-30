@@ -7,6 +7,6 @@ export function allowedProfile(profile) {
 }
 export function menuEntries(profile) {
   if (!allowedProfile(profile)) return [];
-  // Do not claim shared Fleet auth is active before the Fleet backend migrates.
-  return [{id:'depo',enabled:true},{id:'fleet',enabled:false}];
+  // Read-only Fleet shares Firebase Auth; legacy Fleet backend migration remains pending.
+  return [{id:'depo',enabled:true},{id:'fleet',enabled:true,readOnly:true}];
 }
