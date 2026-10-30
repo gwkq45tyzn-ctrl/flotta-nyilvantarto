@@ -24,21 +24,32 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read: if member();
-      allow create, update: if editor()
+      allow create, update: if admin()
         && request.resource.data.keys().hasOnly(['name','daCode','vendor','capacity','active'])
         && request.resource.data.name is string
         && request.resource.data.daCode is string
         && request.resource.data.capacity is int
         && request.resource.data.capacity >= 0
         && request.resource.data.capacity <= 10000;
-      allow delete: if editor();
+      // A közös törzs rekordjait a két modul nem törölheti véletlenül.
+      allow delete: if false;
     }
     match /vehicles/{vehicleId} {
       allow read: if member();
-      allow create, update: if editor()
+      allow create, update: if admin()
         && request.resource.data.keys().hasOnly(['plate','model','status'])
         && request.resource.data.plate is string
         && request.resource.data.status in ['Elérhető','Szerviz','Leállított'];
+      allow delete: if false;
+    }
+    match /driverCapacities/{driverId} {
+      allow read: if member();
+      allow create, update: if editor()
+        && exists(/databases/$(database)/documents/drivers/$(driverId))
+        && request.resource.data.keys().hasOnly(['capacity'])
+        && request.resource.data.capacity is int
+        && request.resource.data.capacity >= 0
+        && request.resource.data.capacity <= 10000;
       allow delete: if editor();
     }
     match /demands/{id} {
@@ -70,7 +81,8 @@ service cloud.firestore {
         && request.resource.data.district is string
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
-        && request.resource.data.capacity is int && request.resource.data.capacity >= 0
+        && request.resource.data.capacity is int && request.resource.data.capacity >= 0 && request.resource.data.capacity <= 10000
+        && getAfter(/databases/(default)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
         && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId;
