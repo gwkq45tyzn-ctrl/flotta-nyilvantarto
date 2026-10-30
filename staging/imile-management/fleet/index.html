@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#123e82">
+  <title>iMile Management · Flotta előnézet (staging)</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#eef3fa;color:#172d49}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh}
+    header{background:linear-gradient(110deg,#143a7b,#2368b9);color:#fff;padding:22px 18px}
+    header>div,main{max-width:1180px;margin:auto}
+    header h1{margin:9px 0;font-size:26px}
+    header a{color:#e3edfa}
+    main{padding:24px 18px 50px}
+    .notice,.panel{background:white;border:1px solid #d5dfec;border-radius:14px;padding:17px;margin-bottom:18px}
+    .notice{background:#fff8e9;color:#68502e}
+    .panel h2{margin:0 0 12px}
+    .summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+    .stat{background:white;border:1px solid #d5dfec;border-radius:12px;padding:16px 22px;flex:1;min-width:160px}
+    .stat strong{font-size:26px;display:block}
+    .scroll{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:11px 10px;border-bottom:1px solid #e3e9f1;text-align:left}
+    th{color:#425976;background:#f2f6fb}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    button{font:inherit;border:1px solid #c2d0e2;background:#edf3fb;border-radius:9px;padding:10px 14px;cursor:pointer}
+    .error{color:#a02222}
+    .small{color:#58718b;font-size:13px}
+    [hidden]{display:none!important}
+  </style>
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header><div>
+    <a href="../index.html">← iMile Management főmenü</a>
+    <h1>Flotta Nyilvántartó · közös törzsadat-előnézet</h1>
+    <div class="actions"><span id="userInfo">Azonosítás…</span><button id="logout" type="button">Kijelentkezés</button></div>
+  </div></header>
+  <main>
+    <div class="notice"><strong>Fejlesztői, csak olvasható nézet.</strong> A Firestore közös futár- és autótörzsét mutatja. A régi Flotta Nyilvántartó teljes funkciói, Google Apps Script szinkronja és éles adatai nincsenek átállítva.</div>
+    <p id="status" role="status" aria-live="polite">Firebase munkamenet ellenőrzése…</p>
+    <section id="fleetContent" hidden>
+      <div class="summary">
+        <div class="stat"><span>Futárok</span><strong id="driversCount">0</strong></div>
+        <div class="stat"><span>Aktív futárok</span><strong id="activeCount">0</strong></div>
+        <div class="stat"><span>Autók</span><strong id="vehiclesCount">0</strong></div>
+        <div class="stat"><span>Elérhető autók</span><strong id="availableCount">0</strong></div>
+      </div>
+      <section class="panel"><h2>Autók · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>Rendszám</th><th>Modell</th><th>Állapot</th></tr></thead><tbody id="vehiclesBody"></tbody></table></div></section>
+      <section class="panel"><h2>Futárok · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>DA-kód</th><th>Név</th><th>Vállalkozó</th><th>Állapot</th></tr></thead><tbody id="driversBody"></tbody></table></div></section>
+    </section>
+    <p class="small">A rekordok nem kerülnek át az éles flottából. Tesztadatot csak az előírt staging eljárással használjunk.</p>
+  </main>
+</body>
+</html>
