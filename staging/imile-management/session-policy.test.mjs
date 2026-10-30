@@ -12,5 +12,7 @@ console.log('PASS: shared menu access and honest Fleet integration status');
 
 assert.equal(loginEmailForUsername('imilemanagement'),'imilemanagement@imile-management-staging.firebaseapp.com');
 assert.equal(loginEmailForUsername(' IMILEMANAGEMENT '),loginEmailForUsername('imilemanagement'));
-for (const value of ['','admin','imilemanagement@example.com','imilemanagement@imile-management-staging.firebaseapp.com',null,undefined,{},1]) assert.equal(loginEmailForUsername(value),null);
-console.log('PASS: username resolves only to dedicated staging account; unknown usernames rejected');
+assert.equal(loginEmailForUsername('editor@example.com'),'editor@example.com');
+assert.equal(loginEmailForUsername(' ADMIN@EXAMPLE.COM '),'admin@example.com');
+for (const value of ['','admin','user@','user@invalid','a b@example.com','user@@domain.com',null,undefined,{},1]) assert.equal(loginEmailForUsername(value),null);
+console.log('PASS: shared username alias plus role-checked invited Firebase account emails');
