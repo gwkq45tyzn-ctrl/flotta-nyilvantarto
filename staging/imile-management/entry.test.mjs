@@ -32,7 +32,9 @@ assert.doesNotMatch(qaJs,/deleteDoc\(|tx\.delete\(/);
 assert.ok(fleetJs.includes("getDoc(doc(db,'users',user.uid))"));
 assert.ok(fleetJs.includes('onSnapshot(collection(db,name)'));
 assert.ok(fleetJs.includes('allowedProfile(profile)'));
-assert.ok(!fleetJs.includes('setDoc('));
+assert.ok(fleetJs.includes('saveFleetMaster({'));
+assert.ok(fleetJs.includes("profile.role==='admin'"));
+assert.ok(fleetJs.includes("onSnapshot(collection(db,name)"));
 
 assert.ok(menu.includes('id="loginForm"'));
 assert.ok(menu.includes('name="username" type="text"'));
@@ -45,7 +47,7 @@ assert.ok(menu.includes('id="depoLink"'));
 assert.ok(menu.includes('id="fleetLink"'));
 assert.ok(menu.includes('id="qaLink" hidden'));
 assert.ok(entry.includes("$('qaLink').hidden=profile.role!=='admin'"));
-assert.ok(menu.includes('Flotta előnézet (csak olvasás)'));
+assert.ok(menu.includes('Flotta törzsadatok (staging)'));
 assert.doesNotMatch(menu,/FLOTTA_GATE_USERS|password.*digest|SECRET_ACCESS_KEY/);
 assert.ok(entry.includes("getDoc(doc(db,'users',user.uid))"));
 assert.ok(entry.includes('allowedProfile(profile)'));
@@ -71,6 +73,8 @@ try{
    'staging/imile-management/session-policy.mjs',
    'staging/imile-management/fleet/index.html',
    'staging/imile-management/fleet/app.mjs',
+   'staging/imile-management/fleet/master-data.mjs',
+   'staging/imile-management/fleet/master-editor.mjs',
    'staging/imile-management/qa/index.html',
    'staging/imile-management/qa/app.mjs',
    'staging/imile-management/qa/functional-flow.mjs',
