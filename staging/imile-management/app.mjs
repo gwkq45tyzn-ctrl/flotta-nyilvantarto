@@ -31,6 +31,7 @@ if (!ready) {
       const profile=record.exists()?record.data():null;
       if(!allowedProfile(profile)){ show('denied'); return; }
       const entries=menuEntries(profile);
+      $('qaLink').hidden=profile.role!=='admin';
       $('depoLink').hidden=!entries.some(x=>x.id==='depo'&&x.enabled);
       $('fleetLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled&&x.readOnly===true);
       $('userSummary').textContent=(profile.name||user.email||'Belső felhasználó')+' · '+profile.role;
