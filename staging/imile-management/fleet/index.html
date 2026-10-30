@@ -80,6 +80,11 @@
         </form>
         <p id="driverMessage" role="status" aria-live="polite"></p>
       </section>
+      <section class="panel"><h2>Attendance alapján automatikusan látható autóhasználat</h2>
+        <p class="subtle">A Mobile Attendance-ből származtatott, csak olvasható staging előnézet. Log In + kiválasztott rendszám = javasolt kiadás. Log Out + teljes visszaadási fotósor = lezárt használat. Hiányos visszaadás nem teszi szabaddá az autót. A forrásnak előbb rendszám mezőt kell biztosítania; ez az előnézet nem váltja ki a szerveroldali autókiadási naplót.</p>
+        <p id="attendanceHandoverStatus" role="status">Attendance adatok betöltése…</p>
+        <div class="scroll"><table><thead><tr><th>Futár / DA</th><th>Rendszám</th><th>Felvétel</th><th>Visszaadás</th><th>Állapot</th></tr></thead><tbody id="handoverBody"></tbody></table></div>
+      </section>
       <section class="panel"><h2>Autók · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>Rendszám</th><th>Modell</th><th>Állapot</th><th id="vehiclesActions" hidden>Kezelés</th></tr></thead><tbody id="vehiclesBody"></tbody></table></div></section>
       <section class="panel"><h2>Futárok · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>DA-kód</th><th>Név</th><th>Vállalkozó</th><th>Állapot</th><th id="driversActions" hidden>Kezelés</th></tr></thead><tbody id="driversBody"></tbody></table></div></section>
     </section>
