@@ -33,6 +33,8 @@ jobs:
         run: node depokapacitas/capacity-eligibility.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
+      - name: Importelőellenőrzés és duplikált rekordok tesztje
+        run: node depokapacitas/import-validation.test.mjs
       - name: Fejlesztői JavaScript modulok ellenőrzése
         run: |
           node --check staging/imile-management/shared-records.mjs
