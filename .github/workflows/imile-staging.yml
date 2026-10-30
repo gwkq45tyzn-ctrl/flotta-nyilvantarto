@@ -41,6 +41,8 @@ jobs:
         run: node depokapacitas/google-sync/timestamp.test.mjs
       - name: Firestore szabályok kódszintű biztonsági ellenőrzése
         run: node depokapacitas/rules-contract.test.mjs
+      - name: Naptári dátumok és Attendance időpontok validálása
+        run: node depokapacitas/rules-calendar.test.mjs
       - name: Fejlesztői JavaScript modulok ellenőrzése
         run: |
           node --check staging/imile-management/shared-records.mjs
