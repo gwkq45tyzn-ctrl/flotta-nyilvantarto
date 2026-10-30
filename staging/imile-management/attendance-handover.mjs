@@ -65,8 +65,8 @@ export function deriveAttendanceHandovers({events=[],drivers=[],vehicles=[],manu
       if(!e.photosComplete){
         previous.status='return_review';
         issue(alerts,'return_photos_missing',e,'A visszaadás rögzítve, de a fotók hiányoznak; az autó nem szabadítható fel automatikusan.');
-        activeDrivers.delete(e.daCode);
-        // Keep vehicle claimed until staff verifies its return condition.
+        // Keep both driver and vehicle claimed until return is reviewed
+        // or a subsequent valid Log Out supplies the required photos.
       }else{
         previous.status='returned';
         activeDrivers.delete(e.daCode);
