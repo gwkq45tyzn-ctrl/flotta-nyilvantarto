@@ -82,7 +82,8 @@ service cloud.firestore {
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
         && request.resource.data.capacity is int && request.resource.data.capacity >= 0 && request.resource.data.capacity <= 10000
-        && getAfter(/databases/(default)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
+        && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
         && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId;
