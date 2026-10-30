@@ -26,6 +26,13 @@
     button{font:inherit;border:1px solid #c2d0e2;background:#edf3fb;border-radius:9px;padding:10px 14px;cursor:pointer}
     .error{color:#a02222}
     .small{color:#58718b;font-size:13px}
+    .fleetform{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end}
+    .fleetform label{display:grid;gap:6px;font-weight:600;font-size:13px}
+    .fleetform input,.fleetform select{font:inherit;border:1px solid #b1c2d7;border-radius:8px;padding:10px;width:100%}
+    .fleetform button{background:#1856a5;color:white;border-color:#1856a5}
+    .subtle{font-size:13px;color:#54718b}
+    .edit{font-size:12px;padding:7px 10px}
+    @media(max-width:700px){.fleetform{grid-template-columns:1fr}}
     [hidden]{display:none!important}
   </style>
   <script type="module" src="./app.mjs"></script>
@@ -37,7 +44,7 @@
     <div class="actions"><span id="userInfo">Azonosítás…</span><button id="logout" type="button">Kijelentkezés</button></div>
   </div></header>
   <main>
-    <div class="notice"><strong>Fejlesztői, csak olvasható nézet.</strong> A Firestore közös futár- és autótörzsét mutatja. A régi Flotta Nyilvántartó teljes funkciói, Google Apps Script szinkronja és éles adatai nincsenek átállítva.</div>
+    <div class="notice"><strong>STAGING – elkülönített tesztkörnyezet.</strong> A Firestore közös futár- és autótörzsét mutatja. Aktív adminisztrátorok ezen a felületen hozhatnak létre és módosíthatnak staging törzsrekordokat. Az éles Flotta Nyilvántartó teljes funkciói, Google Apps Script szinkronja és adatai nincsenek átállítva. Törzsrekordokat ezen az oldalon törölni nem lehet.</div>
     <p id="status" role="status" aria-live="polite">Firebase munkamenet ellenőrzése…</p>
     <section id="fleetContent" hidden>
       <div class="summary">
@@ -46,8 +53,34 @@
         <div class="stat"><span>Autók</span><strong id="vehiclesCount">0</strong></div>
         <div class="stat"><span>Elérhető autók</span><strong id="availableCount">0</strong></div>
       </div>
-      <section class="panel"><h2>Autók · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>Rendszám</th><th>Modell</th><th>Állapot</th></tr></thead><tbody id="vehiclesBody"></tbody></table></div></section>
-      <section class="panel"><h2>Futárok · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>DA-kód</th><th>Név</th><th>Vállalkozó</th><th>Állapot</th></tr></thead><tbody id="driversBody"></tbody></table></div></section>
+      <section class="panel" id="adminVehiclePanel" hidden>
+        <h2>Autó adatainak kezelése · admin</h2>
+        <p class="subtle">Csak staging rekord. A rendszámot létrehozás után nem módosítjuk; a módosítás felülírás előtt a legfrissebb rekordot is ellenőrzi.</p>
+        <form id="vehicleForm" class="fleetform">
+          <label>Rendszám <input name="plate" maxlength="16" required placeholder="ABC123"></label>
+          <label>Modell <input name="model" maxlength="160" placeholder="Pl. Ford Transit"></label>
+          <label>Állapot <select name="status"><option>Elérhető</option><option>Szerviz</option><option>Leállított</option></select></label>
+          <button id="saveVehicle" type="submit">Új autó létrehozása</button>
+          <button id="cancelVehicleEdit" type="button">Új rekord / szerkesztés törlése</button>
+        </form>
+        <p id="vehicleMessage" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel" id="adminDriverPanel" hidden>
+        <h2>Futár adatainak kezelése · admin</h2>
+        <p class="subtle">Csak staging rekord. A DA-kódot létrehozás után nem módosítjuk. Inaktív futár nem vehető fel új foglalásra.</p>
+        <form id="driverForm" class="fleetform">
+          <label>DA-kód <input name="daCode" maxlength="40" required placeholder="DA0001"></label>
+          <label>Név <input name="name" maxlength="160" required></label>
+          <label>Vállalkozó <input name="vendor" maxlength="160"></label>
+          <label>Alapkapacitás <input name="capacity" type="number" min="0" max="10000" step="1" required value="0"></label>
+          <label>Aktív <select name="active"><option value="true">Igen</option><option value="false">Nem</option></select></label>
+          <button id="saveDriver" type="submit">Új futár létrehozása</button>
+          <button id="cancelDriverEdit" type="button">Új rekord / szerkesztés törlése</button>
+        </form>
+        <p id="driverMessage" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel"><h2>Autók · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>Rendszám</th><th>Modell</th><th>Állapot</th><th id="vehiclesActions" hidden>Kezelés</th></tr></thead><tbody id="vehiclesBody"></tbody></table></div></section>
+      <section class="panel"><h2>Futárok · közös Firestore törzs</h2><div class="scroll"><table><thead><tr><th>DA-kód</th><th>Név</th><th>Vállalkozó</th><th>Állapot</th><th id="driversActions" hidden>Kezelés</th></tr></thead><tbody id="driversBody"></tbody></table></div></section>
     </section>
     <p class="small">A rekordok nem kerülnek át az éles flottából. Tesztadatot csak az előírt staging eljárással használjunk.</p>
   </main>
