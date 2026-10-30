@@ -47,3 +47,33 @@ firebase hosting:channel:deploy imile-qa --project imile-management-staging --ex
 ## Korlátok
 
 Ez **nem** a teljes Flotta Nyilvántartó Firebase-migrációja. Nincs éles flottatörzs-átvitel, nincs közös szerveroldali flottaszerkesztés és nincs valódi Attendance import. A régi Fleet teljes funkcionalitása jelenleg csak a külön éles rendszeren érhető el. A staging előnézeti kód és a kizárólag kódszintű tesztek nem bizonyítják a teljes böngészős E2E működést. A bevezetéshez a külön GO/NO-GO kritériumok teljesítése szükséges.
+
+
+## 2026-10-30 – Funkcionális QA, Work-keret elfogyása után
+
+Az utolsó **igazolt** Work-jelentés: 8/8 sikeres böngészős belépési és modulváltási ellenőrzés. A később indított, futár–autó–kapacitás–foglalás funkcionális teszt Work-befejezési jelentése nem érhető el innen; annak tényleges utolsó lépése nem igazolt.
+
+**Megtalált alkalmazáskorlát:** a DepóKapacitás \`saveForm('driver')\` és \`saveForm('vehicle')\` ága szándékosan tiltja a közös törzsek módosítását. A korábbi Work-utasításban kért első szintetikus rekordok ezért nem hozhatók létre közvetlenül a DepóKapacitás felületéről.
+
+### Új, admin által kézzel indított staging QA előkészítő
+
+- Staging rendszerválasztó admin-menüje: \`staging/imile-management/qa/index.html\`.
+- Kizárólag az \`imile-management-staging\` Firebase-projekten, aktív \`admin\` szerepkörrel működik, további Firestore Security Rules védelemmel.
+- Gombnyomással és megerősítéssel, kizárólag hiányzó rekordok esetén létrehozható:
+  - \`drivers/SYNTHETIC_TEST\`: \`name="Tesztfutár (mesterséges)"\`, \`daCode="SYNTHETIC_TEST"\`, \`vendor="QA"\`, \`capacity=100\`, \`active=true\`.
+  - \`vehicles/TESTCAR01\`: \`plate="TESTCAR01"\`, \`model="SYNTHETIC QA"\`, \`status="Elérhető"\`.
+- Az előkészítő nem hoz létre foglalást vagy jelenléti rekordot és semmit nem ír felül.
+- A törzs \`drivers\` és \`vehicles\` törlését a publikált Firestore Rules tiltja. A tesztadatok fennmaradhatnak, és törlésükhöz a projekt jogosult adminisztratív Firebase Console/IAM útvonala szükséges.
+- A QA útvonalat a \`build-preview.mjs\` előnézeti csomagolójához hozzáadtuk; a **korábbi Firebase Hosting preview-kiadás automatikusan nem frissül**, a megváltozott fájlokat csak ellenőrzött újbóli preview-deploy teszi elérhetővé.
+
+### Következő ellenőrzés, új telepítés után
+
+1. Közös bejelentkezés adminnal, majd admin QA menü megjelenése.
+2. Ellenőrizd, hogy a két szintetikus dokumentum még nem létezik; külön jóváhagyás után létrehozás.
+3. Flotta Firestore-előnézet és DepóKapacitás futár/autó listák megjelenése.
+4. DepóKapacitásban driverCapacities/SYNTHETIC_TEST értékének 100-ra állítása, egy jövőbeli napra egyetlen booking + driverClaims mentés.
+5. Ugyanarra a napra második futár-/autófoglalás tiltásának tesztje, valamint a napi kapacitás ellenőrzése.
+6. A foglalás feloldása, booking és driverClaim eltűnésének ellenőrzése.
+7. Visszamaradó teszt-törzsadatok tételes dokumentálása.
+
+A GitHub-fájlok módosítása **nem egyenlő** a Hosting preview publikálásával, és nem jelent valós funkcionális E2E eredményt.
