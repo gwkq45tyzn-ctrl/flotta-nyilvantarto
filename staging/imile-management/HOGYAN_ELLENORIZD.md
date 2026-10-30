@@ -88,3 +88,32 @@ FONTOS: Az új Flotta admin-funkciók GitHubra kerülése nem bizonyítja,
 hogy a legfrissebb Firebase Hosting preview csatornára is kikerültek.
 A böngészős teszt eredményét csak valós staging URL és bejelentkezés után
 tekintjük igazoltnak.
+
+
+2026-10-30 18:56 UTÁNI ÁLLAPOT – TÉNYLEGES GITHUB ACTIONS FUTÁS
+
+GitHub Actions run: https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/actions/runs/41101609802
+Eredmény: completed / success.
+A sikeres futás tartalmazta az összes staging Flotta és DepóKapacitás offline
+tesztet, Firestore szabályok kódszintű ellenőrzését, staging buildet,
+valamint az éles Fleet main/index.html változatlanságának ellenőrzését.
+
+Letölthető ellenőrzött webcsomag:
+https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/actions/runs/41101609802/artifacts/12998197364
+Artifact neve: imile-staging-preview, ID: 12998197364, ~45 627 byte.
+
+A Firebase Hosting telepítés EBBEN a PR-es futásban NEM történt meg:
+1. A workflow PR eseményből indul, a telepítési lépés pedig csak push
+   esemény esetén futna.
+2. A napló szerint a FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING
+   GitHub secret üres/hiányzik. A Hosting jog nem került átadásra.
+3. Nem áll rendelkezésre a friss, tényleges Firebase preview URL;
+   nincs sikeres böngészős CRUD/foglalás E2E visszaigazolás.
+
+A Firebase adminnak a fenti dokumentum korábbi A vagy B útvonala
+szerint kell biztonságosan telepítenie a csomagot. Ne oszd meg a
+service-account kulcsot vagy felhasználói jelszót ebben a beszélgetésben.
+
+A teljes régi Flotta Nyilvántartó további moduljai (kiadás,
+visszavétel, telefonok, szerviz, biztosítások) NEM kerültek át,
+az új staging Flotta jelenleg csak közös törzsadatokat kezel.
