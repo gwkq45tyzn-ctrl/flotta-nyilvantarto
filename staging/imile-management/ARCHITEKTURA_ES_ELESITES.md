@@ -113,3 +113,26 @@ Az új dátumkezelés kód- és mintatesztjei sikeresek, de teljes Excel/Google 
 - A `depokapacitas/firebase-config.test.mjs` ellenőrzi a projektazonosítót, a webkonfiguráció szerkezetét és azt, hogy ne kerüljenek bele szerveroldali titkok. A staging CI-folyamat meghívja ezt a tesztet.
 - **Még ellenőrizendő a felhőben:** Authentication Email/Password bekapcsolva; Firestore adatbázis és európai régió; publikált Security Rules; jogosultsággal ellátott első admin; engedélyezett domain; bejelentkezés és valós időben olvasott tesztadatok.
 - Ne állítsuk át a `main` ágat és ne töltsünk be személyes futáradatokat, amíg az adatbázis jogosultságai és az izolált staging környezet nem vizsgázott sikeresen.
+
+
+## 2026-10-30 – Work Firebase audit javítása (biztonsági publikálás előtt)
+
+A Work a Firebase Console-ban ellenőrizte a következőket: a staging Web App regisztrált, Email/Password bekapcsolt, az üres (default) Firestore adatbázis Frankfurtban (europe-west3) létezik, a GitHub Pages-domain engedélyezett. A Firestore jelenleg publikált szabályai minden kliens-hozzáférést tiltanak. **Nincs Auth-felhasználó, első admin vagy tesztadat**. A Work biztonsági indokból nem publikálta a régi fejlesztői rules-fájlt.
+
+A Work által feltárt problémákra a staging ágon javítás készült:
+1. A bookings/driverClaims tranzakciós párosításhoz a dátum-, futár- és foglalásazonosító egyezését kétirányúan megköveteljük.
+2. Az attendance minden elvárt mezőjét kötelezővé tesszük és típus-/hosszellenőrzésre visszük; az eseménytípus, DA-kód, forrás és időpont összhangját ellenőrizzük.
+3. A users, drivers, vehicles, driverCapacities, demands, results, bookings, driverClaims és sourceRows gyűjteményekre teljes mezőkészlet, rekordazonosító-, adattípus-, tartomány- és hosszkorlátokat alkalmazunk.
+4. Ismeretlen adatútvonalra továbbra is a teljes tiltás az alapértelmezés.
+5. A rules-contract.test.mjs kibővítve a Work három megállapításának regressziós ellenőrzésére.
+
+**FONTOS: a módosított fájl csak GitHub staging forrás.** A kódszintű tesztek nem helyettesítik a Firebase Rules-compiler, Emulator és Playground próbáját, és nem bizonyítják, hogy a szabályok publikálva vannak.
+
+### Elengedhetetlen Firebase Console validáció a következő Work-feladathoz
+
+- A staging ág pontos forrása: depokapacitas/firestore.rules; összevetés után először a Rules Playground és lehetőség szerint a Firebase Emulator segítségével validálni, majd csak kompatibilis, biztonságos szabályokat publikálni.
+- Negatív tesztek: névtelen olvasás/írás tiltása; inaktív felhasználó; viewer írás; érvénytelen users/attendance/results/demands rekordok; árva, eltérő napú, eltérő futárú vagy külön létrehozott driverClaims; dupla autó- vagy futárfoglalás.
+- Pozitív tesztek: jogosult admin és editor törzsadat/kapacitás/tervezés, viewer olvasás; ugyanazon batch/transaction végén egyező bookings + driverClaims engedélyezése és együtt történő feloldása. A Firestore szabályok get/exists/getAfter hozzáférési korlátját valós tranzakcióval is tesztelni kell.
+- Az első valódi admin belépési fiókot Firebase Authenticationben felhasználó által jóváhagyott e-mail címmel létrehozni; a hozzá tartozó users/{UID} dokumentumot adminisztratív Console-hozzáféréssel hozzáadni. **Jelszó, OAuth-token, privát kulcs GitHubba vagy chatbe nem kerülhet.**
+- Tesztadatot kizárólag külön szintetikus ID-kkal szabad létrehozni; az éles flottát, a main ágat és az eredeti Attendance táblát nem érintheti.
+- Csak a sikeres teszteket követően állapítható meg, hogy a DepóKapacitás készen áll a belső staging-belépésre. Élesítés és valódi adatimport továbbra is tiltva.
