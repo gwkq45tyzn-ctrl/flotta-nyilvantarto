@@ -3,6 +3,7 @@ import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'htt
 import {getFirestore,collection,doc,getDoc,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
 import {parseDay,parseTime} from './import-dates.mjs';
+import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 
@@ -53,7 +54,7 @@ const list=[...byDriver].map(([id,r])=>td(esc(byId('drivers',id)?.name||id),r.da
 return datebar()+'<div class="filterbar"><label>Futárátlag időszaka <select id="modePick"><option value="day" '+(state.mode==='day'?'selected':'')+'>Napi</option><option value="week" '+(state.mode==='week'?'selected':'')+'>Heti</option><option value="month" '+(state.mode==='month'?'selected':'')+'>Havi</option></select></label></div><div class="grid kpis">'+summaries.map(r=>kpi(r.label+' sikeresség',r.picked?Math.round(r.success*100/r.picked):0,'A felvett csomagok %-a')).join('')+kpi('Havi felvett csomag',summaries[2].picked,'Aktuális hónap')+'</div>'+(canWrite()?section('Tényleges futáreredmény',frm('result',field('date','Nap','date',state.date)+select('driverId','Futár',get('drivers'),x=>x.name+' · '+x.daCode)+field('district','Kerület','text','','placeholder="pl. IX."')+field('picked','Felvett csomag','number',0,'min="0"')+field('success','Sikeres','number',0,'min="0"')+field('failed','Sikertelen','number',0,'min="0"'))):'')+section({day:'Napi',week:'Heti',month:'Havi'}[state.mode]+' futárátlagok',table(['Futár','Munkanap','Felvett','Sikeres','Sikertelen','Sikeresség','Felvett / munkanap'],list))+section('Napi rögzített eredmények',table(['Futár','Kerület','Felvett','Sikeres','Sikertelen','Lezáratlan',''],rs.filter(x=>x.date===state.date).map(x=>td(esc(byId('drivers',x.driverId)?.name||'—'),esc(x.district),fmt(x.picked),fmt(x.success),fmt(x.failed),fmt(number(x.picked)-number(x.success)-number(x.failed)),cmd('results',x.id)))));}
 function photo(url,name){if(!/^https:\/\/drive\.google\.com\//.test(url||''))return '';const match=String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);const preview=match?'https://drive.google.com/thumbnail?id='+encodeURIComponent(match[1])+'&sz=w240':'';return '<a class="photo" target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">'+(preview?'<img alt="'+esc(name)+' – védett Google Drive-fotó" loading="lazy" referrerpolicy="no-referrer" src="'+esc(preview)+'">':'')+'<span>'+esc(name)+'</span></a>';}
 function attendance(){const seen=new Map();for(const a of get('attendance').filter(x=>(x.eventTime||'').startsWith(state.date))){const key=[a.eventTime,a.daCode,a.type].join('|');const prev=seen.get(key);if(!prev||a.source==='google_sheet')seen.set(key,a);}const r=[...seen.values()].sort((a,b)=>(b.eventTime||'').localeCompare(a.eventTime||''));return datebar()+section('Jelenléti események · '+r.length+' db','<p class="inline-note">A forrás az iMile Driver Attendance – Log In Out. A képek megnyitásához a Google Drive-on külön jogosultság is szükséges. A valós idejű Google-szinkront a belső Google Apps Script összekötő biztosíthatja.</p>'+table(['Időpont','Futár / DA','Esemény','Vállalkozó','Autófotók'],r.map(x=>td(esc(x.timeKnown===false?'Idő nem szerepel':(x.eventTime||'').replace('T',' ')),esc(x.driverName)+'<div class="small">'+esc(x.daCode)+'</div>',status(x.type),esc(x.vendor),'<div class="photo-grid">'+photo(x.photoFront,'Elölről')+photo(x.photoLeft,'Bal oldal')+photo(x.photoRight,'Jobb oldal')+photo(x.photoBack,'Hátulról')+'</div>'))));}
-function imports(){const list=get('sourceRows').filter(x=>!state.search||JSON.stringify(x).toLowerCase().includes(state.search));return (canWrite()?section('Táblázat betöltése','<form id="importForm" class="form-grid"><label>Adattípus<select name="type"><option value="demand">Kerületi csomagigény</option><option value="result">Futáreredmény</option><option value="attendance">Attendance – Mobile Attendance</option><option value="generic">Egyéb operatív adattábla</option></select></label><label>CSV vagy Excel (.xlsx, .xls)<input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><button class="primary" type="submit">Feldolgozás és feltöltés</button></form><p class="small">A fájlt a böngésző dolgozza fel; a kiválasztott sorokat a központi adatbázisba mentjük. Ismételt import nem duplázza az azonos azonosítójú rekordokat.</p>'):'')+section('Operatív adatbázis',table(['Forrás','Adatok előnézete','Betöltve'],list.slice(0,100).map(x=>td(esc(x.source||'Egyéb'),esc((x.content||'').slice(0,180)),esc(x.importedAt||'')))));}
+function imports(){const list=get('sourceRows').filter(x=>!state.search||JSON.stringify(x).toLowerCase().includes(state.search));return (canWrite()?section('Táblázat betöltése','<form id="importForm" class="form-grid"><label>Adattípus<select name="type"><option value="demand">Kerületi csomagigény</option><option value="result">Futáreredmény</option><option value="attendance">Attendance – Mobile Attendance</option><option value="generic">Egyéb operatív adattábla</option></select></label><label>CSV vagy Excel (.xlsx, .xls)<input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><button class="primary" type="submit">Feldolgozás és feltöltés</button></form><p class="small">A fájlt a böngésző dolgozza fel; a kiválasztott sorokat a központi adatbázisba mentjük. Ismételt import nem duplázza az azonos azonosítójú rekordokat. Hibás vagy ismétlődő sor esetén az import nem indul el.</p><div id="importFeedback" role="alert" aria-live="polite" class="small"></div>'):'')+section('Operatív adatbázis',table(['Forrás','Adatok előnézete','Betöltve'],list.slice(0,100).map(x=>td(esc(x.source||'Egyéb'),esc((x.content||'').slice(0,180)),esc(x.importedAt||'')))));}
 function admin(){if(state.role!=='admin')return '';const legacyCompare=section('Közös törzsadatok ellenőrzése – csak olvasás','<p class="inline-note">Töltsd be a jelenlegi Flotta Nyilvántartó JSON-mentését. A fájl csak a böngésződben kerül feldolgozásra; az összehasonlítás nem módosít sem a Firebase-ben, sem a Flottában adatot.</p><form id="masterCompareForm" class="form-grid"><label>Flotta JSON-biztonsági mentés<input type="file" name="fleetBackup" accept=".json,application/json" required></label><button class="secondary" type="submit">Összehasonlítás</button></form><div id="masterCompareOutput"></div>');return legacyCompare+section('Belső felhasználók','<p class="inline-note">Új e-mail/jelszó fiókot a Firebase Console → Authentication → Users részen hozhatsz létre. Az ott kapott UID-hez itt tudsz szerepkört rendelni. Így külső személy nem regisztrálhat önállóan.</p>'+frm('user',field('uid','Firebase-felhasználó UID-ja')+field('name','Név')+'<label>Szerepkör<select name="role"><option value="viewer">Megtekintő</option><option value="editor">Szerkesztő</option><option value="admin">Adminisztrátor</option></select></label>','Jogosultság mentése'))+section('Jogosultságok',table(['Név','UID','Szerepkör','Aktív'],get('users').map(x=>td(esc(x.name||'—'),esc(x.id),esc(x.role),x.active===true?'Igen':'Nem'))));}
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,planning,drivers,vehicles,demands,results,attendance,import:imports,admin}[state.view];const tools=state.view==='overview'?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
 function listen(){for(const un of state.unsubscribe)un();state.unsubscribe=[];for(const name of ['drivers','vehicles','driverCapacities','bookings','demands','results','attendance','sourceRows',...(state.role==='admin'?['users']:[])]){const unsub=onSnapshot(collection(db,name),snap=>{state.data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));$('liveIndicator').textContent='● Élő kapcsolat';$('liveIndicator').classList.remove('off');$('dataStamp').textContent='Utolsó szinkron: '+new Date().toLocaleTimeString('hu-HU');render();},err=>{console.error(name,err);$('liveIndicator').textContent='● Adatkapcsolati hiba';$('liveIndicator').classList.add('off');toast('Nem érhető el a(z) '+name+' adatbázis. Ellenőrizd a jogosultságokat.',true);});state.unsubscribe.push(unsub);}}
@@ -72,13 +73,95 @@ async function cancelBooking(id){const ref=doc(db,'bookings',id);await runTransa
 const lookup=(obj,...names)=>{const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();const entries=Object.entries(obj);for(const n of names){const f=entries.find(([k])=>normalize(k)===normalize(n));if(f)return f[1];}return '';};
 function keyed(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return 'r'+(h>>>0).toString(36)+'_'+s.length;}
 async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});const target=type==='attendance'&&(wb.SheetNames.find(x=>x.toLowerCase().includes('mobile attendance')))||wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
-function rowToRecord(row,type,file){if(type==='demand'){const date=parseDay(lookup(row,'date','dátum','nap','work date'));const district=String(lookup(row,'district','kerület','area','zipcode')).trim().toUpperCase();if(!date||!district)return null;return {col:'demands',id:date+'__'+district,data:{date,district,newCount:number(lookup(row,'new','newcount','új csomag','új','new packages')),retryCount:number(lookup(row,'retry','retrycount','visszatérő','újrakézbesítendő','failed returns'))}};}
-if(type==='result'){const date=parseDay(lookup(row,'date','dátum','nap'));const code=String(lookup(row,'da code','daCode','futárkód','driver id')).trim().toUpperCase();const district=String(lookup(row,'district','kerület','area')).trim().toUpperCase();if(!date||!code||!district)return null;const picked=number(lookup(row,'picked','felvett','felvett csomag')),success=number(lookup(row,'success','sikeres')),failed=number(lookup(row,'failed','sikertelen'));if(success+failed>picked)return null;return {col:'results',id:date+'__'+code+'__'+district,data:{date,driverId:code,district,picked,success,failed}};}
-if(type==='attendance'){const time=parseTime(lookup(row,'Timestamp','dátum','időpont'));const daCode=String(lookup(row,'DA Code','daCode')).trim().toUpperCase();const event=String(lookup(row,'Attendance Type','type','event')).trim();if(!time.date||!daCode||!['Log In','Log Out'].includes(event))return null;const driverName=String(lookup(row,'Driver Name','Futár'));const record={eventTime:time.eventTime,eventDate:time.date,timeKnown:time.timeKnown,daCode,driverName,vendor:String(lookup(row,'Vendor','Vállalkozó')),type:event,status:String(lookup(row,'Status')),photoFront:String(lookup(row,'Car Photo - Front')),photoLeft:String(lookup(row,'Car Photo - Left Side')),photoRight:String(lookup(row,'Car Photo - Right Side')),photoBack:String(lookup(row,'Car Photo - Back')),source:'xlsx:'+file};return {col:'attendance',id:keyed(time.eventTime+'|'+daCode+'|'+event+'|'+record.photoFront),data:record};}
-const data=JSON.stringify(row);return {col:'sourceRows',id:keyed(file+'|'+data),data:{source:file,content:data.slice(0,18000),importedAt:new Date().toISOString().slice(0,19)}};}
-async function importFile(form){const file=form.elements.file.files[0],type=form.elements.type.value;if(!file)throw Error('Válassz fájlt.');toast('Feldolgozás…');const parsed=await parseFile(file,type);const records=parsed.rows.map(x=>rowToRecord(x,type,file.name)).filter(Boolean);if(!records.length)throw Error('Nem található feldolgozható sor. Ellenőrizd az oszlopneveket.');if(!confirm(records.length+' sor importálható a '+parsed.sheet+' munkalapról. Menthetjük a központi adatbázisba?'))return;
-for(let i=0;i<records.length;i+=300){const batch=writeBatch(db);for(const x of records.slice(i,i+300))batch.set(doc(db,x.col,x.id),x.data,{merge:true});await batch.commit();}
-toast(records.length+' sor feldolgozva.');form.reset();}
+function requireValue(value,label){
+ const v=String(value??'').trim();
+ if(!v)throw Error('Hiányzik: '+label);
+ if(v.length>100)throw Error('Túl hosszú mező: '+label);
+ return v;
+}
+function rowToRecord(row,type,file){
+ if(type==='demand'){
+  const date=parseDay(lookup(row,'date','dátum','nap','work date'));
+  const district=requireValue(lookup(row,'district','kerület','area','zipcode'),'kerület').toUpperCase().replaceAll('/','-');
+  if(!date)throw Error('Hiányzó vagy hibás dátum.');
+  const newCount=readNonNegativeCount(lookup(row,'new','newcount','új csomag','új','new packages'),'Új csomag');
+  const retryCount=readNonNegativeCount(lookup(row,'retry','retrycount','visszatérő','újrakézbesítendő','failed returns'),'Újrakézbesítendő');
+  return {col:'demands',id:date+'__'+district,data:{date,district,newCount,retryCount}};
+ }
+ if(type==='result'){
+  const date=parseDay(lookup(row,'date','dátum','nap'));
+  const code=requireValue(lookup(row,'da code','daCode','futárkód','driver id'),'DA-kód').toUpperCase();
+  const district=requireValue(lookup(row,'district','kerület','area'),'kerület').toUpperCase().replaceAll('/','-');
+  if(!date)throw Error('Hiányzó vagy hibás dátum.');
+  if(code.includes('/'))throw Error('Érvénytelen DA-kód.');
+  const picked=readNonNegativeCount(lookup(row,'picked','felvett','felvett csomag'),'Felvett');
+  const success=readNonNegativeCount(lookup(row,'success','sikeres'),'Sikeres');
+  const failed=readNonNegativeCount(lookup(row,'failed','sikertelen'),'Sikertelen');
+  if(success+failed>picked)throw Error('A sikeres és sikertelen összeg nagyobb a felvett csomagszámnál.');
+  return {col:'results',id:date+'__'+code+'__'+district,data:{date,driverId:code,district,picked,success,failed}};
+ }
+ if(type==='attendance'){
+  const time=parseTime(lookup(row,'Timestamp','dátum','időpont'));
+  const daCode=requireValue(lookup(row,'DA Code','daCode'),'DA-kód').toUpperCase();
+  const event=requireValue(lookup(row,'Attendance Type','type','event'),'Jelenlét típusa');
+  if(!time.date||!time.timeKnown)throw Error('Érvénytelen vagy hiányzó jelenléti időpont.');
+  if(daCode.includes('/'))throw Error('Érvénytelen DA-kód.');
+  if(!['Log In','Log Out'].includes(event))throw Error('Ismeretlen jelenlét típus.');
+  const record={
+   eventTime:time.eventTime,eventDate:time.date,timeKnown:time.timeKnown,daCode,
+   driverName:String(lookup(row,'Driver Name','Futár')),
+   vendor:String(lookup(row,'Vendor','Vállalkozó')),type:event,status:String(lookup(row,'Status')),
+   photoFront:String(lookup(row,'Car Photo - Front')),photoLeft:String(lookup(row,'Car Photo - Left Side')),
+   photoRight:String(lookup(row,'Car Photo - Right Side')),photoBack:String(lookup(row,'Car Photo - Back')),
+   source:'xlsx:'+file
+  };
+  return {col:'attendance',id:keyed(time.eventTime+'|'+daCode+'|'+event+'|'+record.photoFront),data:record};
+ }
+ if(type==='generic'){
+  const data=JSON.stringify(row);
+  if(!data||data.length>18000)throw Error('Az operatív adatsor meghaladja a 18 000 karakteres határt.');
+  return {col:'sourceRows',id:keyed(file+'|'+data),data:{source:file,content:data,importedAt:new Date().toISOString().slice(0,19)}};
+ }
+ throw Error('Ismeretlen adattípus.');
+}
+async function importFile(form){
+ if(!canWrite())throw Error('Nincs jogosultság az adatimporthoz.');
+ const file=form.elements.file.files[0],type=form.elements.type.value;
+ if(!file)throw Error('Válassz fájlt.');
+ const feedback=document.getElementById('importFeedback');
+ if(feedback)feedback.textContent='Adatok ellenőrzése…';
+ const parsed=await parseFile(file,type);
+ const plan=buildImportPlan(parsed.rows,row=>rowToRecord(row,type,file.name));
+ if(!plan.canCommit){
+  const msg=formatImportErrors(plan);
+  if(feedback)feedback.textContent=msg;
+  throw Error(msg);
+ }
+ const changed=plan.records.filter(x=>{
+  const old=byId(x.col,x.id);
+  return old&&Object.keys(x.data).some(k=>JSON.stringify(old[k])!==JSON.stringify(x.data[k]));
+ }).length;
+ const question=plan.total+' sor ellenőrizve a(z) '+parsed.sheet+' munkalapon.\n'
+  +'Hibás vagy duplikált sor: 0.\n'
+  +'Már létező rekord megváltoztatása: '+changed+'.\n\n'
+  +'Folytatod az adatbázisba mentéssel?';
+ if(!confirm(question)){if(feedback)feedback.textContent='A feltöltés megszakítva, nem változott adat.';return;}
+ let completed=0;
+ for(let i=0;i<plan.records.length;i+=300){
+  const batch=writeBatch(db);
+  const part=plan.records.slice(i,i+300);
+  for(const x of part)batch.set(doc(db,x.col,x.id),x.data,{merge:true});
+  try{await batch.commit();completed+=part.length;}
+  catch(error){
+   const msg='Az adatimport részben sikerült: '+completed+' / '+plan.total+' rekord mentve. A mentett adatokat ne töltsd újra ellenőrzés nélkül. '+String(error?.message||error);
+   if(feedback)feedback.textContent=msg;
+   throw Error(msg);
+  }
+ }
+ if(feedback)feedback.textContent=completed+' sor sikeresen mentve.';
+ toast(completed+' sor feldolgozva.');
+ form.reset();
+}
 function navigate(view){if(!names[view])return;state.view=view;state.search='';document.querySelector('.sidebar').classList.remove('open');render();}
 document.addEventListener('click',async e=>{const n=e.target.closest('[data-view]');if(n){navigate(n.dataset.view);return;}const del=e.target.closest('[data-del]'),cancel=e.target.closest('[data-cancel]');try{if(del)await removeRow(del.dataset.del,del.dataset.id);if(cancel)await cancelBooking(cancel.dataset.cancel);}catch(ex){toast(ex.message,true);}});
 document.addEventListener('change',e=>{if(e.target.id==='datePick'){state.date=iso(e.target.value);render();}if(e.target.id==='modePick'){state.mode=e.target.value;render();}});
