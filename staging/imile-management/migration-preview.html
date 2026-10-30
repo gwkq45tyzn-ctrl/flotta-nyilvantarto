@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>iMile Management · flottaadat-migráció ellenőrzése · STAGING</title>
+<style>:root{font-family:system-ui,"Segoe UI",sans-serif;color:#183149;background:#f0f4f9}*{box-sizing:border-box}body{margin:0}header{padding:24px;background:#123b70;color:white}header div,main{max-width:1060px;margin:auto}header h1{margin:0 0 5px;font-size:25px}header p{margin:0;color:#cde0fc;font-size:14px}main{padding:25px 15px}.panel{background:white;border:1px solid #d9e3ef;border-radius:15px;padding:23px;margin-bottom:18px;box-shadow:0 4px 22px #17355a0a}p{line-height:1.55;color:#576983}.notice{border-left:4px solid #d49c27;background:#fff7e4;padding:15px;border-radius:10px;margin:15px 0}input{display:block;max-width:100%;margin-top:8px}button{background:#225db3;color:#fff;border:0;border-radius:8px;padding:11px 16px;cursor:pointer;font-weight:650;margin:8px 8px 8px 0}button:disabled{opacity:.45;cursor:default}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.kpi{padding:17px;background:#f5f8fd;border-radius:10px}.kpi b{font-size:27px}.kpi span{display:block;font-size:12px;color:#6b7890}table{width:100%;border-collapse:collapse;min-width:650px}th,td{padding:9px;border-bottom:1px solid #e1e8f3;text-align:left;font-size:13px}th{background:#f5f8fd}.scroll{overflow:auto;max-height:400px}.error{color:#9e2828}.ok{color:#16824e}.hidden{display:none}footer{text-align:center;font-size:12px;color:#788ba3;margin-bottom:20px}@media(max-width:650px){.grid{grid-template-columns:1fr 1fr}}</style>
+</head><body><header><div><h1>Adatmigráció – előzetes ellenőrzés</h1><p>iMile Management · STAGING · csak olvasás</p></div></header>
+<main><section class="panel"><h2>Flotta JSON-biztonsági mentés ellenőrzése</h2>
+<div class="notice"><b>Az éles flottarendszert nem módosítja.</b> A kiválasztott fájl a saját böngésződben kerül feldolgozásra; ez az oldal nem tölt fel semmit a GitHubra, a Firebase-re vagy más szerverre. Csak a régi flottarendszerből letöltött JSON-mentést használd.</div>
+<label for="upload"><b>Flotta JSON-fájl kiválasztása</b></label><input id="upload" type="file" accept=".json,application/json">
+<p id="error" class="error" role="alert"></p><div id="actions" class="hidden"><button id="download" type="button">Ellenőrzési terv mentése JSON-ként</button><button id="reset" type="button">Törlés a nézetből</button></div>
+</section>
+<section id="report" class="panel hidden"><h2>Adatellenőrzés</h2><div class="grid" id="stats"></div><p id="summary"></p>
+<h3>Ellenőrzendő eltérések</h3><div class="scroll" id="issues"></div>
+<h3>Járművek – előnézet</h3><div class="scroll" id="vehicles"></div>
+<h3>Futárok – előnézet</h3><div class="scroll" id="drivers"></div>
+<p>Az itt megjelenő rekordok <b>nem kerülnek át az adatbázisba</b>. A következő fázis csak ellenőrzött azonosítókkal, jóváhagyott hozzáférés mellett indulhat.</p></section></main>
+<footer>iMile Management · elkülönített fejlesztés · nem éles</footer>
+<script type="module">
+import {previewFleetMigration} from './shared-records.mjs';
+let report=null;
+const el=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function tab(head,rows){return '<table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(row=>'<tr>'+row.map(x=>'<td>'+esc(x)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+head.length+'">Nincs eltérés vagy adat</td></tr>')+'</tbody></table>';}
+el('upload').addEventListener('change',async e=>{
+  el('error').textContent='';el('report').classList.add('hidden');el('actions').classList.add('hidden');report=null;
+  const file=e.target.files[0];if(!file)return;
+  if(file.size>15*1024*1024){el('error').textContent='A fájl túl nagy (max. 15 MB).';return;}
+  try{
+    const content=JSON.parse(await file.text());
+    report=previewFleetMigration(content);
+    const c=report.counts;el('stats').innerHTML=[
+      ['Autók a forrásban',c.sourceVehicles],['Futárok a forrásban',c.sourceDrivers],
+      ['Ellenőrizendő eltérések',c.issues],['Kritikus eltérések',c.critical]
+    ].map(([name,n])=>'<div class="kpi"><b>'+n+'</b><span>'+name+'</span></div>').join('');
+    el('summary').textContent=report.readyForManualReview?'A kritikus azonosítóhibák nem láthatók. Az adatbázisba másolás továbbra is tiltva van.':'Kritikus azonosítóhibák miatt a migrációt meg kell állítani az eltérések rendezéséig.';
+    el('summary').className=report.readyForManualReview?'ok':'error';
+    el('issues').innerHTML=tab(['Típus','Terület','Azonosító','Régi ID-k'],report.issues.map(x=>[x.type,x.target,x.id||'',(x.sourceIds||[x.fleetId||'']).join(', ')]));
+    el('vehicles').innerHTML=tab(['Rendszám','Járműtípus','Új státusz','Régi státusz'],report.vehicles.map(x=>[x.plate,x.model,x.status,x.legacyStatus]));
+    el('drivers').innerHTML=tab(['DA-kód','Futár','Vállalkozó','Új státusz'],report.drivers.map(x=>[x.daCode,x.name,x.vendor,x.status]));
+    el('report').classList.remove('hidden');el('actions').classList.remove('hidden');
+  }catch(error){el('error').textContent='Nem sikerült feldolgozni: '+error.message;}
+});
+el('reset').addEventListener('click',()=>{el('upload').value='';el('report').classList.add('hidden');el('actions').classList.add('hidden');report=null;});
+el('download').addEventListener('click',()=>{
+  if(!report)return;
+  const data=JSON.stringify({...report,note:'STAGING REVIEW ONLY – NOT APPROVED FOR PRODUCTION IMPORT'},null,2);
+  const blob=new Blob([data],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='imile_migracios_ellenorzes_NEM_ELES.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+</script></body></html>
