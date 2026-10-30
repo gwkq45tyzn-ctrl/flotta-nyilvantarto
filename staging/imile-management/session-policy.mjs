@@ -1,0 +1,12 @@
+/**
+ * Frontend menu role check. Server-side authorization remains in Firestore Rules.
+ */
+export const validRoles=Object.freeze(['admin','editor','viewer']);
+export function allowedProfile(profile) {
+  return !!profile && profile.active === true && validRoles.includes(profile.role);
+}
+export function menuEntries(profile) {
+  if (!allowedProfile(profile)) return [];
+  // Do not claim shared Fleet auth is active before the Fleet backend migrates.
+  return [{id:'depo',enabled:true},{id:'fleet',enabled:false}];
+}
