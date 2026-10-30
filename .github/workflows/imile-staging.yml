@@ -51,6 +51,7 @@ jobs:
         run: |
           node staging/imile-management/fleet/master-data.test.mjs
           node staging/imile-management/fleet/master-editor.test.mjs
+          node staging/imile-management/fleet/shared-capacity.integration.test.mjs
       - name: Közös belépés és izolált preview tesztje
         run: |
           node staging/imile-management/session-policy.test.mjs
