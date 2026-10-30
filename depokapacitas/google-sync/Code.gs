@@ -29,13 +29,14 @@ function syncAttendance(){
       if(!code||!['Log In','Log Out'].includes(type))continue;
       const dateValue=r[0];
       const known=dateValue instanceof Date && !isNaN(dateValue.valueOf());
-      const datetime=known?Utilities.formatDate(dateValue,DEPO_TZ,"yyyy-MM-dd'T'HH:mm:ss"):formatDisplayTimestamp(v[0]);
-      if(!datetime)continue;
+      const fallback=known?'':formatDisplayTimestamp(v[0]);
+      const datetime=known?Utilities.formatDate(dateValue,DEPO_TZ,"yyyy-MM-dd'T'HH:mm:ss"):fallback;
+      if(!datetime){console.warn('Hibás vagy hiányzó bejelentkezési időpont, forrássor: '+(first+i));continue;}
       const signature=datetime+'|'+code+'|'+type+'|'+String(v[12]||'');
       const id='s'+Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,signature)
         .slice(0,16).map(x=>('0'+((x+256)%256).toString(16)).slice(-2)).join('');
       const fields={
-        eventTime:datetime,eventDate:datetime.substring(0,10),timeKnown:known,
+        eventTime:datetime,eventDate:datetime.substring(0,10),timeKnown:known||Boolean(fallback),
         daCode:code,driverName:String(v[1]||''),vendor:String(v[3]||''),type:type,
         status:String(v[11]||''),photoFront:String(v[12]||''),photoLeft:String(v[13]||''),
         photoRight:String(v[14]||''),photoBack:String(v[15]||''),source:'google_sheet'
@@ -59,9 +60,19 @@ function syncAttendance(){
   }finally{lock.releaseLock();}
 }
 function formatDisplayTimestamp(s){
-  const x=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  // A Google Forms MM/DD/YYYY vagy M/D/YYYY formátumot írhat ki.
+  // Nem fogadunk el idő nélküli, érvénytelen vagy kétértelműen feldolgozott eseményt.
+  const x=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+)(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i);
   if(!x)return '';
-  return x[3]+'-'+x[1].padStart(2,'0')+'-'+x[2].padStart(2,'0')+'T'+(x[4]?x[4].padStart(2,'0')+':'+x[5]+':'+(x[6]||'00'):'00:00:00');
+  const month=Number(x[1]),day=Number(x[2]),year=Number(x[3]);
+  let hour=Number(x[4]);const minute=Number(x[5]),second=Number(x[6]||0);
+  if(year<2000||year>2100||month<1||month>12||day<1||day>31||minute>59||second>59)return '';
+  if(x[7]){if(hour<1||hour>12)return '';hour=hour%12+(x[7].toUpperCase()==='PM'?12:0);}
+  else if(hour>23)return '';
+  const dt=new Date(Date.UTC(year,month-1,day));
+  if(dt.getUTCFullYear()!==year||dt.getUTCMonth()!==month-1||dt.getUTCDate()!==day)return '';
+  const p=n=>String(n).padStart(2,'0');
+  return year+'-'+p(month)+'-'+p(day)+'T'+p(hour)+':'+p(minute)+':'+p(second);
 }
 function installFiveMinuteTrigger(){
   ScriptApp.getProjectTriggers().filter(x=>x.getHandlerFunction()==='syncAttendance').forEach(ScriptApp.deleteTrigger);
