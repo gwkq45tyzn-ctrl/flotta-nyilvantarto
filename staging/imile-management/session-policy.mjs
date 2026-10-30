@@ -7,8 +7,8 @@ export function allowedProfile(profile) {
 }
 export function menuEntries(profile) {
   if (!allowedProfile(profile)) return [];
-  // Read-only Fleet shares Firebase Auth; legacy Fleet backend migration remains pending.
-  return [{id:'depo',enabled:true},{id:'fleet',enabled:true,readOnly:true}];
+  // Staging Fleet master maintenance is admin-only; full legacy Fleet remains unmigrated.
+  return [{id:'depo',enabled:true},{id:'fleet',enabled:true,editableByAdmin:true}];
 }
 
 // Public login identifier only; Firebase Authentication verifies the password.
