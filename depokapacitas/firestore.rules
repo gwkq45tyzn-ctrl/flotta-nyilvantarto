@@ -1,14 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // STAGING ONLY. No anonymous access or direct client self-registration.
     function signedIn() { return request.auth != null; }
     function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
     function member() {
       return signedIn() && exists(userPath()) && get(userPath()).data.active == true;
     }
     function admin() { return member() && get(userPath()).data.role == 'admin'; }
-    function editor() {
-      return member() && get(userPath()).data.role in ['admin', 'editor'];
+    function editor() { return member() && get(userPath()).data.role in ['admin','editor']; }
+
+    function exactFields(data, fields) {
+      return data.keys().hasOnly(fields) && data.keys().hasAll(fields);
+    }
+    function textField(value, maximum) {
+      return value is string && value.size() > 0 && value.size() <= maximum;
+    }
+    function optionalText(value, maximum) {
+      return value is string && value.size() <= maximum;
+    }
+    function validDay(value) {
+      return value is string
+        && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+    function nonNegative(value, maximum) {
+      return value is int && value >= 0 && value <= maximum;
+    }
+    function validDriverCode(value) {
+      return value is string && value.matches('^[A-Z0-9_-]{4,40}$');
+    }
+    function validVehiclePlate(value) {
+      return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId) {
       return exists(/databases/$(database)/documents/driverCapacities/$(driverId))
@@ -17,11 +39,12 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // First admin must be created in the Firebase Console. No self-registration.
+      // The initial admin must be provisioned in the Firebase Console.
       allow get: if signedIn() && (request.auth.uid == uid || admin());
       allow list: if admin();
       allow create, update: if admin()
-        && request.resource.data.keys().hasOnly(['name','role','active'])
+        && exactFields(request.resource.data,['name','role','active'])
+        && textField(request.resource.data.name,120)
         && request.resource.data.role in ['admin','editor','viewer']
         && request.resource.data.active is bool;
       allow delete: if admin() && uid != request.auth.uid;
@@ -29,110 +52,146 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read: if member();
+      // Fleet remains the source of truth. Only admins can stage canonical master records.
       allow create, update: if admin()
-        && request.resource.data.keys().hasOnly(['name','daCode','vendor','capacity','active'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.daCode is string
+        && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
+        && validDriverCode(driverId)
         && request.resource.data.daCode == driverId
-        && request.resource.data.vendor is string
-        && request.resource.data.active is bool
-        && request.resource.data.capacity is int
-        && request.resource.data.capacity >= 0
-        && request.resource.data.capacity <= 10000;
-      // A közös törzs rekordjait a két modul nem törölheti véletlenül.
+        && textField(request.resource.data.name,160)
+        && optionalText(request.resource.data.vendor,160)
+        && nonNegative(request.resource.data.capacity,10000)
+        && request.resource.data.active is bool;
       allow delete: if false;
     }
+
     match /vehicles/{vehicleId} {
       allow read: if member();
       allow create, update: if admin()
-        && request.resource.data.keys().hasOnly(['plate','model','status'])
-        && request.resource.data.plate is string
+        && exactFields(request.resource.data,['plate','model','status'])
+        && validVehiclePlate(vehicleId)
         && request.resource.data.plate == vehicleId
-        && request.resource.data.model is string
+        && optionalText(request.resource.data.model,160)
         && request.resource.data.status in ['Elérhető','Szerviz','Leállított'];
       allow delete: if false;
     }
+
     match /driverCapacities/{driverId} {
       allow read: if member();
       allow create, update: if editor()
+        && validDriverCode(driverId)
         && exists(/databases/$(database)/documents/drivers/$(driverId))
-        && request.resource.data.keys().hasOnly(['capacity'])
-        && request.resource.data.capacity is int
-        && request.resource.data.capacity >= 0
-        && request.resource.data.capacity <= 10000;
+        && exactFields(request.resource.data,['capacity'])
+        && nonNegative(request.resource.data.capacity,10000);
       allow delete: if editor();
     }
+
     match /demands/{id} {
       allow read: if member();
       allow create, update: if editor()
-        && request.resource.data.keys().hasOnly(['date','district','newCount','retryCount'])
-        && request.resource.data.newCount is int && request.resource.data.retryCount is int
-        && request.resource.data.newCount >= 0 && request.resource.data.retryCount >= 0;
+        && exactFields(request.resource.data,['date','district','newCount','retryCount'])
+        && validDay(request.resource.data.date)
+        && textField(request.resource.data.district,60)
+        && id == request.resource.data.date + '__' + request.resource.data.district
+        && nonNegative(request.resource.data.newCount,10000000)
+        && nonNegative(request.resource.data.retryCount,10000000);
       allow delete: if editor();
     }
+
     match /results/{id} {
       allow read: if member();
       allow create, update: if editor()
-        && request.resource.data.keys().hasOnly(['date','driverId','district','picked','success','failed'])
-        && request.resource.data.picked is int
-        && request.resource.data.success is int && request.resource.data.failed is int
-        && request.resource.data.picked >= 0 && request.resource.data.success >= 0
-        && request.resource.data.failed >= 0
+        && exactFields(request.resource.data,['date','driverId','district','picked','success','failed'])
+        && validDay(request.resource.data.date)
+        && validDriverCode(request.resource.data.driverId)
+        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
+        && textField(request.resource.data.district,60)
+        && id == request.resource.data.date + '__' + request.resource.data.driverId + '__' + request.resource.data.district
+        && nonNegative(request.resource.data.picked,10000000)
+        && nonNegative(request.resource.data.success,10000000)
+        && nonNegative(request.resource.data.failed,10000000)
         && request.resource.data.success + request.resource.data.failed <= request.resource.data.picked;
       allow delete: if editor();
     }
+
     match /bookings/{bookingId} {
       allow read: if member();
       allow create: if editor()
-        && request.resource.data.keys().hasOnly(['date','vehicleId','driverId','district','status','capacity'])
-        && request.resource.data.date is string
-        && request.resource.data.vehicleId is string
-        && request.resource.data.driverId is string
-        && request.resource.data.district is string
+        && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity'])
+        && validDay(request.resource.data.date)
+        && validVehiclePlate(request.resource.data.vehicleId)
+        && validDriverCode(request.resource.data.driverId)
+        && optionalText(request.resource.data.district,60)
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
-        && request.resource.data.capacity is int && request.resource.data.capacity >= 0 && request.resource.data.capacity <= 10000
-        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
-        && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
-        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
         && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
-        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId;
+        && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        && nonNegative(request.resource.data.capacity,10000)
+        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
+        // Both documents must be written in one transaction. This prevents double booking.
+        && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
+        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
+        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.date == request.resource.data.date
+        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.driverId == request.resource.data.driverId;
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/driverClaims/$(resource.data.date + '__' + resource.data.driverId));
     }
+
     match /driverClaims/{key} {
       allow read: if member();
       allow create: if editor()
-        && request.resource.data.keys().hasOnly(['date','driverId','bookingId'])
-        && request.resource.data.date is string
-        && request.resource.data.driverId is string
-        && request.resource.data.bookingId is string
+        && exactFields(request.resource.data,['date','driverId','bookingId'])
+        && validDay(request.resource.data.date)
+        && validDriverCode(request.resource.data.driverId)
+        && textField(request.resource.data.bookingId,120)
         && key == request.resource.data.date + '__' + request.resource.data.driverId
-        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId;
+        && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == request.resource.data.date
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
+        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId;
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
     }
+
     match /attendance/{id} {
       allow read: if member();
-      // Attendance is imported by a trusted, IAM-authorized Google Apps Script.
-      // Manual import from the logged-in web app is permitted for editors.
+      // Apps Script uses IAM; manual browser uploads are authorized for editors only.
       allow create, update: if editor()
-        && request.resource.data.keys().hasOnly(['eventTime','eventDate','timeKnown','daCode','driverName','vendor','type','status','photoFront','photoLeft','photoRight','photoBack','source'])
-        && request.resource.data.type in ['Log In','Log Out'];
+        && exactFields(request.resource.data,[
+          'eventTime','eventDate','timeKnown','daCode','driverName','vendor',
+          'type','status','photoFront','photoLeft','photoRight','photoBack','source'])
+        && validDay(request.resource.data.eventDate)
+        && request.resource.data.eventTime is string
+        && request.resource.data.eventTime.matches('^' + request.resource.data.eventDate + 'T[0-9]{2}:[0-9]{2}:[0-9]{2}$')
+        && request.resource.data.timeKnown is bool
+        && validDriverCode(request.resource.data.daCode)
+        && optionalText(request.resource.data.driverName,160)
+        && optionalText(request.resource.data.vendor,160)
+        && request.resource.data.type in ['Log In','Log Out']
+        && optionalText(request.resource.data.status,100)
+        && optionalText(request.resource.data.photoFront,2048)
+        && optionalText(request.resource.data.photoLeft,2048)
+        && optionalText(request.resource.data.photoRight,2048)
+        && optionalText(request.resource.data.photoBack,2048)
+        && textField(request.resource.data.source,256);
       allow delete: if admin();
     }
+
     match /sourceRows/{id} {
       allow read: if member();
       allow create, update: if editor()
-        && request.resource.data.keys().hasOnly(['source','content','importedAt'])
+        && exactFields(request.resource.data,['source','content','importedAt'])
+        && textField(request.resource.data.source,256)
         && request.resource.data.content is string
-        && request.resource.data.content.size() <= 18000;
+        && request.resource.data.content.size() <= 18000
+        && request.resource.data.importedAt is string
+        && request.resource.data.importedAt.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$');
       allow delete: if admin();
     }
+
     match /{path=**} { allow read, write: if false; }
   }
 }
