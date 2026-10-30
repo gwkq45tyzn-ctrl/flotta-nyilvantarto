@@ -26,6 +26,7 @@ assert.match(rules,/match \/\{path=\*\*\} \{ allow read, write: if false;/);
 assert.doesNotMatch(rules,/allow\s+(read|write|create|update|delete)\s*(?:,\s*\w+)?\s*:\s*if\s*true/);
 assert.match(rules,/function member\(\)/);
 assert.match(rules,/get\(userPath\(\)\)\.data\.active == true/);
+assert.match(rules,/get\(userPath\(\)\)\.data\.role in \['admin','editor','viewer'\]/);
 assert.match(rules,/function exactFields\(data, fields\)/);
 assert.match(rules,/data\.keys\(\)\.hasAll\(fields\)/);
 assert.match(rules,/data\.keys\(\)\.hasOnly\(fields\)/);
@@ -59,7 +60,9 @@ assert.match(bookings,/allow update: if false;/);
 for(const k of ['eventTime','eventDate','timeKnown','daCode','driverName','vendor','type','status','photoFront','photoLeft','photoRight','photoBack','source']){
   assert.ok(attendance.includes("'"+k+"'"),'Missing attendance field '+k);
 }
-assert.match(attendance,/request\.resource\.data\.eventTime\.matches/);
+assert.match(attendance,/validEventTime\(request\.resource\.data\.eventTime,request\.resource\.data\.eventDate\)/);
+assert.match(rules,/function validEventTime\(value, day\)/);
+assert.match(rules,/T\(\[01\]\[0-9\]\|2\[0-3\]\):\[0-5\]\[0-9\]:\[0-5\]\[0-9\]/);
 assert.match(attendance,/request\.resource\.data\.timeKnown is bool/);
 assert.match(attendance,/validDriverCode\(request\.resource\.data\.daCode\)/);
 assert.match(attendance,/request\.resource\.data\.type in \['Log In','Log Out'\]/);
