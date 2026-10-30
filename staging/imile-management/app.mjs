@@ -2,7 +2,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,getDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../depokapacitas/firebase-config.js';
-import {allowedProfile,menuEntries} from './session-policy.mjs';
+import {allowedProfile,menuEntries,loginEmailForUsername} from './session-policy.mjs';
 
 const $=id=>document.getElementById(id);
 const views=['loading','login','denied','error','menu'];
@@ -52,7 +52,9 @@ if (!ready) {
     button.disabled=true;
     try{
       const data=new FormData(event.currentTarget);
-      await signInWithEmailAndPassword(auth,String(data.get('email')||'').trim(),String(data.get('password')||''));
+      const loginEmail=loginEmailForUsername(data.get('username'));
+      if (!loginEmail) throw new Error('Invalid login');
+      await signInWithEmailAndPassword(auth,loginEmail,String(data.get('password')||''));
       event.currentTarget.reset();
     }catch(error){
       console.error('Staging Firebase login failed',error?.code||'unknown');

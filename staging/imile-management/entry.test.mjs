@@ -15,6 +15,11 @@ assert.ok(fleetJs.includes('allowedProfile(profile)'));
 assert.ok(!fleetJs.includes('setDoc('));
 
 assert.ok(menu.includes('id="loginForm"'));
+assert.ok(menu.includes('name="username" type="text"'));
+assert.ok(menu.includes('Felhasználónév'));
+assert.ok(!menu.includes('type="email"'));
+assert.ok(entry.includes("loginEmailForUsername(data.get('username'))"));
+assert.ok(entry.includes("signInWithEmailAndPassword(auth,loginEmail,"));
 assert.ok(menu.includes('id="menu"'));
 assert.ok(menu.includes('id="depoLink"'));
 assert.ok(menu.includes('id="fleetLink"'));
