@@ -26,6 +26,7 @@ code{overflow-wrap:anywhere}p{line-height:1.6}dl{display:grid;grid-template-colu
 <dl><dt>Futárkód</dt><dd><code>SYNTHETIC_TEST</code></dd><dt>Futár</dt><dd>Tesztfutár (mesterséges) · 100 csomag/nap</dd><dt>Autó</dt><dd><code>TESTCAR01</code> · Elérhető</dd></dl>
 <p class="warning"><strong>Figyelem!</strong> A jelenlegi Firestore jogosultsági szabályok a futár- és autótörzs törlését tiltják. A mintarekordok a teszt végén megmaradhatnak, és csak adminisztrátori Console/IAM művelettel távolíthatók el. A külön indítható funkcionális teszt ideiglenesen foglalást hoz létre, majd megpróbálja eltávolítani; sikertelen takarítás esetén külön figyelmeztet.</p>
 <p id="existing">Meglévő mintarekordok ellenőrzése…</p>
+<p><label><input type="checkbox" id="consent"> Kizárólag a felsorolt mesterséges staging tesztadatokat használom; a mintatörzs megmaradhat.</label></p>
 <button id="create" type="button" disabled>Hiányzó mesterséges rekordok előkészítése</button>
 <p id="result" role="status" aria-live="polite"></p>
 <hr><h2>Teljes foglalási próba</h2>

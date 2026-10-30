@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Staging Firebase webkonfiguráció ellenőrzése
         run: node depokapacitas/firebase-config.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
@@ -52,6 +52,7 @@ jobs:
           node staging/imile-management/fleet/master-data.test.mjs
           node staging/imile-management/fleet/master-editor.test.mjs
           node staging/imile-management/fleet/shared-capacity.integration.test.mjs
+          node staging/imile-management/fleet/operations.test.mjs
       - name: Közös belépés és izolált preview tesztje
         run: |
           node staging/imile-management/session-policy.test.mjs
@@ -65,6 +66,14 @@ jobs:
           node --check staging/imile-management/fleet/app.mjs
       - name: Staging kiadási tiltások és Hosting preview-szabályok
         run: node staging/imile-management/deploy-policy.test.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Firestore jogosultságok – 99 izolált flottateszt
+        run: |
+          npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config staging/imile-management/fleet/firebase.emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
       - name: A flotta belépési pontjának érintetlensége
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main

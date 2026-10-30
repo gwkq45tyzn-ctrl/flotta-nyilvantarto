@@ -46,7 +46,7 @@ if(!isStaging) {
   });
   runButton.addEventListener('click',async()=>{
     if(!admin||busy||!readyForRun||!isStaging)return;
-    if(!window.confirm('Elindítod az izolált staging foglalási tesztet? A teszt ideiglenes foglalást és futárzárolást hoz létre, majd visszavonja. A két mesterséges törzsrekord megmarad.'))return;
+    if(!$('consent').checked){$('result').textContent='Előbb jelöld be a mesterséges tesztadatok használatát.';return;}
     busy=true;runButton.disabled=true;button.disabled=true;
     const flowLog=$('flowLog');flowLog.textContent='Teszt indítása…';
     const writeLog=line=>{flowLog.textContent+='\n'+line;};
@@ -64,7 +64,7 @@ if(!isStaging) {
   });
     button.addEventListener('click',async()=>{
     if(!admin||busy||!seedEligible||!isStaging)return;
-    if(!window.confirm('Előkészíted a hiányzó mesterséges rekordokat? A már meglévő mintarekordokat nem írjuk felül; a Firestore-szabályok szerint automatikusan nem törölhetők.'))return;
+    if(!$('consent').checked){$('result').textContent='Előbb jelöld be a mesterséges tesztadatok használatát.';return;}
     busy=true;button.disabled=true;
     try{
       await runTransaction(db,async tx=>{

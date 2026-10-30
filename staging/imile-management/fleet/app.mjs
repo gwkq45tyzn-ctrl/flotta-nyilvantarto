@@ -112,7 +112,6 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       const baseline=form.dataset.baseline?JSON.parse(form.dataset.baseline):null;
       const input=Object.fromEntries(new FormData(form).entries());
       const label=kind==='driver'?'futár':'autó';
-      if(!window.confirm('Biztosan mented a '+label+' staging rekordját? Ez nem az éles flotta, de a közös staging törzsadatokat azonnal frissíti.'))return;
       button.disabled=true;
       output.textContent='Mentés folyamatban…';
       try{

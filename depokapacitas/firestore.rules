@@ -201,6 +201,163 @@ service cloud.firestore {
       allow delete: if admin();
     }
 
+
+    // Fleet staging model: fleetRecords/{kind__key} is a bounded typed map,
+    // versioned with immutable creator and server timestamps; no client deletion.
+    // fleetAssignments/{plate} and fleetDriverAssignments/{DA} mirror one another.
+    // fleetMovements/{autoId} is append-only; each movement and assignment pair
+    // must be committed atomically. All collections require an active member.
+    function validFleet_vehicle(d) { return exactFields(d,['vehicleId','make','vin','year','mileage','lessor','location','insuranceNumber','insuranceExpiry','cascoExpiry','inspectionExpiry','rentalExpiry','nextServiceDate','nextServiceMileage','tyresChanged','note'])
+      && validVehiclePlate(d.vehicleId)
+      && optionalText(d.make,160)
+      && optionalText(d.vin,160)
+      && nonNegative(d.year,100000000)
+      && (d.year == 0 || (d.year >= 1900 && d.year <= 2199))
+      && nonNegative(d.mileage,100000000)
+      && optionalText(d.lessor,160)
+      && optionalText(d.location,160)
+      && optionalText(d.insuranceNumber,160)
+      && (d.insuranceExpiry == '' || validDay(d.insuranceExpiry))
+      && (d.cascoExpiry == '' || validDay(d.cascoExpiry))
+      && (d.inspectionExpiry == '' || validDay(d.inspectionExpiry))
+      && (d.rentalExpiry == '' || validDay(d.rentalExpiry))
+      && (d.nextServiceDate == '' || validDay(d.nextServiceDate))
+      && nonNegative(d.nextServiceMileage,100000000)
+      && d.tyresChanged is bool
+      && optionalText(d.note,2000)
+      && (d.vehicleId == '' || exists(/databases/$(database)/documents/vehicles/$(d.vehicleId))); }
+    function validFleet_driver(d) { return exactFields(d,['driverId','phone','licenseExpiry','since','note'])
+      && validDriverCode(d.driverId)
+      && optionalText(d.phone,160)
+      && (d.licenseExpiry == '' || validDay(d.licenseExpiry))
+      && (d.since == '' || validDay(d.since))
+      && optionalText(d.note,2000)
+      && (d.driverId == '' || exists(/databases/$(database)/documents/drivers/$(d.driverId))); }
+    function validFleet_fuel(d) { return exactFields(d,['code','provider','vehicleId','expiry','limit','active','note'])
+      && validDriverCode(d.code)
+      && optionalText(d.provider,160)
+      && (d.vehicleId == '' || validVehiclePlate(d.vehicleId))
+      && (d.expiry == '' || validDay(d.expiry))
+      && nonNegative(d.limit,100000000)
+      && d.active is bool
+      && optionalText(d.note,2000)
+      && (d.vehicleId == '' || exists(/databases/$(database)/documents/vehicles/$(d.vehicleId))); }
+    function validFleet_phone(d) { return exactFields(d,['code','number','model','imei','driverId','active','note'])
+      && validDriverCode(d.code)
+      && optionalText(d.number,160)
+      && optionalText(d.model,160)
+      && optionalText(d.imei,160)
+      && (d.driverId == '' || validDriverCode(d.driverId))
+      && d.active is bool
+      && optionalText(d.note,2000)
+      && (d.driverId == '' || exists(/databases/$(database)/documents/drivers/$(d.driverId))); }
+    function validFleet_contact(d) { return exactFields(d,['code','name','company','phone','email','active','note'])
+      && validDriverCode(d.code)
+      && textField(d.name,160)
+      && optionalText(d.company,160)
+      && optionalText(d.phone,160)
+      && optionalText(d.email,160)
+      && d.active is bool
+      && optionalText(d.note,2000); }
+    function validFleet_service(d) { return exactFields(d,['code','vehicleId','date','provider','mileage','cost','status','note'])
+      && validDriverCode(d.code)
+      && validVehiclePlate(d.vehicleId)
+      && validDay(d.date)
+      && optionalText(d.provider,160)
+      && nonNegative(d.mileage,100000000)
+      && nonNegative(d.cost,100000000)
+      && d.status in ['Elérhető','Szerviz','Leállított']
+      && optionalText(d.note,2000)
+      && (d.vehicleId == '' || exists(/databases/$(database)/documents/vehicles/$(d.vehicleId)))
+      && admin() && getAfter(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data.status == d.status; }
+
+    function validFleetRecord(id,d) {
+      return exactFields(d,['kind','data','revision','createdAt','createdBy','updatedAt','updatedBy'])
+        && d.data is map && d.revision is int && d.revision > 0 && d.revision <= 100000000
+        && d.createdAt is timestamp && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid && textField(d.createdBy,128)
+        && ((d.kind == 'vehicle' && id == 'vehicle__' + d.data.vehicleId && validFleet_vehicle(d.data))
+        || (d.kind == 'driver' && id == 'driver__' + d.data.driverId && validFleet_driver(d.data))
+        || (d.kind == 'fuel' && id == 'fuel__' + d.data.code && validFleet_fuel(d.data))
+        || (d.kind == 'phone' && id == 'phone__' + d.data.code && validFleet_phone(d.data))
+        || (d.kind == 'contact' && id == 'contact__' + d.data.code && validFleet_contact(d.data))
+        || (d.kind == 'service' && id == 'service__' + d.data.code && validFleet_service(d.data)));
+    }
+    match /fleetRecords/{id} {
+      allow read: if member();
+      allow create: if editor() && validFleetRecord(id,request.resource.data)
+        && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if editor() && validFleetRecord(id,request.resource.data)
+        && request.resource.data.kind == resource.data.kind
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
+    function assignmentShape(d) {
+      return exactFields(d,['vehicleId','driverId','active','mileage','operationId'])
+        && validVehiclePlate(d.vehicleId) && validDriverCode(d.driverId)
+        && d.active is bool && nonNegative(d.mileage,100000000)
+        && d.operationId is string && d.operationId.matches('^[A-Za-z0-9]{20}$');
+    }
+    function assignmentEvent(d) {
+      let p = /databases/$(database)/documents/fleetMovements/$(d.operationId);
+      let e = getAfter(p).data;
+      return !exists(p) && e.vehicleId == d.vehicleId && e.driverId == d.driverId
+        && e.mileage == d.mileage && e.action == (d.active ? 'checkout' : 'return');
+    }
+    function assignmentTransition(d) {
+      return ((!resource.data.active && d.active)
+        || (resource.data.active && !d.active && d.vehicleId == resource.data.vehicleId
+          && d.driverId == resource.data.driverId))
+        && (d.vehicleId != resource.data.vehicleId || d.mileage >= resource.data.mileage);
+    }
+    match /fleetAssignments/{id} {
+      allow read: if member();
+      allow create: if editor() && assignmentShape(request.resource.data)
+        && request.resource.data.vehicleId == id && request.resource.data.active
+        && assignmentEvent(request.resource.data)
+        && getAfter(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId)).data == request.resource.data;
+      allow update: if editor() && assignmentShape(request.resource.data)
+        && request.resource.data.vehicleId == id && assignmentTransition(request.resource.data)
+        && assignmentEvent(request.resource.data)
+        && getAfter(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId)).data == request.resource.data;
+      allow delete: if false;
+    }
+    match /fleetDriverAssignments/{id} {
+      allow read: if member();
+      allow create: if editor() && assignmentShape(request.resource.data)
+        && request.resource.data.driverId == id && request.resource.data.active
+        && assignmentEvent(request.resource.data)
+        && getAfter(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.vehicleId)).data == request.resource.data;
+      allow update: if editor() && assignmentShape(request.resource.data)
+        && request.resource.data.driverId == id && assignmentTransition(request.resource.data)
+        && assignmentEvent(request.resource.data)
+        && getAfter(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.vehicleId)).data == request.resource.data;
+      allow delete: if false;
+    }
+    function validFleetMovement(id,d) {
+      let v = get(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data;
+      let driver = get(/databases/$(database)/documents/drivers/$(d.driverId)).data;
+      let a = getAfter(/databases/$(database)/documents/fleetAssignments/$(d.vehicleId)).data;
+      let reverse = getAfter(/databases/$(database)/documents/fleetDriverAssignments/$(d.driverId)).data;
+      return exactFields(d,['vehicleId','driverId','action','date','mileage','note','createdAt','createdBy'])
+        && validVehiclePlate(d.vehicleId) && validDriverCode(d.driverId)
+        && d.action in ['checkout','return'] && validDay(d.date)
+        && nonNegative(d.mileage,100000000) && optionalText(d.note,2000)
+        && d.createdAt == request.time && d.createdBy == request.auth.uid
+        && a == reverse && a.operationId == id && a.vehicleId == d.vehicleId
+        && a.driverId == d.driverId && a.mileage == d.mileage
+        && a.active == (d.action == 'checkout')
+        && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
+    }
+    match /fleetMovements/{id} {
+      allow read: if member();
+      allow create: if editor() && validFleetMovement(id,request.resource.data);
+      allow update,delete: if false;
+    }
+
     match /{path=**} { allow read, write: if false; }
   }
 }
