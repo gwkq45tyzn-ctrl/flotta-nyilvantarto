@@ -77,3 +77,31 @@ Az utolsó **igazolt** Work-jelentés: 8/8 sikeres böngészős belépési és m
 7. Visszamaradó teszt-törzsadatok tételes dokumentálása.
 
 A GitHub-fájlok módosítása **nem egyenlő** a Hosting preview publikálásával, és nem jelent valós funkcionális E2E eredményt.
+
+
+## 2026-10-30 – Egykattintásos, visszavonható foglalási próba
+
+A \`staging/imile-management/qa/\` adminfelületen a külön engedélyezett mesterséges futár és tesztautó megléte után megjelenik a **Teljes staging foglalási teszt indítása** gomb. Az oldal nem futtat tesztet automatikusan, és mentés előtt felhasználói jóváhagyást kér.
+
+A próba **kizárólag** az \`imile-management-staging\` projekten fut, a következő rögzített azonosítókkal:
+
+- \`drivers/SYNTHETIC_TEST\` és \`vehicles/TESTCAR01\` – már létező, csak mesterséges törzsrekordok;
+- \`driverCapacities/SYNTHETIC_TEST\` – 100-as kapacitás, ha korábban nem volt ilyen; a próba végeztével a teszt által létrehozott rekord törlődik;
+- \`bookings/2099-01-15__TESTCAR01\` – egyetlen mesterséges foglalás, 100 csomag kapacitással;
+- \`driverClaims/2099-01-15__SYNTHETIC_TEST\` – a foglaláshoz tartozó egyetlen zárolás.
+
+**Próbamenet:** profil és azonosítók ellenőrzése; kapacitás mentése és visszaolvasása; foglalás + zárolás atomikus tranzakciója; kapacitás ellenőrzése; a két meglévő dokumentum felülírásának szerveroldali tiltási próbája; a foglalás és zárolás együttes feloldása; visszaolvasás és az ideiglenes kapacitás törlése.
+
+A dupla foglalás két *felülírási* szándékkal kerül tesztelésre. Ez nem helyettesíti a külön autóval vagy futárral próbált ütközési helyzetek teljes körű emulátoros ellenőrzését (azt a Work korábban 65/65 teszttel lefuttatta). Nincsen éles adatírás és nem történik automatikus import.
+
+Az oldal rögzíti a sikeres és sikertelen lépéseket. Visszavonás során **csak a pontosan egyező tesztdokumentumokat** próbálja törölni; ha ez nem sikerül, kiírja a lehetséges visszamaradt azonosítókat. A \`drivers\` és \`vehicles\` közös törzsét a korábbi Firestore Security Rules szerint **nem lehet kliensoldalról törölni**. Ezek megmaradnak, amíg jogosult Firebase Console/IAM művelettel külön el nem távolítják őket.
+
+Új automatikus tesztek:
+
+\`\`\`sh
+node staging/imile-management/qa/functional-flow.test.mjs
+node staging/imile-management/qa/run-flow.test.mjs
+node staging/imile-management/entry.test.mjs
+\`\`\`
+
+A \`run-flow.test.mjs\` izolált, memóriabeli **mock Firestore**; nem éles Firestore/Rules emulátor, és nem állít elő publikus előnézeti oldalt. A Firebase Hosting korábbi preview-csatornáját az új verzióra újra kell telepíteni. Nincsen automatikus, engedély nélkül futó publikus deployment.
