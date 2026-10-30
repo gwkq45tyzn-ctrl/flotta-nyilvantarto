@@ -10,6 +10,11 @@ service cloud.firestore {
     function editor() {
       return member() && get(userPath()).data.role in ['admin', 'editor'];
     }
+    function declaredDriverCapacity(driverId) {
+      return exists(/databases/$(database)/documents/driverCapacities/$(driverId))
+        ? get(/databases/$(database)/documents/driverCapacities/$(driverId)).data.capacity
+        : get(/databases/$(database)/documents/drivers/$(driverId)).data.capacity;
+    }
 
     match /users/{uid} {
       // First admin must be created in the Firebase Console. No self-registration.
@@ -27,7 +32,11 @@ service cloud.firestore {
       allow create, update: if admin()
         && request.resource.data.keys().hasOnly(['name','daCode','vendor','capacity','active'])
         && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
         && request.resource.data.daCode is string
+        && request.resource.data.daCode == driverId
+        && request.resource.data.vendor is string
+        && request.resource.data.active is bool
         && request.resource.data.capacity is int
         && request.resource.data.capacity >= 0
         && request.resource.data.capacity <= 10000;
@@ -39,6 +48,8 @@ service cloud.firestore {
       allow create, update: if admin()
         && request.resource.data.keys().hasOnly(['plate','model','status'])
         && request.resource.data.plate is string
+        && request.resource.data.plate == vehicleId
+        && request.resource.data.model is string
         && request.resource.data.status in ['Elérhető','Szerviz','Leállított'];
       allow delete: if false;
     }
@@ -82,6 +93,7 @@ service cloud.firestore {
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
         && request.resource.data.capacity is int && request.resource.data.capacity >= 0 && request.resource.data.capacity <= 10000
+        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
