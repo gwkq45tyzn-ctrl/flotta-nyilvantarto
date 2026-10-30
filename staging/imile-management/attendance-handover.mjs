@@ -33,7 +33,8 @@ export function deriveAttendanceHandovers({events=[],drivers=[],vehicles=[],manu
   const knownVehicles=new Map(vehicles.map(x=>[normPlate(x.plate||x.id),x]));
   const alerts=[],handovers=[],activeVehicles=new Map(),activeDrivers=new Map(),seen=new Set();
   const inputs=events.map(normalizeAttendanceVehicleEvent).map((parsed,index)=>({...parsed,index}))
-    .sort((a,b)=>(a.eventTime||'').localeCompare(b.eventTime||'')||a.index-b.index);
+    .sort((a,b)=>(a.eventTime||'').localeCompare(b.eventTime||'')||
+      String(a.id||'').localeCompare(String(b.id||''))||a.index-b.index);
   for(const e of inputs){
     if(!e.valid){issue(alerts,e.reason,e,'Az Attendance esemény hiányos vagy érvénytelen.');continue;}
     if(seen.has(e.id)){issue(alerts,'duplicate_event',e,'Ismételt Attendance esemény nem nyit új kiadást.');continue;}
