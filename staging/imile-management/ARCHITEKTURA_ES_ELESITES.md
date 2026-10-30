@@ -89,3 +89,18 @@ A `depokapacitas/capacity-eligibility.mjs` megvizsgálja a futár és jármű k�
 A DepóKapacitás staging alkalmazás most a `depokapacitas/import-dates.mjs` közös feldolgozót használja. Támogatja az ISO (`2026-10-30`), magyar (`30.10.2026`), amerikai (`10/30/2026`) és Excel-sorszámos dátumokat. A jelenléti import kifejezetten amerikai `MDY` sorrendet használ a kétértelmű perjeles dátumoknál, a többi operatív import alapértelmezésben magyar `DMY` sorrendet. A dátumvalidálás megakadályozza a lehetetlen napok bekerülését. A `depokapacitas/import-dates.test.mjs` automatikus ellenőrzés a staging GitHub Actions része.
 
 Az új dátumkezelés kód- és mintatesztjei sikeresek, de teljes Excel/Google Attendance böngészős integrációs próba és éles Firestore-validálás még szükséges. Az éles Flotta változatlan.
+
+
+## 2026-10-30 – importbiztonság és Firestore szerveroldali integritás
+
+- Az Excel-beolvasás előzetes ellenőrzése **teljes fájlszintű**: hiányzó kötelező mező, rossz számérték, hibás jelenléti időpont vagy azonos Firestore-rekordra mutató duplikált sor esetén a feltöltés nem indul el.
+- A helytelen, negatív vagy nem egész csomagszámok nem alakulnak észrevétlenül nullává.
+- A feltöltés megmutatja, hány beolvasott rekord tér el a kliens által ismert központi adatoktól. A hálózati adatfrissítés miatt a változásszám csak tájékoztató jellegű; éles környezetben párhuzamos szerkesztést is vizsgálni kell.
+- A több részletből álló Firestore batch-írás részleges sikertelenségét a felület külön jelzi. Ez **nem tranzakciós, az egész fájlra vonatkozó atomicitás**. Teljes atomikus importhoz külön szerveroldali feldolgozási terv szükséges.
+- A Google Attendance Apps Script az AM/PM alakú időpontokat validálja, és a tartalék parszolás eredményét időpontként jelöli.
+- A Firestore staging szabályok a közös \`drivers\` és \`vehicles\` dokumentumoknál az azonosítók egyezését követelik; új foglalásnál a futár aktív, az autó elérhető, a kapacitás pedig az aktuálisan rögzített referenciaértékkel egyező kell legyen.
+- Új automatizált kódszintű tesztek: \`import-validation.test.mjs\`, \`google-sync/timestamp.test.mjs\`, \`rules-contract.test.mjs\`.
+
+**Nem igazolt még:** Firestore Emulator jogosultsági próba, élő Firebase-integráció és jogosultságok publikálása, teljes Excel böngészős kipróbálás, GitHub Actions sikeres futás. A szabályfájl módosítása önmagában nem publikálja a Firestore-szabályokat.
+
+**Kiadási tiltás:** a régi flottarendszer változatlanul üzemel; az új iMile Management átállításához a korábbi GO/NO-GO ellenőrzési lista mindegyik kapuja szükséges.
