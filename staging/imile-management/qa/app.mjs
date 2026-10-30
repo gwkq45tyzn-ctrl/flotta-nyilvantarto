@@ -64,7 +64,7 @@ if(!isStaging) {
   });
     button.addEventListener('click',async()=>{
     if(!admin||busy||!seedEligible||!isStaging)return;
-    if(!window.confirm('Biztosan létrehozod a két szintetikus rekordot? A Firestore-szabályok szerint automatikusan nem törölhetők.'))return;
+    if(!window.confirm('Előkészíted a hiányzó mesterséges rekordokat? A már meglévő mintarekordokat nem írjuk felül; a Firestore-szabályok szerint automatikusan nem törölhetők.'))return;
     busy=true;button.disabled=true;
     try{
       await runTransaction(db,async tx=>{
