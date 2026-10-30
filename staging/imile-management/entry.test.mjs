@@ -64,6 +64,8 @@ try{
    'staging/imile-management/fleet/app.mjs',
    'staging/imile-management/qa/index.html',
    'staging/imile-management/qa/app.mjs',
+   'staging/imile-management/qa/functional-flow.mjs',
+   'staging/imile-management/qa/run-flow.mjs',
    'staging/imile-management/shared-import-plan.mjs',
    'staging/imile-management/shared-records.mjs',
    'depokapacitas/index.html','depokapacitas/app.js','depokapacitas/style.css',
