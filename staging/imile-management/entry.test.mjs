@@ -87,6 +87,9 @@ try{
   assert.ok(!existsSync(join(preview,'flotta')),'Live Fleet must not be copied');
   assert.ok(!existsSync(join(preview,'depokapacitas/google-sync')),'Apps Script must not be copied');
   assert.ok(readFileSync(join(preview,'index.html'),'utf8').includes('staging/imile-management/index.html'));
-  assert.equal(JSON.parse(readFileSync(join(preview,'firebase.json'),'utf8')).hosting.public,'.');
+  const hosting=JSON.parse(readFileSync(join(preview,'firebase.json'),'utf8')).hosting;
+  assert.equal(hosting.public,'.');
+  for(const pattern of ['**/*.log','**/*.log.*'])
+    assert.ok(hosting.ignore.includes(pattern),'CLI diagnostic logs must never be published: '+pattern);
 }finally{rmSync(preview,{recursive:true,force:true});}
 console.log('PASS: unified Firebase login, staging-only module selector, minimal preview build');

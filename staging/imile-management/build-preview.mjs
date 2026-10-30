@@ -44,7 +44,7 @@ try {
   writeFileSync(join(target,'firebase.json'),JSON.stringify({
     hosting:{
       public:'.',
-      ignore:['firebase.json','**/.*','**/node_modules/**'],
+      ignore:['firebase.json','**/.*','**/node_modules/**','**/*.log','**/*.log.*'],
       headers:[{source:'**',headers:[{key:'Cache-Control',value:'no-store'},{key:'X-Content-Type-Options',value:'nosniff'}]}]
     }
   },null,2)+'\n');
