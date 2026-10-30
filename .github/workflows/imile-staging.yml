@@ -27,8 +27,12 @@ jobs:
         run: node depokapacitas/tests/check.mjs
       - name: Közös futár/autó törzs és duplikációs tesztek
         run: node staging/imile-management/shared-records.test.mjs
-      - name: Fejlesztői JavaScript modul ellenőrzése
-        run: node --check staging/imile-management/shared-records.mjs
+      - name: Közös adatbázis-összehasonlítás tesztelése
+        run: node staging/imile-management/shared-import-plan.test.mjs
+      - name: Fejlesztői JavaScript modulok ellenőrzése
+        run: |
+          node --check staging/imile-management/shared-records.mjs
+          node --check staging/imile-management/shared-import-plan.mjs
       - name: A flotta belépési pontjának érintetlensége
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
