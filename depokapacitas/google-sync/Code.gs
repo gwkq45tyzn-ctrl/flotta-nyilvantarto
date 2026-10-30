@@ -19,8 +19,17 @@ function syncAttendance(){
     const props=PropertiesService.getScriptProperties();
     const last=sheet.getLastRow();const first=Math.max(2,Number(props.getProperty(DEPO_WATERMARK)||'2'));
     if(last<first)return;
-    const raw=sheet.getRange(first,1,last-first+1,16).getValues();
-    const display=sheet.getRange(first,1,last-first+1,16).getDisplayValues();
+    // The existing Mobile Attendance uses 16 columns. Only adopt a car ID
+    // after an explicitly named additional column is present in the sheet.
+    // Historic 16-column events stay unchanged and never generate handovers.
+    const columns=Math.max(16,sheet.getLastColumn());
+    const header=sheet.getRange(1,1,1,columns).getDisplayValues()[0];
+    const normHeader=x=>String(x||'').trim().toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const vehicleIndex=header.findIndex(x=>
+      ['vehicleplate','vehicleid','licenseplate','rendszam','autorendszama'].includes(normHeader(x)));
+    const raw=sheet.getRange(first,1,last-first+1,columns).getValues();
+    const display=sheet.getRange(first,1,last-first+1,columns).getDisplayValues();
     let writes=[];
     for(let i=0;i<raw.length;i++){
       const r=raw[i],v=display[i];
@@ -41,6 +50,18 @@ function syncAttendance(){
         status:String(v[11]||''),photoFront:String(v[12]||''),photoLeft:String(v[13]||''),
         photoRight:String(v[14]||''),photoBack:String(v[15]||''),source:'google_sheet'
       };
+      // Optional: the Google Form must first add "Vehicle Plate" (exact
+      // plate ID only) to Mobile Attendance; no automatic assignment without it.
+      if(vehicleIndex>=0){
+        const vehicleId=String(v[vehicleIndex]||'').trim().toUpperCase().replace(/[\s-]+/g,'');
+        if(vehicleId){
+          if(!/^[A-Z0-9]{4,12}$/.test(vehicleId)){
+            console.warn('Érvénytelen kiválasztott rendszám, sor: '+(first+i));
+            continue;
+          }
+          fields.vehicleId=vehicleId;
+        }
+      }
       const firestoreFields={};
       for(const key in fields)firestoreFields[key]=typeof fields[key]==='boolean'?{booleanValue:fields[key]}:{stringValue:fields[key]};
       writes.push({update:{name:'projects/'+DEPO_PROJECT_ID+'/databases/(default)/documents/attendance/'+id,fields:firestoreFields}});
