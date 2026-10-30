@@ -59,6 +59,9 @@ jobs:
         run: |
           node --check staging/imile-management/shared-records.mjs
           node --check staging/imile-management/shared-import-plan.mjs
+          node --check staging/imile-management/fleet/master-data.mjs
+          node --check staging/imile-management/fleet/master-editor.mjs
+          node --check staging/imile-management/fleet/app.mjs
       - name: Staging kiadási tiltások és Hosting preview-szabályok
         run: node staging/imile-management/deploy-policy.test.mjs
       - name: A flotta belépési pontjának érintetlensége
