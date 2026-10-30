@@ -59,3 +59,42 @@ jobs:
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
           git diff --exit-code origin/main -- index.html
+
+      - name: Izolált, letölthető staging webcsomag építése
+        run: node staging/imile-management/build-preview.mjs
+      - name: Ellenőrzött staging webcsomag archiválása
+        uses: actions/upload-artifact@v4
+        with:
+          name: imile-staging-preview
+          path: preview-imile-staging/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Staging Firebase Hosting feltételeinek ellenőrzése
+        id: hosting_permission
+        env:
+          FIREBASE_HOSTING_SA: \${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
+        run: |
+          if [ -n "$FIREBASE_HOSTING_SA" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Firebase Hosting: biztonságos staging preview telepítés engedélyezhető." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Firebase Hosting: a GitHub staging service-account secret hiányzik, csak ellenőrzött preview artifact készült. Semmilyen éles telepítés nem történt." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Firebase Hosting előnézet publikálása – csak staging csatorna
+        if: github.event_name == 'push' && steps.hosting_permission.outputs.enabled == 'true'
+        id: deploy_preview
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: \${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
+          projectId: imile-management-staging
+          channelId: imile-qa
+          expires: 7d
+          entryPoint: preview-imile-staging
+      - name: Hosting preview elérhetőségének megjelenítése
+        if: steps.deploy_preview.outcome == 'success'
+        env:
+          PREVIEW_URL: \${{ steps.deploy_preview.outputs.details_url }}
+        run: |
+          echo "### iMile Management staging preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "$PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
