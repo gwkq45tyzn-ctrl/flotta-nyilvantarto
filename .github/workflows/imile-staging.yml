@@ -43,6 +43,10 @@ jobs:
         run: node depokapacitas/rules-contract.test.mjs
       - name: Naptári dátumok és Attendance időpontok validálása
         run: node depokapacitas/rules-calendar.test.mjs
+      - name: Szintetikus kapacitás-, foglalás- és visszavonási tesztek
+        run: |
+          node staging/imile-management/qa/functional-flow.test.mjs
+          node staging/imile-management/qa/run-flow.test.mjs
       - name: Közös belépés és izolált preview tesztje
         run: |
           node staging/imile-management/session-policy.test.mjs
