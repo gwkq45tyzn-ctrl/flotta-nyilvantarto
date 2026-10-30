@@ -45,8 +45,8 @@ try {
     }
   },null,2)+'\n');
   console.log('Safe preview generated: '+target);
-  console.log('Only selector and DepoKapacitas files copied: '+allowed.length+' files');
-  console.log('No Fleet application, no customer data, no Apps Script credentials.');
+  console.log('Only shared menu, read-only Fleet preview and DepoKapacitas copied: '+allowed.length+' files');
+  console.log('No legacy production Fleet application, no customer data, no Apps Script credentials.');
 } catch(error) {
   rmSync(target,{recursive:true,force:true});
   throw error;
