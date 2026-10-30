@@ -130,6 +130,9 @@ function rowToRecord(row,type,file){
   if(!time.date||!time.timeKnown)throw Error('Érvénytelen vagy hiányzó jelenléti időpont.');
   if(daCode.includes('/'))throw Error('Érvénytelen DA-kód.');
   if(!['Log In','Log Out'].includes(event))throw Error('Ismeretlen jelenlét típus.');
+  const vehicleValue=String(lookup(row,'Vehicle Plate','Vehicle ID','License Plate','Rendszám','Autó rendszáma')||'');
+  const vehicleId=vehicleValue.trim().toUpperCase().replace(/[\s-]+/g,'');
+  if(vehicleId && !/^[A-Z0-9]{4,12}$/.test(vehicleId))throw Error('Érvénytelen Attendance rendszám.');
   const record={
    eventTime:time.eventTime,eventDate:time.date,timeKnown:time.timeKnown,daCode,
    driverName:String(lookup(row,'Driver Name','Futár')),
@@ -138,6 +141,7 @@ function rowToRecord(row,type,file){
    photoRight:String(lookup(row,'Car Photo - Right Side')),photoBack:String(lookup(row,'Car Photo - Back')),
    source:'xlsx:'+file
   };
+  if(vehicleId)record.vehicleId=vehicleId;
   return {col:'attendance',id:keyed(time.eventTime+'|'+daCode+'|'+event+'|'+record.photoFront),data:record};
  }
  if(type==='generic'){
