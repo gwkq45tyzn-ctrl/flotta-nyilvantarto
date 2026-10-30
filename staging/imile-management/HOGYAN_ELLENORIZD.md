@@ -52,3 +52,39 @@ KORLÁT
 A Work korábban 8/8 böngészős közös belépési tesztet sikeresen végzett.
 A foglalás teljes élő tesztje csak a QA futás sikeres végrehajtása után
 igazolható; az új Flotta teljes régi funkcióinak migrációja még nem kész.
+
+
+2026-10-30 – KÖZÖS FLOTTA TÖRZS SZERKESZTÉSE
+
+A legfrissebb staging verzió a főmenü Flotta törzsadatok (staging)
+moduljában tartalmazza a futár- és járműtörzs adminisztrátori kezelését.
+
+- Aktív admin Firestore-fiókkal lehet új futárt vagy járművet létrehozni,
+  vagy meglévő staging rekordot a táblázat Szerkesztés gombjával módosítani.
+- Viewer/editor a Flotta törzset továbbra is csak olvasni tudja.
+- A DA-kód és a rendszám azonosítója létrehozás után nem változtatható.
+- Minden mentésnél megerősítést kér, és tranzakcióban ellenőrzi,
+  hogy nem történt-e közben konkurens módosítás.
+- Futár inaktiválása és autó Szerviz/Leállított állapota a
+  DepóKapacitás tervezhető kapacitásából kizárja az érintett rekordot.
+- Ez továbbra sem a régi Fleet Manager összes funkciójának migrációja:
+  autókiadás, visszavétel, telefonok, szerviznapló, biztosítások,
+  tankolókártyák és az éles Google-szinkron még külön átállítandó.
+
+Ellenőrzési sorrend: staging admin login -> Flotta törzsadatok ->
+mesterséges futár és jármű -> DepóKapacitás lista és beosztás ->
+staging Flotta: autó Szerviz -> DepóKapacitás: 0 tervezhető kapacitás
+az adott autóra -> autó Elérhető, futár Inaktív -> megfelelő kizárás.
+
+Ne módosíts valós depóadatot a staging rendszer ellenőrzésére.
+Csak elkülönített mesterséges rekordokat és tesztnapot használj.
+
+OFFLINE ELLENŐRZÉSEK
+node staging/imile-management/fleet/master-data.test.mjs
+node staging/imile-management/fleet/master-editor.test.mjs
+node staging/imile-management/fleet/shared-capacity.integration.test.mjs
+
+FONTOS: Az új Flotta admin-funkciók GitHubra kerülése nem bizonyítja,
+hogy a legfrissebb Firebase Hosting preview csatornára is kikerültek.
+A böngészős teszt eredményét csak valós staging URL és bejelentkezés után
+tekintjük igazoltnak.
