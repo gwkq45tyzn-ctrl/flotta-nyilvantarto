@@ -16,6 +16,8 @@ const allowed=[
   'staging/imile-management/session-policy.mjs',
   'staging/imile-management/fleet/index.html',
   'staging/imile-management/fleet/app.mjs',
+  'staging/imile-management/fleet/master-data.mjs',
+  'staging/imile-management/fleet/master-editor.mjs',
   'staging/imile-management/qa/index.html',
   'staging/imile-management/qa/app.mjs',
   'staging/imile-management/qa/functional-flow.mjs',
