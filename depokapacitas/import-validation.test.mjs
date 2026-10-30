@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
+assert.equal(readNonNegativeCount('0','Új'),0);
+assert.equal(readNonNegativeCount('1 200','Új'),1200);
+assert.equal(readNonNegativeCount(999,'Új'),999);
+for (const v of ['','12,5','-1','abc','Infinity',NaN,Infinity,10000001])
+  assert.throws(()=>readNonNegativeCount(v,'Új'));
+const f=(x)=>x.valid?{col:'demands',id:x.id,data:{newCount:x.n}}:null;
+let result=buildImportPlan([{valid:true,id:'A',n:4},{valid:true,id:'B',n:5}],f);
+assert.equal(result.canCommit,true);assert.equal(result.accepted,2);
+result=buildImportPlan([{valid:true,id:'A',n:4},{valid:false,id:'B'}],f);
+assert.equal(result.canCommit,false);assert.equal(result.accepted,1);
+assert.equal(result.errors[0].line,3);
+assert.match(formatImportErrors(result),/Sor 3/);
+result=buildImportPlan([{valid:true,id:'A',n:4},{valid:true,id:'A',n:5}],f);
+assert.equal(result.canCommit,false);
+assert.match(formatImportErrors(result),/Ismétlődő/);
+result=buildImportPlan([{valid:true,id:'A',n:4},{valid:true,id:'B',n:5}],(x,i)=>{if(i===1)throw Error('Hibás dátum');return f(x);});
+assert.equal(result.errors[0].line,3);
+assert.throws(()=>buildImportPlan([],f),/nincs feldolgozható/);
+assert.throws(()=>buildImportPlan(Array(5001).fill({valid:true,id:'A'}),f),/5000/);
+console.log('PASS: import preflight rejects missing values, bad counts and duplicate IDs');
