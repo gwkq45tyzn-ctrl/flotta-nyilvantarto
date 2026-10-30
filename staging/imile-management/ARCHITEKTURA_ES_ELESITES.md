@@ -83,3 +83,9 @@ A `depokapacitas/capacity-eligibility.mjs` megvizsgálja a futár és jármű k�
 **Ellenőrzés:** 16/16 célzott logikai és kódintegritási teszt sikeres a beszélgetésben futtatott mintákon. Az éles Firebase jogosultságok, a GitHub Actions futás és a teljes böngészős integrációs teszt **még nincs igazolva**.
 
 **Élesítési állapot változatlan:** a Firebase webkonfiguráció GitHubon üres, és a jelenlegi éles Flotta Nyilvántartóhoz nem nyúltunk.
+
+## 2026-10-30 – Importdátumok javítása
+
+A DepóKapacitás staging alkalmazás most a `depokapacitas/import-dates.mjs` közös feldolgozót használja. Támogatja az ISO (`2026-10-30`), magyar (`30.10.2026`), amerikai (`10/30/2026`) és Excel-sorszámos dátumokat. A jelenléti import kifejezetten amerikai `MDY` sorrendet használ a kétértelmű perjeles dátumoknál, a többi operatív import alapértelmezésben magyar `DMY` sorrendet. A dátumvalidálás megakadályozza a lehetetlen napok bekerülését. A `depokapacitas/import-dates.test.mjs` automatikus ellenőrzés a staging GitHub Actions része.
+
+Az új dátumkezelés kód- és mintatesztjei sikeresek, de teljes Excel/Google Attendance böngészős integrációs próba és éles Firestore-validálás még szükséges. Az éles Flotta változatlan.
