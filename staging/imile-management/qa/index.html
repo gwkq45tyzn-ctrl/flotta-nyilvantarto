@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>iMile Management · Staging tesztadatok</title>
+<style>
+:root{font:16px system-ui,Arial,sans-serif;color:#193251;background:#eef3fa}*{box-sizing:border-box}
+body{margin:0}header{background:#173f80;color:#fff;padding:20px}header a{color:#fff}
+main{max-width:800px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border:1px solid #d9e3ef;border-radius:16px;padding:24px;margin-bottom:16px}
+h1{margin:10px 0;font-size:26px}h2{margin-top:0}button{padding:12px 16px;border:0;border-radius:10px;background:#195aab;color:#fff;font:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}.warning{background:#fff7e5;border-left:4px solid #d18c19;padding:14px;border-radius:6px}
+code{overflow-wrap:anywhere}p{line-height:1.6}dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px}dd{margin:0}
+[hidden]{display:none!important}
+</style>
+<script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<header><a href="../index.html">← Vissza a közös főmenübe</a><h1>Staging tesztadat-előkészítés</h1></header>
+<main>
+<div class="card"><h2>Izolált Firebase ellenőrzés</h2>
+<p>Projekt: <strong>imile-management-staging</strong>. Ez az eszköz kizárólag egy előre rögzített, mesterséges futár és autó létrehozására alkalmas; nem kapcsolódik az éles flottához.</p>
+<p id="state" role="status" aria-live="polite">Hitelesítés ellenőrzése…</p></div>
+<div class="card" id="controls" hidden>
+<h2>Előkészített tesztrekordok</h2>
+<dl><dt>Futárkód</dt><dd><code>SYNTHETIC_TEST</code></dd><dt>Futár</dt><dd>Tesztfutár (mesterséges) · 100 csomag/nap</dd><dt>Autó</dt><dd><code>TESTCAR01</code> · Elérhető</dd></dl>
+<p class="warning"><strong>Figyelem!</strong> A jelenlegi Firestore jogosultsági szabályok a futár- és autótörzs törlését tiltják. A mintarekordok a teszt végén megmaradhatnak, és csak adminisztrátori Console/IAM művelettel távolíthatók el. Foglalást ez az oldal nem hoz létre.</p>
+<p id="existing">Meglévő mintarekordok ellenőrzése…</p>
+<button id="create" type="button" disabled>Mesterséges futár és autó létrehozása</button>
+<p id="result" role="status" aria-live="polite"></p>
+<p><a href="../../../depokapacitas/index.html">Tovább a DepóKapacitás tesztelésére</a></p>
+</div>
+</main>
+</body></html>
