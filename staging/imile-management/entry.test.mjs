@@ -8,11 +8,17 @@ const menu=read('staging/imile-management/index.html');
 const entry=read('staging/imile-management/app.mjs');
 const depotHtml=read('depokapacitas/index.html');
 const depotJs=read('depokapacitas/app.js');
+const fleetJs=read('staging/imile-management/fleet/app.mjs');
+assert.ok(fleetJs.includes("getDoc(doc(db,'users',user.uid))"));
+assert.ok(fleetJs.includes('onSnapshot(collection(db,name)'));
+assert.ok(fleetJs.includes('allowedProfile(profile)'));
+assert.ok(!fleetJs.includes('setDoc('));
 
 assert.ok(menu.includes('id="loginForm"'));
 assert.ok(menu.includes('id="menu"'));
 assert.ok(menu.includes('id="depoLink"'));
-assert.ok(menu.includes('disabled aria-disabled="true"'), 'Fleet must remain disabled until backend migration');
+assert.ok(menu.includes('id="fleetLink"'));
+assert.ok(menu.includes('Flotta előnézet (csak olvasás)'));
 assert.doesNotMatch(menu,/FLOTTA_GATE_USERS|password.*digest|SECRET_ACCESS_KEY/);
 assert.ok(entry.includes("getDoc(doc(db,'users',user.uid))"));
 assert.ok(entry.includes('allowedProfile(profile)'));
@@ -36,6 +42,8 @@ try{
    'staging/imile-management/index.html',
    'staging/imile-management/app.mjs',
    'staging/imile-management/session-policy.mjs',
+   'staging/imile-management/fleet/index.html',
+   'staging/imile-management/fleet/app.mjs',
    'staging/imile-management/shared-import-plan.mjs',
    'staging/imile-management/shared-records.mjs',
    'depokapacitas/index.html','depokapacitas/app.js','depokapacitas/style.css',
@@ -44,6 +52,7 @@ try{
   ];
   for(const p of paths)assert.ok(existsSync(join(preview,p)),'Preview missing '+p);
   assert.ok(!existsSync(join(preview,'features')),'Live fleet features must not be copied');
+  assert.ok(existsSync(join(preview,'staging/imile-management/fleet/index.html')));
   assert.ok(!existsSync(join(preview,'flotta')),'Live Fleet must not be copied');
   assert.ok(!existsSync(join(preview,'depokapacitas/google-sync')),'Apps Script must not be copied');
   assert.ok(readFileSync(join(preview,'index.html'),'utf8').includes('staging/imile-management/index.html'));
