@@ -40,8 +40,8 @@ console.log('Izolált Firebase Hosting csomag előállítása…');
 run(process.execPath,['staging/imile-management/build-preview.mjs']);
 const npx=process.platform==='win32'?'npx.cmd':'npx';
 console.log('Firebase-bejelentkezés a saját böngésződben; jelszót a script nem kér és nem tárol.');
-run(npx,['--yes','firebase-tools','login']);
+run(npx,['--yes','firebase-tools','login'],{shell:process.platform==='win32'});
 console.log('Kizárólag '+project+' / '+channel+' preview csatorna következik. Nincs live deployment.');
 run(npx,['--yes','firebase-tools','hosting:channel:deploy',channel,
- '--project',project,'--expires','7d'],{cwd:output});
+ '--project',project,'--expires','7d'],{cwd:output,shell:process.platform==='win32'});
 console.log('\nSIKER: a Firebase CLI által fent kiírt preview URL-en ellenőrizhető az alkalmazás.');
