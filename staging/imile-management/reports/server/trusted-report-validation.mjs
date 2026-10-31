@@ -130,7 +130,7 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  if(previous){
   // A browser-written legacy snapshot is NEVER upgraded to trusted by an
   // identical retry: explicitly approve a new server-validated revision.
-  if(previous.validationSource==='trusted-server'&&
+  if(previous.validationSource==='server-aggregates-only'&&
    previous.contentHash===v.contentHash&&
    (kind==='inhub'||previous.status===status))
    return {result:'unchanged',version:previous.version,reportKey:key,contentHash:v.contentHash};
@@ -140,10 +140,10 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  }else if(expectedVersion!==null&&expectedVersion!==0)throw new Error('unexpected_version');
  const version=(previous?.version||0)+1;
  const verified={...v.snapshot,kind,contentHash:v.contentHash,status:kind==='ofd'?status:null,
-  version,validationVersion:VALIDATION_VERSION,validationSource:'trusted-server'};
+  version,validationVersion:VALIDATION_VERSION,validationSource:'server-aggregates-only'};
  const history=withinArchiveLimit({...verified,actorUid,sourceName,
   previousHash:previous?.contentHash||''});
- const legacy=previous&&previous.validationSource!=='trusted-server'
+ const legacy=previous&&previous.validationSource!=='server-aggregates-only'
   ?{...previous,kind,validationSource:'legacy-unverified',archivedBy:actorUid}
   :null;
  return {result:'commit',kind,reportKey:key,version,contentHash:v.contentHash,
