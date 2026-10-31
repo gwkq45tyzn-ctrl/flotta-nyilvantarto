@@ -16,11 +16,11 @@ const cellText=(ref,v,style=0)=>{
 const rowXml=(r,cells,styles=[],height=null)=>`<row r="${r}"${height?` ht="${height}" customHeight="1"`:''}>${cells.map((v,j)=>cellText(col(j+1)+r,v,styles[j]||0)).join('')}</row>`;
 const xmlHeader='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const status=(list,key,value)=>Object.prototype.hasOwnProperty.call(list,key)?list[key]:value;
-const stylesXml=()=>`${xmlHeader}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="165" formatCode="0.00%"/><numFmt numFmtId="166" formatCode="0.0"/><numFmt numFmtId="167" formatCode="0;-0;;@"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font></fonts><fills count="10"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${['002060','8AB8E6','E6E6E6','DDEBF7','FFF2CC','D45D60','E7D67B','5AAC6F'].map(x=>`<fill><patternFill patternType="solid"><fgColor rgb="FF${x}"/><bgColor indexed="64"/></patternFill></fill>`).join('')}</fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF888888"/></left><right style="thin"><color rgb="FF888888"/></right><top style="thin"><color rgb="FF888888"/></top><bottom style="thin"><color rgb="FF888888"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="13">${[
+const stylesXml=()=>`${xmlHeader}<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="165" formatCode="0.00%"/><numFmt numFmtId="166" formatCode="0.0"/><numFmt numFmtId="167" formatCode="0;-0;;@"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font></fonts><fills count="11"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${['002060','8AB8E6','E6E6E6','DDEBF7','FFF2CC','D45D60','E7D67B','5AAC6F','A8C375'].map(x=>`<fill><patternFill patternType="solid"><fgColor rgb="FF${x}"/><bgColor indexed="64"/></patternFill></fill>`).join('')}</fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF888888"/></left><right style="thin"><color rgb="FF888888"/></right><top style="thin"><color rgb="FF888888"/></top><bottom style="thin"><color rgb="FF888888"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="14">${[
  [0,0,0,0],[2,2,0,0],[1,3,1,0],[0,4,1,0],[1,5,0,0],[0,6,1,0],
- [0,7,1,165],[0,8,1,165],[0,9,1,165],[0,4,1,165],[1,4,1,0],[1,9,1,165],[0,4,1,166]
+ [0,7,1,165],[0,8,1,165],[0,9,1,165],[0,4,1,165],[1,4,1,0],[1,9,1,165],[0,4,1,166],[0,10,1,165]
 ].map(([font,fill,border,num])=>`<xf numFmtId="${num}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"${font===2?' horizontal="center"':''}/></xf>`).join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
-// Style ids: 1 navy title, 2 blue header, 3 grey row, 4 pivot header, 5 missing, 6 red %, 7 yellow %, 8 green %, 9 grey %, 10 grey bold, 11 green bold %, 12 grey decimal.
+// Style ids: 1 navy title, 2 blue header, 3 grey row, 4 pivot header, 5 missing, 6 red %, 7 yellow %, 8 green %, 9 grey %, 10 grey bold, 11 green bold %, 12 grey decimal, 13 pale green %.
 const sheetXml=(rows,{widths=[],merges=[],freeze=0,autoFilter=null}={})=>{
  const maxCol=Math.max(1,...rows.map(x=>x.values.length)),maxRow=rows.length||1;
  const cols=widths.length?`<cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols>`:'';
@@ -74,7 +74,7 @@ export function writeReportXlsx(sourceRows,report){
   for(const [i,r] of report.rows.entries()){
    const n=i+3,key=JSON.stringify([r.date,r.station,r.vendor]),group=groups.get(key);
    const first=firstRows.get(key)===n;
-   const rateStyle=!first?3:(group.rate<.60?6:group.rate<.68?7:8);
+   const rateStyle=!first?3:(group.rate<.60?6:group.rate<.68?7:group.rate<.72?13:8);
    const vals=[r.date,r.station,'—',r.name,r.code,r.vendor,r.ofd,r.delivered,r.rate,r.p90,first?group.ofd:null,first?group.delivered:null,first?group.rate:null,first?group.spr:null];
    const sts=[3,3,5,3,3,3,3,3,9,12,3,3,rateStyle,3];
    out.push({values:vals,styles:sts,height:20});
