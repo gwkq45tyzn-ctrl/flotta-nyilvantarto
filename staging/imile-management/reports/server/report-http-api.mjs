@@ -74,7 +74,7 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
   let url;
   try{url=new URL(req.url);}catch{return fail(400,'invalid_request_url',origin);}
   if(!['POST','GET'].includes(req.method))return fail(405,'method_not_allowed',origin);
-  if(!['/v1/reports/save','/v1/reports/version'].includes(url.pathname))
+  if(!['/v1/reports/save','/v1/reports/version','/v1/reports/current'].includes(url.pathname))
    return fail(404,'not_found',origin);
   const token=parseBearer(req.headers.get('authorization'));
   if(!token)return fail(401,'bearer_required',origin);
@@ -85,10 +85,12 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
    if(typeof uid!=='string'||!uid.length||uid.length>128)throw Error('bad_token');
   }catch{return fail(401,'invalid_auth_token',origin);}
   if(req.method==='GET'){
-   if(url.pathname!=='/v1/reports/version')return fail(405,'method_not_allowed',origin);
+   if(!['/v1/reports/version','/v1/reports/current'].includes(url.pathname))
+    return fail(405,'method_not_allowed',origin);
    const kind=url.searchParams.get('kind'),date=url.searchParams.get('date'),
     station=url.searchParams.get('station'),rawVersion=url.searchParams.get('version');
-   if(!Object.hasOwn(kinds,kind)||!/^[1-9]\d{0,5}$/.test(rawVersion||''))
+   if(!Object.hasOwn(kinds,kind)||
+    (url.pathname==='/v1/reports/version'&&!/^[1-9]\d{0,5}$/.test(rawVersion||'')))
     return fail(400,'invalid_history_query',origin);
    let key,version;
    try{key=reportKey(date,station);version=Number(rawVersion);}catch{
@@ -99,6 +101,15 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
     const profile=member.exists?member.data():null;
     if(!profile||profile.active!==true||!['admin','editor','viewer'].includes(profile.role))
      return fail(403,'membership_required',origin);
+    if(url.pathname==='/v1/reports/current'){
+     const current=await db.doc(kinds[kind][0]+'/'+key).get();
+     if(!current.exists)return response(200,{exists:false,version:null},origin);
+     const value=current.data();
+     if(value.key!==key||!Number.isInteger(value.version)||value.version<1)
+      return fail(409,'current_integrity_failed',origin);
+     return response(200,{exists:true,version:value.version,
+      status:value.status||null,sourceValidation:value.validationSource||'legacy-unverified'},origin);
+    }
     const snap=await db.doc(kinds[kind][1]+'/'+archiveId(key,version)).get();
     if(!snap.exists)return fail(404,'version_not_found',origin);
     const record=snap.data();
