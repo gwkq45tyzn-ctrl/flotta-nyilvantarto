@@ -110,8 +110,8 @@ function parseAttendanceOdometer(raw,display){
   if(typeof raw==='number'){
     return Number.isSafeInteger(raw)&&raw>=0&&raw<=100000000?raw:null;
   }
-  const s=String(display??raw).trim().replace(/[ \\u00a0\\u202f]/g,'');
-  if(!/^\\d{1,9}$/.test(s))return null;
+  const s=String(display??raw).trim().replace(/[ \u00a0\u202f]/g,'');
+  if(!/^\d{1,9}$/.test(s))return null;
   const number=Number(s);
   return Number.isSafeInteger(number)&&number<=100000000?number:null;
 }
