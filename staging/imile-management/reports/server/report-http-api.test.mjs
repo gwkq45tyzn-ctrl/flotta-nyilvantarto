@@ -174,7 +174,7 @@ await check('non-JSON request refused',async()=>{
  assert.equal(r.status,415);
 });
 await check('missing version returns 404',async()=>{
- const r=await json(await api(req('GET','/v1/reports/version?kind=ofd&date='+date+'&station=DS(AKE)&version=3')));
+ const r=await json(await api(req('GET','/v1/reports/version?kind=ofd&date='+date+'&station=DS(AKE)&version=4')));
  assert.equal(r.status,404);
 });
 await check('GET to write endpoint refused',async()=>{
