@@ -1,7 +1,13 @@
 /** Read-only iMile report transforms. No cloud writes, no inferred source aliases. */
 export const COLORS=Object.freeze({navy:'002060',blue:'8AB8E6',gray:'E6E6E6',pivot:'DDEBF7',red:'D45D60',yellow:'E7D67B',green:'5AAC6F',lightgreen:'A8C375',missing:'FFF2CC'});
 const txt=x=>typeof x==='string'?x.trim():x==null?'':String(x).trim();
-const date=x=>{const v=x instanceof Date?x.toISOString().slice(0,10):txt(x).slice(0,10);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
+const date=x=>{
+ if(x instanceof Date){if(!Number.isFinite(x.getTime()))return null;x=x.toISOString().slice(0,10);}
+ if(typeof x!=='string')return null;
+ const value=x.trim(),m=/^(20\d{2}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value);
+ if(!m||m[2]!==undefined&&(+m[2]>23||+m[3]>59||+m[4]>59))return null;
+ const d=new Date(m[1]+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===m[1]?m[1]:null;
+};
 const int=x=>typeof x==='number'?x:typeof x==='string'&&/^\d+$/.test(x.trim())?Number(x.trim()):NaN;
 const header=(matrix,required)=>{if(!Array.isArray(matrix)||!Array.isArray(matrix[0])||matrix.length>10002)throw Error('Hibás vagy túl nagy export.');const h=matrix[0].map(txt);if(new Set(h).size!==h.length)throw Error('Duplikált oszlopfejléc.');for(const k of required)if(!h.includes(k))throw Error('Hiányzó oszlop: '+k);return Object.fromEntries(h.map((v,i)=>[v,i]));};
 const data=matrix=>matrix.slice(1).filter(x=>Array.isArray(x)&&x.some(v=>txt(v)!==''));
@@ -16,7 +22,7 @@ export function inhub(matrix){
  const ids=new Set(),counts=new Map(),days=new Set(),areas=new Set(),issues=[];
  for(const [i,r]of data(matrix).entries()){
   const id=txt(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
-  if(!id||!day||!area){issues.push({line:i+2,reason:'invalid_parcel_or_area'});continue;}
+  if(typeof r[h['Waybill Number']]!=='string'||!id||!day||!area){issues.push({line:i+2,reason:'invalid_parcel_or_area'});continue;}
   if(ids.has(id)){issues.push({line:i+2,reason:'duplicate_waybill'});continue;}
   ids.add(id);days.add(day);areas.add(area);const k=JSON.stringify([area,day]);counts.set(k,(counts.get(k)||0)+1);
  }
@@ -31,7 +37,7 @@ export function ofd(matrix){
  for(const [i,r]of data(matrix).entries()){
   const day=date(r[h['OFD Date']]),name=txt(r[h['DA']]),code=txt(r[h['DA Code']]),vendor=txt(r[h['Vendor']]),station=txt(r[h['Station']]);
   const out=int(r[h['OFD']]),del=int(r[h['Delivered']]);
-  if(!day||!name||!code||!vendor||!station||!Number.isSafeInteger(out)||!Number.isSafeInteger(del)||out<0||del<0||del>out){issues.push({line:i+2,reason:'invalid_da_metric'});continue;}
+  if(typeof r[h['DA Code']]!=='string'||!day||!name||!code||!vendor||!station||!Number.isSafeInteger(out)||!Number.isSafeInteger(del)||out<0||del<0||del>out){issues.push({line:i+2,reason:'invalid_da_metric'});continue;}
   const key=JSON.stringify([day,station,code,vendor]);
   if(!byId.has(key))byId.set(key,{date:day,station,code,name,vendor,ofd:0,delivered:0,sourceCount:0,district:null});
   const v=byId.get(key);if(v.name!==name)issues.push({line:i+2,reason:'conflicting_da_name'});v.ofd+=out;v.delivered+=del;v.sourceCount++;
