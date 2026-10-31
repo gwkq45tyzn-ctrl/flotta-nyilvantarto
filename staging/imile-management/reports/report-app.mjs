@@ -7,6 +7,7 @@ import {allowedProfile} from '../session-policy.mjs';
 import {inhub,ofd} from './report-core.mjs';
 import {readXlsxFirstSheet,writeReportXlsx} from './xlsx-lite.mjs';
 import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash} from './report-statistics.mjs';
+import {planInventorySnapshot,inventoryHash,inventoryHistory} from './inventory-statistics.mjs';
 
 const $=id=>document.getElementById(id);
 const field=(id,value)=>{$(id).textContent=String(value)};
@@ -18,9 +19,10 @@ const entry=(values)=>{
  return tr;
 };
 let authorized=false,canSave=false,revision=0,excelBuffer=null,excelName=null;
-let currentReport=null,sourceName=null,db=null,user=null,stats=null;
+let currentReport=null,currentSourceMatrix=null,sourceName=null,db=null,user=null,stats=null;
+$('inventoryDay').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function clearReport(){
- revision++;excelBuffer=null;excelName=null;currentReport=null;sourceName=null;
+ revision++;excelBuffer=null;excelName=null;currentReport=null;currentSourceMatrix=null;sourceName=null;
  $('download').disabled=true;$('save').disabled=true;$('preview').hidden=true;
  $('stats').replaceChildren();$('approve').checked=false;
 }
@@ -57,7 +59,7 @@ $('form').onsubmit=async event=>{
   if(rev!==revision||!authorized)return;
   excelBuffer=bytes;excelName=kind==='inhub'
    ?'iMile_InHub_Inventory_kesz.xlsx':'iMile_DA_OFD_Performance_kesz.xlsx';
-  currentReport=result;sourceName=file.name.slice(0,200);
+  currentReport=result;currentSourceMatrix=matrix;sourceName=file.name.slice(0,200);
   $('download').disabled=false;preview(result);
   if(result.kind==='ofd'&&canSave){
    try{
@@ -65,9 +67,10 @@ $('form').onsubmit=async event=>{
     $('save').disabled=planned.some(x=>x.rows.length>300);
     field('saveNote',planned.length+' nap/depó rekord készíthető. A mentés csak külön jóváhagyással történik.');
    }catch(error){field('saveNote','Adatmentés blokkolva: '+error.message);$('save').disabled=true;}
-  }else field('saveNote',result.kind==='inhub'
-   ?'Az In-Hub-riport csak letölthető. A későbbi raktárstatisztikához külön adatmentési kontroll készül.'
-   :'A statisztikai mentéshez admin vagy editor jogosultság szükséges.');
+  }else if(result.kind==='inhub'&&canSave){
+   try{planInventorySnapshot(result,matrix,$('inventoryDay').value);$('save').disabled=false;field('saveNote','A raktárpillanatkép a kiválasztott naphoz és az egyetlen forrásdepóhoz menthető.');}
+   catch(error){$('save').disabled=true;field('saveNote','Raktári mentés blokkolva: '+error.message);}
+  }else field('saveNote','A statisztikai mentéshez admin vagy editor jogosultság szükséges.');
   field('message','A Sheet2 elkészült. Az Excel helyben, a böngésződben keletkezett.');
  }catch(error){if(rev===revision)field('message','A fájl feldolgozása sikertelen: '+error.message);}
  finally{if(rev===revision)$('prepare').disabled=false;}
@@ -99,10 +102,17 @@ async function loadStats(){
  }catch(error){field('statStatus','A szerveri statisztikák nem ellenőrizhetők: '+error.message);}
 }
 $('refreshStats').onclick=loadStats;
+$('inventoryDay').onchange=()=>{
+ if(!currentReport||currentReport.kind!=='inhub'||!canSave)return;
+ try{planInventorySnapshot(currentReport,currentSourceMatrix,$('inventoryDay').value);$('save').disabled=false;field('saveNote','A napi raktárpillanatkép menthető.');}
+ catch(error){$('save').disabled=true;field('saveNote','Raktári mentés blokkolva: '+error.message);}
+};
 $('save').onclick=async()=>{
- if(!authorized||!canSave||!currentReport||currentReport.kind!=='ofd'||!db||!user)return;
+ if(!authorized||!canSave||!currentReport||!db||!user)return;
+ if(currentReport.kind==='inhub')return saveInventory();
+ if(currentReport.kind!=='ofd')return;
  if(!$('approve').checked){field('saveNote','Mentés előtt jelöld be a jóváhagyást.');return;}
- const rev=revision,identity=user.uid,report=currentReport;
+ const rev=revision,identity=user.uid,report=currentReport,fileSource=sourceName,replaceAllowed=$('replaceApproved').checked;
  const status=$('reportState').value;
  if(!['provisional','final'].includes(status))return;
  if(status==='final'&&!$('confirmFinal').checked){
@@ -125,7 +135,7 @@ $('save').onclick=async()=>{
    for(let i=0;i<prepared.length;i++){
     const p=prepared[i],previous=old[i].exists()?old[i].data():null;
     if(previous&&previous.contentHash===p.contentHash&&previous.status===status)continue;
-    if(previous&&!$('replaceApproved').checked)
+    if(previous&&!replaceAllowed)
      throw Error('Ehhez a naphoz/depóhoz már van riport. Javításhoz külön cserejóváhagyás szükséges: '+p.key);
     if(previous?.status==='final'&&status!=='final')
      throw Error('Végleges napi riport nem minősíthető vissza előzetessé.');
@@ -133,7 +143,7 @@ $('save').onclick=async()=>{
     const data={
      key:p.key,date:p.date,station:p.station,status,rows:p.rows,
      totalOFD:p.totalOFD,totalDelivered:p.totalDelivered,courierCount:p.courierCount,
-     contentHash:p.contentHash,sourceName,version,lastAuditId:auditRef.id,
+     contentHash:p.contentHash,sourceName:fileSource,version,lastAuditId:auditRef.id,
      createdAt:previous?previous.createdAt:serverTimestamp(),
      createdBy:previous?previous.createdBy:identity,
      updatedAt:serverTimestamp(),updatedBy:identity
@@ -141,7 +151,7 @@ $('save').onclick=async()=>{
     tx.set(refs[i],data);
     tx.set(auditRef,{
      reportKey:p.key,version,contentHash:p.contentHash,priorHash:previous?.contentHash||'',
-     action:previous?'replace':'create',status,actor:identity,at:serverTimestamp(),sourceName
+     action:previous?'replace':'create',status,actor:identity,at:serverTimestamp(),sourceName:fileSource
     });
     changed++;
    }
