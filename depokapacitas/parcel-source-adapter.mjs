@@ -59,7 +59,8 @@ export function adaptParcelSource(rows,{config=null,availableHeaders=null,select
   const issue=(reason,line=null,relatedLine=null)=>
     result.issues.push({reason,line,relatedLine});
   if(!Array.isArray(rows)||rows.length>5000){issue('invalid_or_oversized_input');return result;}
-  if(selectedDate!==null&&!isValidDate(selectedDate)){issue('invalid_selected_day');return result;}
+  if(selectedDate===null){issue('selected_day_required');return result;}
+  if(!isValidDate(selectedDate)){issue('invalid_selected_day');return result;}
   const headerNames=Array.isArray(availableHeaders)
     ?availableHeaders
     :rows.length&&rows[0]&&typeof rows[0]==='object'&&!Array.isArray(rows[0])
@@ -87,7 +88,7 @@ export function adaptParcelSource(rows,{config=null,availableHeaders=null,select
       !district||district.length>60||!kind){
       issue('invalid_mapped_value',line);continue;
     }
-    if(selectedDate!==null&&date!==selectedDate){result.excludedRows++;continue;}
+    if(date!==selectedDate){result.excludedRows++;continue;}
     const record={date,trackingId,district,kind};
     mapped.push(record);
     const k=JSON.stringify([date,trackingId]);
