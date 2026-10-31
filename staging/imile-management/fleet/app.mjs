@@ -5,15 +5,16 @@ import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
 import {deriveAttendanceHandovers} from '../attendance-handover.mjs';
+import {fleetAvailability} from './availability.mjs';
 
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
 let unsubs=[],generation=0;
-const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[]};
+const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[],fleetAssignments:[]};
 function clear() {
   for(const un of unsubs)un();
   unsubs=[];
-  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];
+  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];state.fleetAssignments=[];
   $('fleetContent').hidden=true;
   $('adminVehiclePanel').hidden=true;
   $('adminDriverPanel').hidden=true;
@@ -103,8 +104,9 @@ function render(){
   $('driversCount').textContent=state.drivers.length;
   $('activeCount').textContent=state.drivers.filter(x=>x.active===true).length;
   $('vehiclesCount').textContent=state.vehicles.length;
-  $('availableCount').textContent=state.vehicles.filter(x=>
-    x.status==='Elérhető'&&!handovers.openVehicleIds.includes(x.id)).length;
+  const availability=fleetAvailability({vehicles:state.vehicles,
+    assignments:state.fleetAssignments,attendanceOpenVehicleIds:handovers.openVehicleIds});
+  $('availableCount').textContent=availability.free;
   renderRows('driversBody',state.drivers.slice().sort((a,b)=>
     String(a.daCode||'').localeCompare(String(b.daCode||''))),[
       x=>x.daCode||x.id,x=>x.name,x=>x.vendor,x=>x.active===true?'Aktív':'Inaktív'
@@ -174,20 +176,22 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       $('driversActions').hidden=!state.admin;
       $('vehiclesActions').hidden=!state.admin;
       const loaded=new Set();
-      for(const name of ['drivers','vehicles','attendance','bookings']){
+      for(const name of ['drivers','vehicles','attendance','bookings','fleetAssignments']){
         const unsubscribe=onSnapshot(collection(db,name),snap=>{
           if(rev!==generation)return;
           state[name]=snap.docs.map(d=>({id:d.id,...d.data()}));
           loaded.add(name);
-          render();
-          $('fleetContent').hidden=false;
-          status(loaded.size===4
-            ?'● Élő staging Firestore kapcsolat · '+(state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság')
-            :'Adatok betöltése…');
+          if(loaded.size===5){
+            try{render();$('fleetContent').hidden=false;
+              status('● Élő staging Firestore kapcsolat · minden alapforrás betöltve · '+
+               (state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság'));
+            }catch(error){$('fleetContent').hidden=true;status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);}
+          }else{$('fleetContent').hidden=true;status('Flotta-adatok betöltése: '+loaded.size+'/5 forrás…');}
         },error=>{
           if(rev!==generation)return;
           console.error('Staging fleet read failed:',name,error);
-          status('A közös törzsadatok olvasása sikertelen. Ellenőrizd a Firestore jogosultságokat.',true);
+          $('fleetContent').hidden=true;
+          status('Az egyik kötelező Flotta-forrás ('+name+') nem érhető el. Az elérhetőség nem tekinthető ellenőrzöttnek.',true);
         });
         unsubs.push(unsubscribe);
       }
