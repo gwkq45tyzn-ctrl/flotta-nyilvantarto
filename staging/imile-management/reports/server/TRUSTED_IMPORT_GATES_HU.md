@@ -27,6 +27,27 @@ A CI szintetikus validációs, API, idempotencia, archive és Firestore-emuláto
 
 A teljes verzióarchívum garantálja, hogy a korábbi `v1`/`v2` rekordok és futáradatok visszaolvashatók; az újabb változat nem írja felül őket. Visszaállító írás külön jogosultság- és jóváhagyásvédett műveletként fejlesztendő, **nem** automatikus.
 
+## Automatizált kiadási ellenőrző
+
+A `release-gate.mjs` tisztán olvasó, előkészítő ellenőrzés: nem indít
+felhőszolgáltatást, nem módosít adatbázist, nem használ titkokat. Csak akkor
+ad pozitív eredményt, ha a staging projekt/csatorna, a pontos HTTPS
+kiszolgálói origin, az elkülönített szerveridentitás, az adatkezelési
+és költségjóváhagyás, a verzióarchívum-visszaállítás, a Firestore-emulátoros
+tranzakciók, a jogosultsági kapuk és a forrásadapter jóváhagyása külön-külön
+igazolt. Alaphelyzetben minden hiányzó jelzés tilt.
+
+A kiadási ellenőrzés nem helyettesíti a valódi jóváhagyásokat:
+a környezeti jelzőket az üzemeltetésnek bizonyítékokhoz kell kötnie,
+nem szabad pusztán `true` értékekkel megkerülni a kapukat.
+A vizsgálatot helyi ellenőrzésként így lehet futtatni:
+
+`node staging/imile-management/reports/server/release-gate.mjs`
+
+A mai fejlesztésben nincs jóváhagyott, futó privát szerver, nincs
+függetlenül hitelesített eredeti iMile export, ezért a telepítési kapu
+**jelenleg szándékosan NEM teljesíthető**.
+
 ## Szigorú telepítési kapuk
 
 1. Vállalati adatkezelési, adatmegőrzési és szerverüzemeltetési jóváhagyás. A futáradat személyes adat lehet; a szerverre küldött riportösszesítés is tartalmaz neveket és DA-kódokat.
