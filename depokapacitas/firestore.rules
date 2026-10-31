@@ -451,6 +451,65 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // STAGING daily warehouse inventory: aggregated only (never waybills).
+    function validInventorySnapshot(id,d) {
+      return exactFields(d,[
+        'key','date','station','dates','areas','total','contentHash',
+        'sourceName','version','lastAuditId','createdAt','createdBy','updatedAt','updatedBy'
+      ])
+      && d.key == id && validDay(d.date) && textField(d.station,160)
+      && d.dates is list && d.dates.size() > 0 && d.dates.size() <= 180
+      && d.areas is list && d.areas.size() > 0 && d.areas.size() <= 250
+      && nonNegative(d.total,10000000)
+      && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}')
+      && textField(d.sourceName,200)
+      && d.version is int && d.version >= 1 && d.version <= 1000000
+      && d.lastAuditId is string && d.lastAuditId.matches('^[A-Za-z0-9]{20}')
+      && d.createdAt is timestamp && textField(d.createdBy,128)
+      && d.updatedAt == request.time && d.updatedBy == request.auth.uid
+      && existsAfter(/databases/$(database)/documents/inventoryAudits/$(d.lastAuditId))
+      && getAfter(/databases/$(database)/documents/inventoryAudits/$(d.lastAuditId)).data.reportKey == id
+      && getAfter(/databases/$(database)/documents/inventoryAudits/$(d.lastAuditId)).data.version == d.version
+      && getAfter(/databases/$(database)/documents/inventoryAudits/$(d.lastAuditId)).data.contentHash == d.contentHash;
+    }
+    match /inventoryDays/{id} {
+      allow read: if member();
+      allow create: if editor() && validInventorySnapshot(id,request.resource.data)
+        && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if editor() && validInventorySnapshot(id,request.resource.data)
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.lastAuditId != resource.data.lastAuditId;
+      allow delete: if false;
+    }
+    function validInventoryAudit(id,d) {
+      return exactFields(d,['reportKey','version','contentHash','priorHash','action','actor','at','sourceName'])
+        && id.matches('^[A-Za-z0-9]{20}') && textField(d.reportKey,300)
+        && d.version is int && d.version >= 1 && d.version <= 1000000
+        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}')
+        && d.priorHash is string && (d.priorHash == '' || d.priorHash.matches('^[a-f0-9]{64}'))
+        && d.action in ['create','replace']
+        && d.actor == request.auth.uid && d.at == request.time
+        && textField(d.sourceName,200)
+        && existsAfter(/databases/$(database)/documents/inventoryDays/$(d.reportKey))
+        && getAfter(/databases/$(database)/documents/inventoryDays/$(d.reportKey)).data.lastAuditId == id
+        && getAfter(/databases/$(database)/documents/inventoryDays/$(d.reportKey)).data.version == d.version
+        && getAfter(/databases/$(database)/documents/inventoryDays/$(d.reportKey)).data.contentHash == d.contentHash
+        && ((!exists(/databases/$(database)/documents/inventoryDays/$(d.reportKey))
+          && d.action == 'create' && d.priorHash == '')
+         || (exists(/databases/$(database)/documents/inventoryDays/$(d.reportKey))
+          && d.action == 'replace'
+          && d.priorHash == get(/databases/$(database)/documents/inventoryDays/$(d.reportKey)).data.contentHash));
+    }
+    match /inventoryAudits/{id} {
+      allow read: if member();
+      allow create: if editor() && validInventoryAudit(id,request.resource.data);
+      allow update, delete: if false;
+    }
+
     match /{path=**} { allow read, write: if false; }
   }
 }
