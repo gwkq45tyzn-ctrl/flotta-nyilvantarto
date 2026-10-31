@@ -10,15 +10,15 @@
 <form id="form"><div class="fields"><label>Riport<select id="kind"><option value="inhub">In-Hub Inventory</option><option value="ofd">DA OFD Monitoring</option></select></label><label>Excel forrás (.xlsx)<input id="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label></div><button id="prepare" type="submit">Riport elkészítése</button><button type="button" id="download" class="secondary" disabled>Excel letöltése</button></form><p id="message" role="status" aria-live="polite"></p></div></section>
 <section class="panel" id="preview" hidden><h2>Összesítés</h2><p id="summary"></p><div class="scroll"><table><thead><tr><th>Terület / vállalkozó</th><th>Összesítés</th></tr></thead><tbody id="stats"></tbody></table></div></section>
 <section class="panel" id="saveOptions" hidden>
- <h2>OFD-statisztika mentése</h2>
- <p class="muted">A kész Excel már letölthető. Ezzel külön, auditált napi depóadatokat menthetsz az iMile staging adatbázisba. A 10 óra körüli állapot alapértelmezés szerint <strong>előzetes</strong>.</p>
+ <h2>Riportadatok mentése a statisztikához</h2>
+ <p class="muted">A kész Excel már letölthető. Ezzel külön, auditált napi depóadatokat menthetsz az iMile staging adatbázisba. Az OFD 10 óra körüli állapota alapértelmezés szerint <strong>előzetes</strong>; az In-Hub pillanatkép kiválasztott napra rögzül.</p>
  <div class="fields">
-  <label>Riport státusza<select id="reportState"><option value="provisional">Előzetes / napi pillanatkép</option><option value="final">Végleges napi eredmény</option></select></label>
+  <label>Raktárpillanatkép napja (In-Hub)<input id="inventoryDay" type="date"></label><label>Riport státusza<select id="reportState"><option value="provisional">Előzetes / napi pillanatkép</option><option value="final">Végleges napi eredmény</option></select></label>
  </div>
  <label class="check"><input type="checkbox" id="approve"> Ellenőriztem az adatokat, és jóváhagyom a napi statisztikai mentést.</label>
  <label class="check"><input type="checkbox" id="replaceApproved"> Engedélyezem a már létező napi riport javítását (új verzió és audit készül).</label>
  <label class="check"><input type="checkbox" id="confirmFinal"> Megerősítem, hogy a kiválasztott riport valóban végleges napi eredmény (csak „Végleges” státusznál szükséges).</label>
- <button type="button" id="save" disabled>OFD-statisztika ellenőrzött mentése</button>
+ <button type="button" id="save" disabled>Riportadatok ellenőrzött mentése</button>
  <p id="saveNote" role="status" aria-live="polite"></p>
 </section>
 <section class="panel">
@@ -26,6 +26,9 @@
  <p class="muted">Az adatokat friss szerveri válaszból kérjük le. A százalékok súlyozottak, a napi előzetes és végleges állapotok elkülönülnek.</p>
  <button type="button" id="refreshStats">Statisztika frissítése</button>
  <p id="statStatus" role="status">Még nincs szerveri statisztika betöltve.</p>
+ <h3>In-Hub raktárpillanatképek</h3>
+ <p id="inventoryStatStatus" role="status">Még nincs raktárstatisztika betöltve.</p>
+ <div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Raktári csomag</th><th>Területek</th></tr></thead><tbody id="inventoryStats"></tbody></table></div>
  <h3>Futárok</h3><div class="scroll"><table><thead><tr><th>DA Code</th><th>Futár</th><th>Riportnap</th><th>OFD</th><th>DLD</th><th>Sikeresség</th><th>Vállalkozók</th></tr></thead><tbody id="courierStats"></tbody></table></div>
  <h3>Vállalkozók – napi teljesítmény</h3><div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Vállalkozó</th><th>Futárok</th><th>OFD</th><th>DLD</th><th>DLD%</th><th>SPR</th></tr></thead><tbody id="vendorStats"></tbody></table></div>
 </section>
