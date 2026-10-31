@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getFirestore,FieldValue} from 'firebase-admin/firestore';
-import {commitTrustedReport,archiveId,validateTrustedReport} from
+import {commitTrustedReport,restoreTrustedReport,archiveId,validateTrustedReport} from
  '../reports/server/trusted-report-validation.mjs';
 import {createReportApi} from '../reports/server/report-http-api.mjs';
 
@@ -104,6 +104,28 @@ try{
   assert.equal(first.version,1);assert.equal(second.version,2);
   assert.equal((await db.doc('inventoryVersions/'+archiveId(key,1)).get()).data().total,3);
   assert.equal((await db.doc('inventoryVersions/'+archiveId(key,2)).get()).data().total,4);
+ });
+ await db.doc('users/qa-admin').set({name:'Synthetic Admin',role:'admin',active:true});
+ await test('Admin restores full old inventory version without deleting newer archive',async()=>{
+  const result=await restoreTrustedReport({db,verifiedUid:'qa-admin',
+   kind:'inhub',date:day,station,fromVersion:1,expectedVersion:2,
+   reason:'Synthetic Admin approved rollback'});
+  assert.equal(result.version,3);
+  assert.equal((await db.doc('inventoryDays/'+key).get()).data().total,3);
+  assert.equal((await db.doc('inventoryVersions/'+archiveId(key,2)).get()).data().total,4);
+  assert.equal((await db.doc('inventoryVersions/'+archiveId(key,3)).get()).data().restoredFromVersion,1);
+  assert.equal((await db.doc('inventoryAudits/'+result.auditId).get()).data().action,'restore');
+ });
+ await test('Editor is denied restoring despite normal save permissions',async()=>{
+  await assert.rejects(()=>restoreTrustedReport({db,verifiedUid:'qa-editor',
+   kind:'inhub',date:day,station,fromVersion:2,expectedVersion:3,
+   reason:'Synthetic Editor blocked rollback'}),/report_write_forbidden/);
+ });
+ await test('Stale restore attempt does not overwrite newest version',async()=>{
+  await assert.rejects(()=>restoreTrustedReport({db,verifiedUid:'qa-admin',
+   kind:'inhub',date:day,station,fromVersion:2,expectedVersion:2,
+   reason:'Synthetic stale rollback attempt'}),/replacement_not_approved/);
+  assert.equal((await db.doc('inventoryDays/'+key).get()).data().version,3);
  });
  await test('role deactivation is applied inside new transaction',async()=>{
   await db.doc('users/qa-editor').update({active:false});
