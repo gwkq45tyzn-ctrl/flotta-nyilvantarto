@@ -188,4 +188,25 @@ await check('cannot create API with insecure origin',async()=>{
  assert.throws(()=>createReportApi({db,allowedOrigin:'http://example.com',verifyIdToken:async()=>({uid:'editor'}),projectId:'imile-management-staging'}));
 });
 assert.ok(calls>=14);
+await check('forged server archive totals are not returned as trusted',async()=>{
+ active='viewer';
+ const path='performanceVersions/'+archiveId(key,1),saved=db.docs.get(path);
+ db.docs.set(path,{...saved,totalDelivered:99});
+ try{
+  const v=await json(await api(req('GET','/v1/reports/version?kind=ofd&date='+date+
+   '&station=DS(AKE)&version=1')));
+  assert.equal(v.status,409);assert.equal(v.body.error,'history_integrity_failed');
+ }finally{db.docs.set(path,saved);}
+});
+await check('archive missing validation provenance is always legacy-unverified',async()=>{
+ active='viewer';
+ const path='performanceVersions/'+archiveId(key,1),saved=db.docs.get(path);
+ const unknown={...saved};delete unknown.validationSource;
+ db.docs.set(path,unknown);
+ try{
+  const v=await json(await api(req('GET','/v1/reports/version?kind=ofd&date='+date+
+   '&station=DS(AKE)&version=1')));
+  assert.equal(v.status,200);assert.equal(v.body.sourceValidation,'legacy-unverified');
+ }finally{db.docs.set(path,saved);}
+});
 console.log('PASS: '+passed+' HTTP API Auth, CORS, input limits, idempotence and archived history cases');
