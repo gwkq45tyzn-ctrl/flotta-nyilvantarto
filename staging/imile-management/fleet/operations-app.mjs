@@ -26,7 +26,7 @@ function buildForm(){
   control.name=field.key;control.required=field.required;control.disabled=!recordWritable();
   if(['vehicle','driver'].includes(field.type)){
    options(control,data[field.type==='vehicle'?'vehicles':'drivers'],'id',x=>field.type==='vehicle'?x.plate:x.daCode+' · '+x.name);
-  }else if(field.type==='boolean'){control.add(new Option('Igen','true'));control.add(new Option('Nem','false'));}
+  }else if(field.type==='boolean'){control.add(new Option('Igen','true'));control.add(new Option('Nem','false'));if(field.key==='tyresChanged')control.value='false';}
   else if(field.type==='status')for(const value of ['Elérhető','Szerviz','Leállított'])control.add(new Option(value,value));
   else{control.type=field.type==='integer'?'number':field.type==='date'?'date':'text';control.maxLength=field.max;if(field.type==='integer'){control.min='0';control.max='100000000';control.step='1';control.value='0';}}
   if(baseline)control.value=String(baseline.data[field.key]);

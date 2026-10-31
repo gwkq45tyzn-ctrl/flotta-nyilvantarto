@@ -70,14 +70,14 @@ jobs:
           node --check staging/imile-management/fleet/app.mjs
       - name: Staging kiadási tiltások és Hosting preview-szabályok
         run: node staging/imile-management/deploy-policy.test.mjs
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - name: Firestore jogosultságok – 99 izolált flottateszt
+      - name: Firestore jogosultságok – izolált flottatesztek
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
-          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config staging/imile-management/fleet/firebase.emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
       - name: A flotta belépési pontjának érintetlensége
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main

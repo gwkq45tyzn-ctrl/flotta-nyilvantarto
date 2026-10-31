@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 import {doc,collection,getDoc,getDocs,setDoc,updateDoc,deleteDoc,writeBatch,serverTimestamp} from 'firebase/firestore';
-import {schemas,normalizeFleetRecord} from './operations-data.mjs';
+import {schemas,normalizeFleetRecord,initialVehicleDetails} from './operations-data.mjs';
 const env=await initializeTestEnvironment({projectId:'demo-imile-fleet',firestore:{host:'127.0.0.1',port:8787,rules:await fs.readFile(new URL('../../../depokapacitas/firestore.rules',import.meta.url),'utf8')}});
 await env.clearFirestore();console.log('SEED START');
 const roles=['admin','editor','viewer','inactive','unknown','unlisted','anonymous'];
@@ -16,6 +16,12 @@ function fixture(kind,key='TEST0001'){
  return Object.fromEntries(schemas[kind].fields.map(f=>[f.key,f.type==='integer'?0:f.type==='boolean'?true:f.type==='code'?key:f.type==='vehicle'?(kind==='vehicle'?key:'TEST0001'):f.type==='driver'?(kind==='driver'?key:'TEST0001'):f.type==='date'?(f.required?'2099-01-15':''):f.type==='status'?'Elérhető':f.required?'SYNTHETIC TEST':'']));
 }
 function envelope(kind,data,uid){return {kind,data,revision:1,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),createdBy:uid,updatedBy:uid};}
+const attendance={eventTime:'2099-01-15T08:00:00',eventDate:'2099-01-15',timeKnown:true,daCode:'TEST0001',driverName:'SYNTHETIC TEST',vendor:'QA',type:'Log In',status:'',photoFront:'',photoLeft:'',photoRight:'',photoBack:'',source:'synthetic-emulator',vehicleId:'TEST0001'};
+await test('admin: optional Attendance vehicle allowed',true,()=>setDoc(doc(db.admin,'attendance','SYNATT1'),attendance));
+await test('editor: optional Attendance vehicle allowed',true,()=>setDoc(doc(db.editor,'attendance','SYNATT2'),attendance));
+await test('viewer: Attendance vehicle write denied',false,()=>setDoc(doc(db.viewer,'attendance','SYNATT3'),attendance));
+await test('editor: malformed Attendance vehicle denied',false,()=>setDoc(doc(db.editor,'attendance','SYNATT4'),{...attendance,vehicleId:'../invalid'}));
+await test('editor: extra Attendance field denied',false,()=>setDoc(doc(db.editor,'attendance','SYNATT5'),{...attendance,extra:'unexpected'}));
 async function createRecord(role,kind,key='TEST0001'){
  const record=normalizeFleetRecord(kind,fixture(kind,key));
  const batch=writeBatch(db[role]);batch.set(doc(db[role],'fleetRecords',record.id),envelope(kind,record.data,role));
@@ -36,7 +42,7 @@ for(const kind of ['vehicle','driver','service']){
 const profile=doc(db.admin,'fleetRecords','vehicle__TEST0001');
 await test('admin: valid optimistic update',true,()=>updateDoc(profile,{'data.mileage':50,revision:2,updatedAt:serverTimestamp(),updatedBy:'admin'}));
 for(const [name,patch]of [
- ['stale revision',{revision:2}],['negative odometer',{'data.mileage':-1,revision:3}],
+ ['stale revision',{revision:2}],['negative odometer',{'data.mileage':-1,revision:3}],['decreasing positive odometer',{'data.mileage':49,revision:3}],
  ['unknown nested field',{'data.injected':'x',revision:3}],['unknown envelope field',{role:'admin',revision:3}],
  ['creator change',{createdBy:'editor',revision:3}],['creator timestamp change',{createdAt:serverTimestamp(),revision:3}],
  ['actor spoof',{updatedBy:'editor',revision:3}],['wrong identifier',{'data.vehicleId':'TEST0002',revision:3}],
@@ -52,12 +58,18 @@ const service=normalizeFleetRecord('service',{...fixture('service','NEWSERVICE')
 await test('admin: service without matching canonical status denied',false,()=>setDoc(doc(db.admin,'fleetRecords',service.id),envelope('service',service.data,'admin')));
 await test('admin: service plus canonical status atomic',true,()=>{const b=writeBatch(db.admin);b.set(doc(db.admin,'fleetRecords',service.id),envelope('service',service.data,'admin'));b.update(doc(db.admin,'vehicles','TEST0001'),{status:'Szerviz'});return b.commit();});
 await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'vehicles','TEST0001'),{status:'Elérhető'}));
+const mileageService=normalizeFleetRecord('service',{...fixture('service','SERVICEMILE'),vehicleId:'TEST0001',mileage:60});
+await test('admin: service without odometer synchronization denied',false,()=>setDoc(doc(db.admin,'fleetRecords',mileageService.id),envelope('service',mileageService.data,'admin')));
+await test('admin: service with odometer synchronization allowed',true,async()=>{const current=await getDoc(profile);const batch=writeBatch(db.admin);batch.set(doc(db.admin,'fleetRecords',mileageService.id),envelope('service',mileageService.data,'admin'));batch.update(profile,{'data.mileage':60,revision:current.data().revision+1,updatedAt:serverTimestamp(),updatedBy:'admin'});return batch.commit();});
 let seq=0;
-function movement(role,{vehicleId='TEST0001',driverId='TEST0001',action='checkout',mileage=100,pair=true,event=true,date='2099-01-15',actor=role,extra={}}={}){
+async function movement(role,{vehicleId='TEST0001',driverId='TEST0001',action='checkout',mileage=100,pair=true,event=true,date='2099-01-15',actor=role,extra={},skipProfile=false}={}){
  const id=String(++seq).padStart(20,'0'),s=db[role],b=writeBatch(s);
  const a={vehicleId,driverId,active:action==='checkout',mileage,operationId:id};
  if(pair){b.set(doc(s,'fleetAssignments',vehicleId),a);b.set(doc(s,'fleetDriverAssignments',driverId),a);}
  if(event)b.set(doc(s,'fleetMovements',id),{vehicleId,driverId,action,date,mileage,note:'SYNTHETIC TEST',createdAt:serverTimestamp(),createdBy:actor,...extra});
+ const profile=await getDoc(doc(db.admin,'fleetRecords','vehicle__'+vehicleId));
+ if(!skipProfile&&profile.exists()&&mileage>profile.data().data.mileage)b.update(doc(s,'fleetRecords','vehicle__'+vehicleId),{'data.mileage':mileage,revision:profile.data().revision+1,updatedAt:serverTimestamp(),updatedBy:role});
+ if(!skipProfile&&!profile.exists())b.set(doc(s,'fleetRecords','vehicle__'+vehicleId),envelope('vehicle',initialVehicleDetails(vehicleId,mileage),role));
  return b.commit();
 }
 for(const role of ['anonymous','unlisted','unknown','inactive','viewer'])await test(role+': checkout denied',false,()=>movement(role));
@@ -66,6 +78,7 @@ await test('editor: event without pair denied',false,()=>movement('editor',{pair
 await test('editor: invalid event date denied',false,()=>movement('editor',{date:'2099-02-31'}));
 await test('editor: spoofed actor denied',false,()=>movement('editor',{actor:'admin'}));
 await test('editor: unknown event field denied',false,()=>movement('editor',{extra:{role:'admin'}}));
+await test('editor: movement without odometer update denied',false,()=>movement('editor',{skipProfile:true}));
 await test('editor: atomic checkout allowed',true,()=>movement('editor'));
 await test('admin: duplicate car checkout denied',false,()=>movement('admin',{driverId:'TEST0002'}));
 await test('admin: duplicate driver checkout denied',false,()=>movement('admin',{vehicleId:'TEST0002'}));

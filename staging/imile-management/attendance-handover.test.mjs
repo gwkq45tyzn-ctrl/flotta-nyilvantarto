@@ -64,4 +64,11 @@ const reduce=(events,manualBookings=[])=>deriveAttendanceHandovers({events,drive
  assert.deepEqual(result.openVehicleIds,['TESTCAR02']);
 }
 assert.equal(normalizeAttendanceVehicleEvent(evt('i1','DA0001','Log In','T-E-S-T C A R 0 1','06:00:00')).valid,true);
+for(const day of ['2026-02-29','2099-02-31','2026-04-31','2200-01-01'])
+ assert.equal(normalizeAttendanceVehicleEvent({...evt('bad','DA0001','Log In','TESTCAR01','06:00:00'),eventTime:day+'T06:00:00'}).valid,false);
+assert.equal(normalizeAttendanceVehicleEvent({...evt('leap','DA0001','Log In','TESTCAR01','06:00:00'),eventTime:'2028-02-29T06:00:00'}).valid,true);
+{
+ const result=reduce([evt('i1','DA0001','Log In','TESTCAR01','06:00:00')],[{date:'2026-11-02',driverId:'DA0001',vehicleId:'TESTCAR02'}]);
+ assert.equal(result.handovers.length,0);assert.equal(result.alerts[0].kind,'planning_conflict');
+}
 console.log('PASS: attendance pickup/return derivation, no car, double issue, planning conflict, missing photos and out-of-order events');

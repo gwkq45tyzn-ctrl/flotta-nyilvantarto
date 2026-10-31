@@ -5,7 +5,11 @@
  */
 const normDa=value=>String(value??'').trim().toUpperCase();
 const normPlate=value=>String(value??'').trim().toUpperCase().replace(/[\s-]+/g,'');
-const validDate=value=>/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(String(value||''));
+const validDate=value=>{
+  if(!/^(19|20|21)\d{2}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(String(value||'')))return false;
+  const day=value.slice(0,10),parsed=new Date(day+'T12:00:00Z');
+  return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===day;
+};
 const photoKeys=['photoFront','photoLeft','photoRight','photoBack'];
 const hasReturnPhotos=event=>photoKeys.every(key=>typeof event[key]==='string'&&event[key].trim().length>0);
 const issue=(alerts,kind,event,detail)=>alerts.push({kind,eventId:event.id??null,detail});
@@ -48,8 +52,10 @@ export function deriveAttendanceHandovers({events=[],drivers=[],vehicles=[],manu
       if(previous){issue(alerts,previous.vehicleId===e.vehicleId?'duplicate_checkin':'driver_already_assigned',e,'A futárnak már van nyitott autókiadása.');continue;}
       if(activeVehicles.has(e.vehicleId)){issue(alerts,'vehicle_already_assigned',e,'Az autó már más futárnál van.');continue;}
       const date=e.eventTime.slice(0,10);
-      if(manualBookings.some(b=>b.date===date&&b.vehicleId===e.vehicleId&&b.driverId!==e.daCode)){
-        issue(alerts,'planning_conflict',e,'A tervezett beosztásban más futárhoz tartozik az autó.');continue;
+      if(manualBookings.some(b=>b.date===date&&(
+        (b.vehicleId===e.vehicleId&&b.driverId!==e.daCode)||
+        (b.driverId===e.daCode&&b.vehicleId!==e.vehicleId)))){
+        issue(alerts,'planning_conflict',e,'A tervezett beosztásban eltérő autó–futár kapcsolat szerepel.');continue;
       }
       const record={id:e.id,driverId:e.daCode,vehicleId:e.vehicleId,
         pickedUpAt:e.eventTime,returnedAt:null,status:'issued',

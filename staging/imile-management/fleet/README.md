@@ -13,6 +13,8 @@ Apps Script-hívás nélkül. A DepóKapacitás ugyanezeket a törzsdokumentumok
 - Szervizrekord mentése és a közös járműállapot frissítése egy tranzakcióban.
 - Kiadás/visszavétel páros autó–futár zárolással, csökkenő km-óra és dupla kiadás
   tiltásával. Az események nem szerkeszthetők és nem törölhetők kliensből.
+- A kiadás/visszavétel és szerviz kilométeradata tranzakciósan frissíti a jármű
+  részadatát; hiányzó részadatnál üres opcionális mezőkkel hozza létre azt.
 - Keresés, 60 napos lejárati figyelmeztetés, JSON export és nyomtatható riport.
 
 A fizikai kiadás és a Depó napi foglalása külön folyamat. A fizikai kiadás nem
@@ -38,8 +40,8 @@ előfeltétel után történhet adminisztratív IAM-hozzáféréssel. Nincs auto
 
 ## Automatikus ellenőrzés
 
-- `operations.test.mjs`: 27 offline séma-, lejárat-, tranzakció- és kiadási eset.
-- `rules-emulator.mjs`: 99 pozitív/negatív Firestore-próba, kizárólag
+- `operations.test.mjs`: 30 offline séma-, lejárat-, tranzakció- és kiadási eset.
+- `rules-emulator.mjs`: 108 pozitív/negatív Firestore-próba, kizárólag
   `demo-imile-fleet`, helyi `127.0.0.1:8787`. Ehhez Node >=24.12 és Java 21 kell.
 - A CI npm lockfájllal telepíti a tesztfüggőségeket, és automatikusan elindítja az
   emulátoros csomagot. Nem használ Firebase secretet és nem ér el felhőadatokat.

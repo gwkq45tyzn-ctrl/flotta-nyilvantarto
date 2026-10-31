@@ -51,3 +51,7 @@ export function expiryWarnings(records,today){
  }
  return result.sort((a,b)=>a.date.localeCompare(b.date));
 }
+export function initialVehicleDetails(vehicleId,mileage){
+ const input=Object.fromEntries(schemas.vehicle.fields.map(f=>[f.key,f.type==='integer'?0:f.type==='boolean'?false:'']));
+ return normalizeFleetRecord('vehicle',{...input,vehicleId,mileage}).data;
+}

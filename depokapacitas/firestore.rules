@@ -214,13 +214,25 @@ service cloud.firestore {
     // fleetAssignments/{plate} and fleetDriverAssignments/{DA} mirror one another.
     // fleetMovements/{autoId} is append-only; each movement and assignment pair
     // must be committed atomically. All collections require an active member.
+    function fleetMileageFloor(d) {
+      let p = /databases/$(database)/documents/fleetAssignments/$(d.vehicleId);
+      return !existsAfter(p) || d.mileage >= getAfter(p).data.mileage;
+    }
+    function fleetMileageMatches(vehicleId,mileage) {
+      let p = /databases/$(database)/documents/fleetRecords/$('vehicle__' + vehicleId);
+      return existsAfter(p) && getAfter(p).data.data.mileage == mileage;
+    }
+    function fleetServiceMileage(d) {
+      let p = /databases/$(database)/documents/fleetRecords/$('vehicle__' + d.vehicleId);
+      return existsAfter(p) && getAfter(p).data.data.mileage >= d.mileage;
+    }
     function validFleet_vehicle(d) { return exactFields(d,['vehicleId','make','vin','year','mileage','lessor','location','insuranceNumber','insuranceExpiry','cascoExpiry','inspectionExpiry','rentalExpiry','nextServiceDate','nextServiceMileage','tyresChanged','note'])
       && validVehiclePlate(d.vehicleId)
       && optionalText(d.make,160)
       && optionalText(d.vin,160)
       && nonNegative(d.year,100000000)
       && (d.year == 0 || (d.year >= 1900 && d.year <= 2199))
-      && nonNegative(d.mileage,100000000)
+      && nonNegative(d.mileage,100000000) && fleetMileageFloor(d)
       && optionalText(d.lessor,160)
       && optionalText(d.location,160)
       && optionalText(d.insuranceNumber,160)
@@ -276,7 +288,8 @@ service cloud.firestore {
       && d.status in ['Elérhető','Szerviz','Leállított']
       && optionalText(d.note,2000)
       && (d.vehicleId == '' || exists(/databases/$(database)/documents/vehicles/$(d.vehicleId)))
-      && admin() && getAfter(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data.status == d.status; }
+      && admin() && getAfter(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data.status == d.status
+      && fleetServiceMileage(d); }
 
     function validFleetRecord(id,d) {
       return exactFields(d,['kind','data','revision','createdAt','createdBy','updatedAt','updatedBy'])
@@ -299,7 +312,9 @@ service cloud.firestore {
         && request.resource.data.kind == resource.data.kind
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.revision == resource.data.revision + 1;
+        && request.resource.data.revision == resource.data.revision + 1
+        && (resource.data.kind != 'vehicle' || request.resource.data.data.mileage >= resource.data.data.mileage);
+      // Vehicle odometer corrections require an explicit administrative process.
       allow delete: if false;
     }
     function assignmentShape(d) {
@@ -356,6 +371,7 @@ service cloud.firestore {
         && d.createdAt == request.time && d.createdBy == request.auth.uid
         && a == reverse && a.operationId == id && a.vehicleId == d.vehicleId
         && a.driverId == d.driverId && a.mileage == d.mileage
+        && fleetMileageMatches(d.vehicleId,d.mileage)
         && a.active == (d.action == 'checkout')
         && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
     }

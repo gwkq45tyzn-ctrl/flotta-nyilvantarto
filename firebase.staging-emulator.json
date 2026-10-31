@@ -1,4 +1,4 @@
 {
-  "firestore": {"rules": "../../../depokapacitas/firestore.rules"},
+  "firestore": {"rules": "depokapacitas/firestore.rules"},
   "emulators": {"firestore": {"host": "127.0.0.1", "port": 8787}, "ui": {"enabled": false}}
 }
