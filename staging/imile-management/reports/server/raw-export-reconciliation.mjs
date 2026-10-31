@@ -37,7 +37,7 @@ function ensureMatrix(matrix){
  }
  return matrix;
 }
-export function reconcileWithRawExport({kind,candidate,rawMatrix}={}){
+export function reconcileWithRawExport({kind,candidate,rawMatrix,rawScope=null}={}){
  if(!['ofd','inhub'].includes(kind))throw Error('invalid_report_kind');
  ensureMatrix(rawMatrix);
  // Validate submitted totals and daily key independently of raw processing.
@@ -47,15 +47,21 @@ export function reconcileWithRawExport({kind,candidate,rawMatrix}={}){
  catch{throw Error('raw_source_schema_invalid');}
  if(original.status!=='ready')
   throw Error('raw_source_'+(original.status==='blocked'?'blocked':'missing'));
- let expected;
+ let expected,scopedRows=null;
+ if(rawScope!==null&&(kind!=='ofd'||typeof rawScope!=='object'||Array.isArray(rawScope)||
+  Object.keys(rawScope).length!==2||rawScope.date!==candidate.date||rawScope.station!==candidate.station))
+  throw Error('raw_source_scope_invalid');
  if(kind==='ofd'){
   let groups;
   try{groups=planPerformanceSnapshots(original);}
   catch{throw Error('raw_source_daily_conflict');}
   // A single file must exactly represent one day and one depot. Reject
   // partial matches, which could otherwise certify omitted daily rows.
-  if(groups.length!==1)throw Error('raw_source_multiple_days_or_stations');
-  const g=groups[0];
+  if(rawScope===null&&groups.length!==1)throw Error('raw_source_multiple_days_or_stations');
+  const selected=rawScope===null?groups:groups.filter(g=>g.date===rawScope.date&&g.station===rawScope.station);
+  if(selected.length!==1)throw Error('raw_source_scope_not_found');
+  const g=selected[0];
+  if(rawScope!==null)scopedRows=original.rows.filter(r=>r.date===rawScope.date&&r.station===rawScope.station).reduce((n,r)=>n+r.sourceCount,0);
   expected={
    key:g.key,date:g.date,station:g.station,rows:g.rows,
    totalOFD:g.totalOFD,totalDelivered:g.totalDelivered,courierCount:g.courierCount
@@ -78,7 +84,8 @@ export function reconcileWithRawExport({kind,candidate,rawMatrix}={}){
   kind,
   reportKey:derived.snapshot.key,
   contentHash:derived.contentHash,
-  sourceRows:original.sourceRows,
+  sourceRows:scopedRows??original.sourceRows,
+  ...(scopedRows===null?{}:{excludedSourceRows:original.sourceRows-scopedRows,scopeExplicit:true}),
   validation:'raw-matrix-reconciled-not-provider-attested'
  });
 }
