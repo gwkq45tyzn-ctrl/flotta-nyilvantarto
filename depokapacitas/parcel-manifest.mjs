@@ -59,7 +59,7 @@ export function previewParcelManifest(rawRows,{date,storedDemands=[],sourceReady
       m.retryCount===store.retryCount);
     return {district:d,manifestNew:m?.newCount??null,manifestRetry:m?.retryCount??null,
       storedNew:store?.newCount??null,storedRetry:store?.retryCount??null,
-      status:!m?'missing_manifest':!store?'missing_aggregate':match?'match':'mismatch'};
+      status:!m?'missing_manifest':records.length>1?'duplicate_aggregate':!store?'missing_aggregate':match?'match':'mismatch'};
   });
   const comparisonStatus=!sourceReady?'source_unavailable':!ready?'invalid_manifest':
     comparisons.length>0&&comparisons.every(x=>x.status==='match')?'match':'mismatch';
