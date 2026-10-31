@@ -5,6 +5,7 @@ import {firebaseConfig} from './firebase-config.js';
 import {parseDay,parseTime} from './import-dates.mjs';
 import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
+import {summarizeDistrictCapacity} from './district-capacity.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
 import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs';
@@ -33,7 +34,7 @@ function table(headers,items){return '<div class="table-wrap"><table><thead><tr>
 const td=(...items)=>'<tr>'+items.map(x=>'<td>'+x+'</td>').join('')+'</tr>';
 const cmd=(coll,id)=>canWrite()&&!['drivers','vehicles'].includes(coll)?'<button type="button" class="danger" data-del="'+coll+'" data-id="'+esc(id)+'">Törlés</button>':'';
 const label=(text,cls='')=>'<span class="badge '+cls+'">'+esc(text)+'</span>';
-function kpi(name,value,desc,cls=''){return '<div class="kpi '+cls+'"><div class="name">'+name+'</div><div class="number">'+fmt(value)+'</div><div class="desc">'+desc+'</div></div>';}
+function kpi(name,value,desc,cls=''){return '<div class="kpi '+cls+'"><div class="name">'+name+'</div><div class="number">'+(value===null?'—':fmt(value))+'</div><div class="desc">'+desc+'</div></div>';}
 function section(h,body){return '<section class="panel"><h3>'+h+'</h3>'+body+'</section>';}
 function datebar(){return '<div class="filterbar"><label>Nap <input type="date" id="datePick" value="'+state.date+'"></label></div>';}
 function inRange(x,mode){const day=(x.date||x.eventDate||x.eventTime||'').slice(0,10);if(mode==='day')return day===state.date;if(mode==='month')return day.slice(0,7)===state.date.slice(0,7);const d=new Date(state.date+'T12:00:00');const monday=new Date(d);monday.setDate(d.getDate()-((d.getDay()+6)%7));const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);return day>=monday.toISOString().slice(0,10)&&day<=sunday.toISOString().slice(0,10);}
@@ -72,16 +73,63 @@ function centralTaskList(limit=null){
     more+jump+detail);
 }
 function alertsView(){return datebar()+centralTaskList(null);}
-function overview(){const t=totals();const demand=t.newCount+t.retryCount;const gap=t.capacity-demand;const districts=[...new Set([...get('demands').filter(x=>inRange(x,'day')).map(x=>x.district),...get('bookings').filter(x=>inRange(x,'day')).map(x=>x.district)])].sort();
-const region=districts.map(d=>{const a=get('demands').find(x=>x.date===state.date&&x.district===d);const b=get('bookings').filter(x=>x.date===state.date&&x.district===d);const cap=b.reduce((a,x)=>a+safeBookingCapacity(x),0);const count=a?number(a.newCount)+number(a.retryCount):null;return td(esc(d),count===null?'—':fmt(count),fmt(cap),count===null?'—':label((cap-count)>=0?'+'+fmt(cap-count):fmt(cap-count),(cap-count)<0?'red':'green'));});
-const att=get('attendance').filter(x=>(x.eventTime||'').startsWith(state.date)).sort((a,b)=>(a.eventTime||'').localeCompare(b.eventTime||''));const latest=new Map();for(const a of att)latest.set(a.daCode||a.driverName,a.type);const ins=new Set([...latest].filter(([k,type])=>type==='Log In').map(([k])=>k));
-const bars=districts.map(d=>{const a=get('demands').find(x=>x.date===state.date&&x.district===d);const count=a?number(a.newCount)+number(a.retryCount):0;const max=Math.max(...get('demands').filter(x=>x.date===state.date).map(x=>number(x.newCount)+number(x.retryCount)),1);return '<div class="chartline"><div class="label">'+esc(d)+'</div><div class="bar"><span style="width:'+(100*count/max)+'%"></span></div><div class="value">'+fmt(count)+'</div></div>';}).join('');
-return datebar()+centralTaskList(8)+(t.blockedBookings?'<p class="notice">Figyelem: '+fmt(t.blockedBookings)+' nem elérhető foglalás jelenleg nincs beleszámítva a kapacitásba.</p>':'')+'<div class="grid kpis">'+kpi('Kiszállítandó csomag',demand,t.hasDemand?'Új + újrakézbesítendő':'Csomagigény még nincs')+kpi('Tervezett kapacitás',t.capacity,'Futárbeosztások alapján')+kpi('Kapacitáseltérés',t.hasDemand?gap:0,t.hasDemand?(gap<0?'Hiány a tervhez képest':'Többlet a tervhez képest'):'Nem számítható',t.hasDemand&&gap<0?'red':'good')+kpi('Bejelentkezett futárok',ins.size,'Attendance Log In események')+'</div><div class="grid twocol">'+section('Kerületi terv–kapacitás',table(['Kerület','Csomagigény','Kapacitás','Eltérés'],region))+section('Csomagigény kerületenként',bars||'<p class="muted">Töltsd fel a napi mennyiségeket.</p>')+'</div>'+section('Tényleges napi teljesítmény','<div class="grid kpis" style="margin:0">'+kpi('Felvett',t.picked,'Tényadat')+kpi('Sikeres',t.success,'Kézbesített', 'good')+kpi('Sikertelen',t.failed,'Kézbesítés', 'warn')+kpi('Sikeresség',t.picked?Math.round(100*t.success/t.picked):0,t.hasResults?'A felvett csomagok %-a':'Nincs tényadat')+'</div>');}
+function overview(){
+ const t=totals();
+ const plan=summarizeDistrictCapacity({
+   date:state.date,today:todayAtDepot(),demands:get('demands'),
+   bookings:get('bookings'),drivers:get('drivers'),vehicles:get('vehicles')
+ });
+ const sourceReady=['demands','bookings','drivers','vehicles'].every(x=>state.loaded.has(x)&&!state.errors.has(x));
+ const validDemand=sourceReady&&plan.hasCompleteDemand;
+ const districtRows=plan.rows;
+ const region=districtRows.map(x=>td(
+   esc(x.district),x.newCount===null?'—':fmt(x.newCount),
+   x.retryCount===null?'—':fmt(x.retryCount),
+   x.demand===null?'—':fmt(x.demand),fmt(x.capacity),
+   x.gap===null?'Nincs igényadat':label((x.gap>=0?'+':'')+fmt(x.gap),x.gap<0?'red':'green'),
+   x.excludedBookings?label(x.excludedBookings+' kizárva','red'):'—'
+ ));
+ const att=get('attendance').filter(x=>(x.eventTime||'').startsWith(state.date))
+   .sort((a,b)=>(a.eventTime||'').localeCompare(b.eventTime||''));
+ const latest=new Map();
+ for(const a of att)latest.set(a.daCode||a.driverName,a.type);
+ const ins=new Set([...latest].filter(([k,type])=>type==='Log In').map(([k])=>k));
+ const max=Math.max(1,...districtRows.map(x=>x.demand??0));
+ const bars=districtRows.filter(x=>x.demand!==null).map(x=>
+   '<div class="chartline"><div class="label">'+esc(x.district)+'</div>'+
+   '<div class="bar"><span style="width:'+(100*x.demand/max)+'%"></span></div>'+
+   '<div class="value">'+fmt(x.demand)+'</div></div>').join('');
+ const warnings=[
+   !sourceReady?'Nem töltődött be minden kapacitás- vagy csomagigény-adatforrás: a mutatók nem tekinthetők teljesnek.':'',
+   plan.issues.length?plan.issues.length+' adatütközés vagy kizárt foglalás. Ellenőrizd a kerületi igényeket és a beosztásokat.':'',
+   'Az új és újrakézbesítendő csomagok mennyiségi adatok; egyedi csomagazonosító nélkül a két kategória átfedése még nem ellenőrizhető.'
+ ].filter(Boolean);
+ return datebar()+centralTaskList(8)+
+   '<p class="notice">'+warnings.map(esc).join(' ')+'</p>'+
+   '<div class="grid kpis">'+
+   kpi('Új csomag',validDemand?plan.totalNew:null,'Napi kerületi terv')+
+   kpi('Újrakézbesítendő',validDemand?plan.totalRetry:null,'Napi kerületi terv')+
+   kpi('Kiszállítandó összesen',validDemand?plan.totalDemand:null,validDemand?'Új + újrakézbesítendő':'Nem teljes az igényadat')+
+   kpi('Tervezett kapacitás',sourceReady?plan.totalCapacity:null,'Ütköző vagy nem elérhető foglalás nélkül')+
+   kpi('Kapacitáseltérés',validDemand?plan.gap:null,validDemand?(plan.gap<0?'Hiány a tervhez képest':'Többlet a tervhez képest'):'Nem számítható',validDemand&&plan.gap<0?'red':'good')+
+   kpi('Bejelentkezett futárok',ins.size,'Attendance Log In események')+
+   '</div><div class="grid twocol">'+
+   section('Kerületi terv–kapacitás',table(
+     ['Kerület','Új','Újrakézbesítendő','Összesen','Kapacitás','Eltérés','Ellenőrzés'],region))+
+   section('Csomagigény kerületenként',bars||'<p class="muted">Töltsd fel a napi mennyiségeket.</p>')+
+   '</div>'+section('Tényleges napi teljesítmény',
+   '<div class="grid kpis" style="margin:0">'+
+   kpi('Felvett',t.hasResults?t.picked:null,'Tényadat')+
+   kpi('Sikeres',t.hasResults?t.success:null,'Kézbesített','good')+
+   kpi('Sikertelen',t.hasResults?t.failed:null,'Kézbesítés','warn')+
+   kpi('Sikeresség',t.picked?Math.round(100*t.success/t.picked):null,
+       t.hasResults?'A felvett csomagok %-a':'Nincs tényadat')+'</div>');
+}
 function drivers(){const list=get('drivers').filter(x=>(x.name+' '+x.daCode+' '+x.vendor).toLowerCase().includes(state.search));const edit=canWrite()?section('Depókapacitás megadása (külön az alapadatoktól)',frm('capacity',select('driverId','Futár',get('drivers'),x=>x.name+' · '+x.daCode)+field('capacity','Napi csomagkapacitás','number',0,'min="0" max="10000"'))):'';return '<p class="inline-note">A futártörzs közös adat: a Flotta kezeli. Itt csak a depóhoz szükséges kapacitás állítható.</p>'+edit+section('Futártörzs · '+list.length+' fő',table(['Futár','DA-kód','Vállalkozó','Napi kapacitás'],list.map(x=>td(esc(x.name),esc(x.daCode),esc(x.vendor),fmt(byId('driverCapacities',x.id)?.capacity??x.capacity??0)))));}
 function vehicles(){const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));return '<p class="inline-note">Az autók és a műszaki státuszok közös törzsadatai a Flotta rendszerből származnak. A Kapacitáskezelő nem írja felül őket.</p>'+section('Autónyilvántartás · '+list.length+' db',table(['Rendszám','Típus','Állapot','Mai foglalás'],list.map(x=>{const b=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);return td(esc(x.plate),esc(x.model),status(x.status),b?esc(byId('drivers',b.driverId)?.name||'—'):'Szabad');})));}
 function planning(){const ds=get('drivers').filter(eligibleDriver).slice().sort((a,b)=>a.name.localeCompare(b.name));const vs=get('vehicles').filter(x=>x.status==='Elérhető').slice().sort((a,b)=>a.plate.localeCompare(b.plate));const today=get('bookings').filter(x=>x.date===state.date).sort((a,b)=>(a.district||'').localeCompare(b.district||''));const taken=new Set(today.map(x=>x.vehicleId));const available=vs.filter(x=>!taken.has(x.id));const form=canWrite()?section('Futár és autó összerendelése',frm('booking',field('date','Munkanap','date',state.date)+select('driverId','Futár',ds,x=>x.name+' · '+x.daCode)+select('vehicleId','Szabad autó',available,x=>x.plate)+field('district','Kerület','text','','placeholder="pl. IX."')+'<label>Státusz<select name="status"><option value="planned">Tervezett</option><option value="confirmed">Visszaigazolt</option></select></label>','Foglalás mentése')+'<p class="small">Egy autó egy nap csak egy futárhoz foglalható. Ugyanaz a futár sem kaphat két autót ugyanarra a napra.</p>'):'';
 return datebar()+centralTaskList(5)+attendanceVehicleSummary()+form+section('Napi foglalások · '+today.length,table(['Futár','Autó','Kerület','Kapacitás','Státusz','Elérhetőség',''],today.map(x=>td(esc(byId('drivers',x.driverId)?.name||'Ismeretlen'),esc(byId('vehicles',x.vehicleId)?.plate||'—'),esc(x.district),fmt(x.capacity),status(x.status),bookingAssessment(x).eligible?label('Rendben','green'):label('Nem elérhető','red'),canWrite()?'<button class="danger" data-cancel="'+esc(x.id)+'">Feloldás</button>':''))));}
-function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak akkor számít bele egy későbbi nap igényébe, ha újrakézbesítésre tervezed. Nincs automatikus dupla beszámítás.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
+function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
 function results(){const rs=get('results');const dates=['day','week','month'];const summaries=dates.map(mode=>{const data=rs.filter(x=>inRange(x,mode));return {mode,label:{day:'Napi',week:'Heti',month:'Havi'}[mode],picked:data.reduce((s,x)=>s+number(x.picked),0),success:data.reduce((s,x)=>s+number(x.success),0),failed:data.reduce((s,x)=>s+number(x.failed),0)};});
 const byDriver=new Map();for(const r of rs.filter(x=>inRange(x,state.mode))){const x=byDriver.get(r.driverId)||{picked:0,success:0,failed:0,days:new Set()};x.picked+=number(r.picked);x.success+=number(r.success);x.failed+=number(r.failed);x.days.add(r.date);byDriver.set(r.driverId,x);}
 const list=[...byDriver].map(([id,r])=>td(esc(byId('drivers',id)?.name||id),r.days.size,fmt(r.picked),fmt(r.success),fmt(r.failed),(r.picked?Math.round(100*r.success/r.picked)+'%':'—'),(r.days.size?(r.picked/r.days.size).toFixed(1):'—')));
