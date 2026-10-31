@@ -50,7 +50,7 @@ try{
   assert.equal(current.data().totalDelivered,7);
   assert.equal(history.data().rows[0].delivered,7);
   assert.equal(audit.data().version,1);
-  assert.equal(current.data().validationSource,'trusted-server');
+  assert.equal(current.data().validationSource,'server-aggregates-only');
  });
  await test('re-upload of same report returns unchanged, with single v1',async()=>{
   const result=await commitTrustedReport(action('ofd',courier()));
@@ -124,7 +124,7 @@ try{
   assert.equal(response.status,200);
   const history=(await response.json()).version;
   assert.equal(history.rows[0].delivered,7);
-  assert.equal(history.validationSource,'trusted-server');
+  assert.equal(history.validationSource,'server-aggregates-only');
  });
  console.log('PASS: '+passed+' REAL Firestore Admin SDK emulator transactions, history and race tests');
 }finally{
