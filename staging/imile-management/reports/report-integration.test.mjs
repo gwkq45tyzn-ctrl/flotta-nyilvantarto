@@ -11,6 +11,8 @@ for(const name of ['reports/index.html','reports/report-app.mjs','reports/report
 assert.doesNotMatch(builder,/^\s*'staging\/imile-management\/reports\/report-xlsx\.mjs',/m);
 assert.doesNotMatch(html,/cdn\.jsdelivr|exceljs@|<script.*src="https?:/i);
 assert.match(html,/id="download"/);assert.match(html,/id="save"/);
+assert.match(html,/id="restoreOptions"/);assert.match(html,/id="restoreReason"/);
+assert.match(html,/id="restoreConfirm"/);assert.match(html,/id="historyRestore"/);
 assert.match(html,/id="replaceApproved"/);assert.match(html,/id="confirmFinal"/);
 assert.match(html,/id="courierStats"/);assert.match(html,/id="vendorStats"/);assert.match(html,/id="inventoryStats"/);assert.match(html,/id="inventoryDay"/);
 assert.match(app,/getDocFromServer/);assert.match(app,/getDocsFromServer/);
@@ -19,6 +21,9 @@ assert.match(app,/firebaseConfig\.projectId!=='imile-management-staging'/);
 assert.match(app,/readXlsxFirstSheet/);assert.match(app,/writeReportXlsx/);
 assert.doesNotMatch(app,/\b(?:runTransaction|setDoc|updateDoc|writeBatch|deleteDoc)\s*\(/);
 assert.match(app,/getIdToken/);assert.match(app,/reportApiReady/);
+assert.match(app,/canRestore=profile.role==='admin'/);
+assert.match(app,/inspectedArchive/);
+assert.match(app,/\/v1\/reports\/restore/);
 assert.match(app,/\/v1\/reports\/save/);assert.match(app,/\/v1\/reports\/version/);
 assert.match(app,/approve/);
 assert.match(app,/performanceDays/);
