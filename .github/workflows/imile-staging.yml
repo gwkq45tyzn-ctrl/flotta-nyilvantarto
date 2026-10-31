@@ -33,6 +33,10 @@ jobs:
         run: node staging/imile-management/shared-import-plan.test.mjs
       - name: Szervizben lévő autók és inaktív futárok kizárása
         run: node depokapacitas/capacity-eligibility.test.mjs
+      - name: Kerületi új/újrakézbesítendő csomagok és kapacitás ütközésellenőrzése
+        run: |
+          node depokapacitas/district-capacity.test.mjs
+          node depokapacitas/district-capacity.integration.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
       - name: Magyar CSV karakterkódolások ellenőrzése
