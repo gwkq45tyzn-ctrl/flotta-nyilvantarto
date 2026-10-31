@@ -84,6 +84,7 @@ await test('admin: duplicate car checkout denied',false,()=>movement('admin',{dr
 await test('admin: duplicate driver checkout denied',false,()=>movement('admin',{vehicleId:'TEST0002'}));
 await test('editor: decreasing mileage return denied',false,()=>movement('editor',{action:'return',mileage:99}));
 await test('editor: mismatched driver return denied',false,()=>movement('editor',{action:'return',driverId:'TEST0002'}));
+await test('editor: return before checkout date denied',false,()=>movement('editor',{action:'return',date:'2099-01-14',mileage:120}));
 await test('editor: atomic return allowed',true,()=>movement('editor',{action:'return',mileage:120}));
 await test('editor: repeated return denied',false,()=>movement('editor',{action:'return',mileage:120}));
 await test('admin: reissue after return allowed',true,()=>movement('admin',{mileage:120,driverId:'TEST0002'}));

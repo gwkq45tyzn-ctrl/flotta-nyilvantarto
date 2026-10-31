@@ -359,6 +359,12 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.vehicleId)).data == request.resource.data;
       allow delete: if false;
     }
+    function validFleetReturnDate(d) {
+      let prior = get(/databases/$(database)/documents/fleetAssignments/$(d.vehicleId)).data;
+      let issued = get(/databases/$(database)/documents/fleetMovements/$(prior.operationId)).data;
+      return issued.action == 'checkout' && issued.vehicleId == d.vehicleId
+        && issued.driverId == d.driverId && validDay(issued.date) && d.date >= issued.date;
+    }
     function validFleetMovement(id,d) {
       let v = get(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data;
       let driver = get(/databases/$(database)/documents/drivers/$(d.driverId)).data;
@@ -373,6 +379,7 @@ service cloud.firestore {
         && a.driverId == d.driverId && a.mileage == d.mileage
         && fleetMileageMatches(d.vehicleId,d.mileage)
         && a.active == (d.action == 'checkout')
+        && (d.action != 'return' || validFleetReturnDate(d))
         && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
     }
     match /fleetMovements/{id} {

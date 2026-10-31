@@ -46,7 +46,11 @@ export async function moveFleetVehicle({db,input,uid,doc,collection,runTransacti
   if(action==='checkout'){
    check(vehicle.data().status==='Elérhető'&&driver.data().active===true,'Inaktív futárnak vagy nem elérhető autóval nem készülhet kiadás.');
    check(!v.data()?.active&&!d.data()?.active,'Az autó vagy a futár már aktív kiadáshoz tartozik.');
-  }else check(v.exists()&&d.exists()&&v.data().active&&d.data().active&&v.data().driverId===driverId&&d.data().vehicleId===vehicleId,'Nincs egyező aktív kiadás.');
+  }else{
+   check(v.exists()&&d.exists()&&v.data().active&&d.data().active&&v.data().driverId===driverId&&d.data().vehicleId===vehicleId,'Nincs egyező aktív kiadás.');
+   const issued=await tx.get(doc(db,'fleetMovements',v.data().operationId));
+   check(issued.exists()&&issued.data().action==='checkout'&&issued.data().vehicleId===vehicleId&&issued.data().driverId===driverId&&validDate(issued.data().date)&&date>=issued.data().date,'A visszavétel dátuma nem előzheti meg a kiadás dátumát.');
+  }
   check(!v.exists()||mileage>=v.data().mileage,'A km-óra nem csökkenhet.');
   check(!details.exists()||mileage>=details.data().data.mileage,'A km-óra nem csökkenhet.');
   const assignment={vehicleId,driverId,active:action==='checkout',mileage,operationId:event.id};

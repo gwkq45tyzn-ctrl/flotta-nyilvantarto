@@ -54,7 +54,8 @@ function render(){
     form.elements.vehicleId.value=a.vehicleId;
     form.elements.driverId.value=a.driverId;
     form.elements.action.value='return';
-    form.elements.date.value=today();
+    const issued=data.fleetMovements.find(m=>m.id===a.operationId);
+    form.elements.date.value=issued?.date>today()?issued.date:today();
     form.elements.mileage.value=String(a.mileage);
     $('movementMessage').textContent='Visszavétel előkészítve: '+a.vehicleId+' / '+a.driverId+'. Ellenőrizd a valós km-órát, majd mentsd a műveletet.';
     form.scrollIntoView({block:'center'});
