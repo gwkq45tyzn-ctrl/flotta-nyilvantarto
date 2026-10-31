@@ -6,7 +6,7 @@ const html=read('./index.html'),app=read('./report-app.mjs');
 const engine=read('./xlsx-lite.mjs'),stats=read('./report-statistics.mjs');
 const rules=read('../../../depokapacitas/firestore.rules');
 assert.match(menu,/id="reportsLink"/);
-for(const name of ['reports/index.html','reports/report-app.mjs','reports/report-core.mjs','reports/xlsx-lite.mjs','reports/report-statistics.mjs','reports/inventory-statistics.mjs'])
+for(const name of ['reports/index.html','reports/report-app.mjs','reports/report-core.mjs','reports/xlsx-lite.mjs','reports/report-statistics.mjs','reports/inventory-statistics.mjs','reports/report-api-config.mjs'])
  assert.ok(builder.includes("'staging/imile-management/"+name+"'"),'not packaged: '+name);
 assert.doesNotMatch(builder,/^\s*'staging\/imile-management\/reports\/report-xlsx\.mjs',/m);
 assert.doesNotMatch(html,/cdn\.jsdelivr|exceljs@|<script.*src="https?:/i);
@@ -17,16 +17,23 @@ assert.match(app,/getDocFromServer/);assert.match(app,/getDocsFromServer/);
 assert.match(app,/allowedProfile/);
 assert.match(app,/firebaseConfig\.projectId!=='imile-management-staging'/);
 assert.match(app,/readXlsxFirstSheet/);assert.match(app,/writeReportXlsx/);
-assert.match(app,/runTransaction\(/);assert.match(app,/lastAuditId/);
-assert.match(app,/snapshotHash/);assert.match(app,/approve/);
-assert.match(app,/performanceDays/);assert.match(app,/performanceAudits/);
-assert.match(app,/inventoryDays/);assert.match(app,/inventoryAudits/);
-assert.doesNotMatch(app,/\b(?:fetch|XMLHttpRequest)\s*\(/);
+assert.doesNotMatch(app,/\b(?:runTransaction|setDoc|updateDoc|writeBatch|deleteDoc)\s*\(/);
+assert.match(app,/getIdToken/);assert.match(app,/reportApiReady/);
+assert.match(app,/\/v1\/reports\/save/);assert.match(app,/\/v1\/reports\/version/);
+assert.match(app,/approve/);
+assert.match(app,/performanceDays/);
+assert.match(app,/inventoryDays/);
+assert.match(app,/fetch\(/);assert.doesNotMatch(app,/XMLHttpRequest\s*\(/);
 assert.doesNotMatch(engine,/\b(?:fetch|XMLHttpRequest)\s*\(/);
 assert.match(engine,/mergeCells|mergeCells/);assert.match(engine,/Grand Total/);
 assert.match(rules,/match \/performanceDays\/\{id\}/);
 assert.match(rules,/match \/performanceAudits\/\{id\}/);
 assert.match(rules,/match \/inventoryDays\/\{id\}/);
 assert.match(rules,/match \/inventoryAudits\/\{id\}/);
-assert.match(rules,/getAfter\(\/databases/);
-console.log('PASS: vendor-free XLSX, internal auth, report dashboard and staged atomic audit wiring');
+for(const collection of ['performanceDays','inventoryDays','performanceAudits','inventoryAudits','performanceVersions','inventoryVersions']){
+ const block=rules.split('match /'+collection+'/{id} {')[1];
+ assert.ok(block,'missing '+collection);
+ assert.match(block.slice(0,280),/allow create, update, delete: if false/);
+}
+assert.doesNotMatch(builder,/reports\/server\/report-http-api\.mjs/);
+console.log('PASS: offline XLSX, fail-closed report API and no direct Firestore report writes');
