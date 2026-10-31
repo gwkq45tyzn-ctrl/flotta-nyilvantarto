@@ -98,7 +98,11 @@ export function previewObservedSource({kind,rawMatrix,scope,candidate=null}={}){
   !dateValid(scope.date)||!validStation(scope.station))
   throw Error('explicit_scope_required');
  if(!bounded(rawMatrix))return reject(kind,scope,0,'invalid_source_matrix_or_limits');
- const sourceRows=rawMatrix.slice(1).filter(r=>r.some(v=>v!==null&&v!==undefined&&v!=='')).length;
+ // report-core skips blank rows. Preserve the real Excel line indexes in
+ // diagnostic output even when the source contains blank/whitespace rows.
+ const filledLines=rawMatrix.map((row,i)=>({row,line:i+1})).slice(1)
+  .filter(x=>x.row.some(v=>pvalue(v)!==''));
+ const sourceRows=filledLines.length;
  const headers=headMap(rawMatrix,kind);
  if(!headers)return reject(kind,scope,sourceRows,'observed_schema_mismatch');
  const wrongTypes=typeIssues(rawMatrix,kind,headers);
@@ -108,9 +112,11 @@ export function previewObservedSource({kind,rawMatrix,scope,candidate=null}={}){
  catch{return reject(kind,scope,sourceRows,'raw_source_schema_invalid');}
  if(full.status!=='ready'){
   const issues=full.issues||[];
+  const actualLine=reported=>filledLines[reported-2]?.line??reported;
   const mapped=kind==='inhub'?issues.map(x=>({
-   line:x.line,reason:issueForInhub(rawMatrix,x.line,x.reason,headers)
-  })):issues.map(x=>({line:x.line,reason:x.reason}));
+   line:actualLine(x.line),
+   reason:issueForInhub(rawMatrix,actualLine(x.line),x.reason,headers)
+  })):issues.map(x=>({line:actualLine(x.line),reason:x.reason}));
   return reject(kind,scope,sourceRows,'raw_source_'+full.status,mapped);
  }
  if(kind==='ofd'){
@@ -133,9 +139,8 @@ export function previewObservedSource({kind,rawMatrix,scope,candidate=null}={}){
    origin:'local-matrix-not-provider-attested'
   });
  }
- const selected=rawMatrix.slice(1).filter(row=>row.some(v=>
-  v!==null&&v!==undefined&&v!=='')&&
-  row[headers.get('Inventory Station')]===scope.station);
+ const selected=filledLines.filter(x=>
+  x.row[headers.get('Inventory Station')]===scope.station).map(x=>x.row);
  const selectedSourceRows=selected.length;
  if(!selectedSourceRows)return reject(kind,scope,sourceRows,'scope_not_found');
  let g;
