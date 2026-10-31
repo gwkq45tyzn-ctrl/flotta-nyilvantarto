@@ -28,6 +28,14 @@ function syncAttendance(){
       .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
     const vehicleIndex=header.findIndex(x=>
       ['vehicleplate','vehicleid','licenseplate','rendszam','autorendszama'].includes(normHeader(x)));
+    // Separate pickup, return or shared "Odometer" source columns are optional.
+    // No columns or form questions are created or modified in the source.
+    const pickupIndex=header.findIndex(x=>
+      ['pickupodometer','pickupkm','atvetelikm','atvetelikilometerora','atvetelikilometeroraallas'].includes(normHeader(x)));
+    const returnIndex=header.findIndex(x=>
+      ['returnodometer','returnkm','visszaadasikm','visszaadasikilometerora','visszaadasikilometeroraallas'].includes(normHeader(x)));
+    const sharedOdometerIndex=header.findIndex(x=>
+      ['odometer','odometerreading','mileage','kilometeroraallas','aktualiskilometeroraallas'].includes(normHeader(x)));
     const raw=sheet.getRange(first,1,last-first+1,columns).getValues();
     const display=sheet.getRange(first,1,last-first+1,columns).getDisplayValues();
     let writes=[];
@@ -62,8 +70,23 @@ function syncAttendance(){
           fields.vehicleId=vehicleId;
         }
       }
+      const odometerIndex=type==='Log In'
+        ? (pickupIndex>=0?pickupIndex:sharedOdometerIndex)
+        : (returnIndex>=0?returnIndex:sharedOdometerIndex);
+      if(odometerIndex>=0){
+        const odometer=parseAttendanceOdometer(r[odometerIndex],v[odometerIndex]);
+        if(odometer!==null){
+          fields[type==='Log In'?'pickupOdometer':'returnOdometer']=odometer;
+        }else if(String(v[odometerIndex]||'').trim()){
+          console.warn('Hibás kilométeróra-adat, sor: '+(first+i));
+        }
+      }
       const firestoreFields={};
-      for(const key in fields)firestoreFields[key]=typeof fields[key]==='boolean'?{booleanValue:fields[key]}:{stringValue:fields[key]};
+      for(const key in fields){
+        const value=fields[key];
+        firestoreFields[key]=typeof value==='boolean'?{booleanValue:value}:
+          typeof value==='number'?{integerValue:String(value)}:{stringValue:value};
+      }
       writes.push({update:{name:'projects/'+DEPO_PROJECT_ID+'/databases/(default)/documents/attendance/'+id,fields:firestoreFields}});
     }
     const endpoint='https://firestore.googleapis.com/v1/projects/'+DEPO_PROJECT_ID+'/databases/(default)/documents:commit';
@@ -79,6 +102,18 @@ function syncAttendance(){
     props.setProperty(DEPO_WATERMARK,String(last+1));
     console.log('Szinkronizált sorok: '+raw.length+' / mentett események: '+writes.length);
   }finally{lock.releaseLock();}
+}
+function parseAttendanceOdometer(raw,display){
+  // Only an exact nonnegative integer is accepted. Never round an odometer,
+  // interpret a decimal as a thousands separator or fabricate a missing value.
+  if(raw===undefined||raw===null||raw==='')return null;
+  if(typeof raw==='number'){
+    return Number.isSafeInteger(raw)&&raw>=0&&raw<=100000000?raw:null;
+  }
+  const s=String(display??raw).trim().replace(/[ \\u00a0\\u202f]/g,'');
+  if(!/^\\d{1,9}$/.test(s))return null;
+  const number=Number(s);
+  return Number.isSafeInteger(number)&&number<=100000000?number:null;
 }
 function formatDisplayTimestamp(s){
   // A Google Forms MM/DD/YYYY vagy M/D/YYYY formátumot írhat ki.
