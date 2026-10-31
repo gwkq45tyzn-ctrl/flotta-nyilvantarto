@@ -59,6 +59,8 @@ jobs:
         run: |
           node staging/imile-management/attendance-handover.test.mjs
           node staging/imile-management/attendance-integration.test.mjs
+      - name: Közös napi teendők és Flotta figyelmeztetések ellenőrzése
+        run: node staging/imile-management/central-alerts.test.mjs
       - name: Közös belépés és izolált preview tesztje
         run: |
           node staging/imile-management/session-policy.test.mjs
