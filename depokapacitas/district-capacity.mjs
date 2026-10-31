@@ -8,8 +8,11 @@ import {assessBooking} from './capacity-eligibility.mjs';
 const district=v=>String(v??'').trim().toLocaleUpperCase('hu-HU').replaceAll('/','-');
 const validCount=v=>Number.isSafeInteger(v)&&v>=0&&v<=10000000;
 const add=(map,key,value)=>map.set(key,(map.get(key)||0)+value);
-const validDate=v=>/^20\d\d-\d\d-\d\d$/.test(String(v))&&
-  new Date(v+'T12:00:00Z').toISOString().slice(0,10)===v;
+const validDate=v=>{
+  if(!/^20\d\d-\d\d-\d\d$/.test(String(v)))return false;
+  const parsed=new Date(v+'T12:00:00Z');
+  return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===v;
+};
 
 /**
  * Verify a parcel-level daily manifest before using it to replace manually
