@@ -51,6 +51,7 @@ jobs:
           node staging/imile-management/reports/server/raw-export-reconciliation.test.mjs
           node staging/imile-management/reports/real-export-compatibility.test.mjs
           node staging/imile-management/reports/server/readonly-source-preflight.test.mjs
+          node staging/imile-management/reports/server/physical-row-diagnostics.test.mjs
           node --check staging/imile-management/reports/server/readonly-source-preflight.mjs
           node --check staging/imile-management/reports/server/raw-export-reconciliation.mjs
           node staging/imile-management/reports/server/report-http-api.test.mjs

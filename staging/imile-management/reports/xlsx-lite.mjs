@@ -2,6 +2,7 @@
  * Handles typical ZIP-stored and DEFLATE-compressed .xlsx exports, shared strings
  * and scalar worksheet cells. Does not evaluate formulas, execute code or upload.
  * Rejects unexpected workbook structure; NOT a full OOXML implementation. */
+import {completePhysicalExcelRows} from './physical-excel-rows.mjs';
 const te=new TextEncoder(),td=new TextDecoder('utf-8',{fatal:true});
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'');
 const cv=x=>x==null?'':x instanceof Date?x.toISOString().slice(0,10):String(x);
@@ -132,6 +133,7 @@ export async function readXlsxFirstSheet(data){
  const result=[];
  for(const row of sheetData.getElementsByTagName('row')){
   const ri=Number(row.getAttribute('r'))-1;if(!Number.isInteger(ri)||ri<0||ri>10001)throw Error('Túl nagy Excel-tábla.');
+  if(Object.hasOwn(result,ri))throw Error('Ismételt Excel-sorszám.');
   const values=[];
   for(const c of row.getElementsByTagName('c')){
    const ref=c.getAttribute('r')||'',m=/^([A-Z]+)\d+$/.exec(ref);if(!m)continue;
@@ -148,5 +150,5 @@ export async function readXlsxFirstSheet(data){
   result[ri]=values;
  }
  if(!result.length||!result[0])throw Error('Üres Excel-export.');
- return result.map(r=>r||[]);
+ return completePhysicalExcelRows(result);
 }
