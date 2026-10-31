@@ -10,7 +10,8 @@ const candidate=(delivered=8)=>({key,date,station,rows:[
 class FirestoreFake{
  constructor(){this.docs=new Map([['users/editor',{active:true,role:'editor'}],
  ['users/viewer',{active:true,role:'viewer'}],
- ['users/inactive',{active:false,role:'editor'}]]);}
+ ['users/inactive',{active:false,role:'editor'}],
+ ['users/admin',{active:true,role:'admin'}]]);}
  doc(path){return {path,get:async()=>this.read(path)};}
  read(path){return {exists:this.docs.has(path),data:()=>structuredClone(this.docs.get(path))};}
  async runTransaction(fn){
@@ -79,6 +80,39 @@ await check('unknown daily report gives absent current version',async()=>{
  const r=await json(await api(req('GET','/v1/reports/current?kind=ofd&date=2099-04-04'+
   '&station=DS(AKE)')));
  assert.equal(r.status,200);assert.equal(r.body.exists,false);
+});
+await check('restore endpoint requires explicit approval',async()=>{
+ active='admin';
+ const p={kind:'ofd',date,station,fromVersion:1,expectedVersion:2,
+  reason:'Synthetic administrative rollback test',confirmed:false};
+ const r=await json(await api(req('POST','/v1/reports/restore',p)));
+ assert.equal(r.status,400);
+});
+await check('admin restore rejects earlier provisional after final',async()=>{
+ // Current v2 is provisional, so the version can be restored safely.
+ active='admin';
+ const p={kind:'ofd',date,station,fromVersion:1,expectedVersion:2,
+  reason:'Synthetic administrative rollback test',confirmed:true};
+ const r=await json(await api(req('POST','/v1/reports/restore',p)));
+ assert.equal(r.status,200);assert.equal(r.body.result.version,3);
+ const history=db.docs.get('performanceVersions/'+archiveId(key,3));
+ assert.equal(history.restoredFromVersion,1);
+ assert.equal(db.docs.get('performanceDays/'+key).totalDelivered,8);
+ assert.equal(db.docs.get('performanceVersions/'+archiveId(key,2)).rows[0].delivered,9);
+});
+await check('restore requires the admin role even when editor can save',async()=>{
+ active='editor';
+ const p={kind:'ofd',date,station,fromVersion:2,expectedVersion:3,
+  reason:'Synthetic administrative rollback test',confirmed:true};
+ const r=await json(await api(req('POST','/v1/reports/restore',p)));
+ assert.equal(r.status,403);
+});
+await check('restore cannot use stale report revision',async()=>{
+ active='admin';
+ const p={kind:'ofd',date,station,fromVersion:2,expectedVersion:2,
+  reason:'Synthetic administrative rollback test',confirmed:true};
+ const r=await json(await api(req('POST','/v1/reports/restore',p)));
+ assert.equal(r.status,409);
 });
 await check('viewer reads archived historical details',async()=>{
  active='viewer';
