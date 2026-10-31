@@ -51,6 +51,8 @@ test('plan district absent from parcel list is not a verified zero',()=>{
  const r=check(p([row('A')]),[demand('IX.'),demand('X.',0,0)]);
  assert.equal(r.status,'preview-differences');
  assert.equal(r.rows.find(x=>x.district==='X.').status,'missing_parcel_district');
+ assert.equal(r.totals.previewNew,null);
+ assert.equal(r.totals.previewRetry,null);
 });
 test('duplicate demand entries blocked from matching',()=>{
  const r=check(p([row('A')]),[demand(),demand()]);

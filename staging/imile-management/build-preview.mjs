@@ -43,7 +43,7 @@ const allowed=[
   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
-  'depokapacitas/parcel-preview.mjs',
+  'depokapacitas/parcel-demand-qa.mjs','depokapacitas/parcel-demand-reconciliation.mjs','depokapacitas/parcel-preview.mjs',
   'depokapacitas/parcel-preview-app.mjs'
 ];
 for(const p of allowed)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);

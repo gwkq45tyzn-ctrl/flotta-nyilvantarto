@@ -1,3 +1,4 @@
+import {runSyntheticDemandQa} from './parcel-demand-qa.mjs';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,getDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
@@ -8,7 +9,7 @@ import {decodeCsv} from './import-encoding.mjs';
 const $=id=>document.getElementById(id),make=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);return e;};
 let allowed=false,last=null,source='Kézzel megadott minta',sequence=0;
 $('previewDate').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-function invalidate(){sequence++;last=null;$('result').hidden=true;$('downloadAudit').disabled=true;}
+function invalidate(){sequence++;$('qaComparisonResult').hidden=true;last=null;$('result').hidden=true;$('downloadAudit').disabled=true;}
 for(const id of ['previewInput','previewDate','previewFormat'])$(id).addEventListener('input',()=>{invalidate();if(id==='previewInput')source='Kézzel megadott minta';});
 $('loadSample').onclick=()=>{invalidate();source='Beépített mesterséges minta';$('previewFormat').value='csv';const d=$('previewDate').value;$('previewInput').value='date,trackingId,district,kind\n'+d+',SYN0001,IX.,new\n'+d+',SYN0001,IX.,new\n'+d+',SYN0002,IX.,retry\n'+d+',SYN0003,X.,new';$('inputMessage').textContent='Mesterséges minta betöltve; még nincs ellenőrzött eredmény.';};
 $('previewFile').onchange=async event=>{
@@ -32,8 +33,24 @@ $('downloadAudit').onclick=()=>{if(!allowed||!last)return;const url=URL.createOb
 if(firebaseConfig.projectId!=='imile-management-staging')$('access').textContent='Nem staging konfiguráció: a működés tiltva.';
 else{
  const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);let generation=0;
- onAuthStateChanged(auth,async user=>{const rev=++generation;allowed=false;$('controls').hidden=true;invalidate();$('previewInput').value='';$('previewFile').value='';$('inputMessage').textContent='';source='Kézzel megadott minta';if(!user){window.location.replace('../staging/imile-management/index.html');return;}
-  try{const profile=(await getDoc(doc(db,'users',user.uid))).data();if(rev!==generation)return;if(!allowedProfile(profile)){$('access').textContent='Nincs aktív belső jogosultság.';return;}allowed=true;$('controls').hidden=false;$('access').textContent='Hozzáférés: '+profile.role+' · csak olvasó előnézet';}
+ onAuthStateChanged(auth,async user=>{const rev=++generation;allowed=false;$('controls').hidden=true;$('comparisonQa').hidden=true;invalidate();$('previewInput').value='';$('previewFile').value='';$('inputMessage').textContent='';source='Kézzel megadott minta';if(!user){window.location.replace('../staging/imile-management/index.html');return;}
+  try{const profile=(await getDoc(doc(db,'users',user.uid))).data();if(rev!==generation)return;if(!allowedProfile(profile)){$('access').textContent='Nincs aktív belső jogosultság.';return;}allowed=true;$('controls').hidden=false;$('comparisonQa').hidden=false;$('access').textContent='Hozzáférés: '+profile.role+' · csak olvasó előnézet';}
   catch{$('access').textContent='A hozzáférés nem ellenőrizhető. A helyi adatokat nem jelenítjük meg.';}
  });
 }
+
+const qaStates={'preview-match':'Mesterséges minta: egyezés','preview-differences':'Mesterséges minta: eltérések',blocked:'Mesterséges minta: összehasonlítás tiltva','source-untrusted':'Mesterséges minta: adatforrás nem hiteles'};
+const rowStates={match:'Egyezés',count_mismatch:'Darabszámeltérés',missing_plan_district:'Hiányzó terv',duplicate_plan_district:'Duplikált terv',missing_parcel_district:'Hiányzó csomagkerület',invalid_plan_counts:'Hibás terv'};
+$('qaScenario').onchange=invalidate;
+$('runComparisonQa').onclick=()=>{
+ if(!allowed)return;
+ invalidate();const qa=runSyntheticDemandQa($('qaScenario').value);
+ $('previewDate').value=qa.date;$('previewFormat').value='json';$('previewFile').value='';$('previewInput').value=qa.text;
+ source='Beépített szintetikus QA';$('inputMessage').textContent='Csak a beépített mesterséges lista és terv lett összevetve. A forrásállapot szimulált.';
+ last={...qa.preview,checkedAt:new Date().toISOString()};render(last);
+ const result=qa.comparison;$('qaComparisonStatus').textContent=qaStates[result.status];$('qaComparisonStatus').dataset.status=result.status;
+ $('qaComparisonRows').replaceChildren();
+ for(const row of result.rows){const tr=make('tr');for(const value of [row.district,row.previewNew,row.previewRetry,row.planNew,row.planRetry,row.newDelta,row.retryDelta,rowStates[row.status]])tr.append(make('td',value===null?'—':value));$('qaComparisonRows').append(tr);}
+ if(!result.rows.length){const tr=make('tr'),td=make('td','Nincs összehasonlítható eredmény.');td.colSpan=8;tr.append(td);$('qaComparisonRows').append(tr);}
+ $('qaComparisonResult').hidden=false;
+};

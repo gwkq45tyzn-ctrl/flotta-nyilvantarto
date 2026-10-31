@@ -105,8 +105,8 @@ export function compareParcelPreviewToDemands(preview,demands,
     matchCount:matches,mismatchCount:rows.length-matches,
     rows,
     totals:{
-      previewNew:rows.reduce((sum,r)=>sum+(r.previewNew??0),0),
-      previewRetry:rows.reduce((sum,r)=>sum+(r.previewRetry??0),0),
+      previewNew:rows.every(r=>r.previewNew!==null)?rows.reduce((sum,r)=>sum+r.previewNew,0):null,
+      previewRetry:rows.every(r=>r.previewRetry!==null)?rows.reduce((sum,r)=>sum+r.previewRetry,0):null,
       planNew:rows.every(r=>r.planNew!==null)?rows.reduce((s,r)=>s+r.planNew,0):null,
       planRetry:rows.every(r=>r.planRetry!==null)?rows.reduce((s,r)=>s+r.planRetry,0):null
     },

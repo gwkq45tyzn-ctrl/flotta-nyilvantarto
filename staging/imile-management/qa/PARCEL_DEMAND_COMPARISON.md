@@ -57,3 +57,25 @@ adatbázis-/hálózatmentes függvény. Képes a #5 ellenőrzött csomaglista
    fejlesztve, sem engedélyezve nincs.
 
 **Nincs deployment vagy production merge ebben a munkafolyamatban.**
+
+
+## #9 felületi előkészítés – csak mesterséges QA
+
+A meglévő parcel-preview.html ugyanazon az oldalon kapott egy QA-panelt. Kizárólag hét beépített forgatókönyv hoz létre mesterséges csomaglistát és tervet: egyezés, eltérés, hiányzó terv, duplikált terv, hiányzó csomagkerület, csomagütközés, nem hiteles forrás. A lista ugyanazon previewParcelImport feldolgozón és eredménynézeten halad át. A kézzel megadott vagy feltöltött tartalom nem továbbítható a comparatorba. Az eredmény és a szimulált forrásállapot feltűnően QA-jelölésű. Nincs Firestore demands-lekérdezés vagy írás ebben az új folyamatban; az eredeti belső Auth/profile olvasás változatlan. Aktív admin/editor/viewer láthatja, jogosulatlan/inaktív felhasználó nem.
+
+Bemenet-, dátum-, formátum- vagy forgatókönyv-váltás, illetve Auth-változás elrejti az elavult összehasonlítást. A #5 normál előnézeti exportja nem exportál összehasonlítást vagy üzemi hitelesítést. A #6 előrejelzőt és a source-health logikát nem módosítottuk. Az adapter továbbra sincs bekötve valós exporthoz. A hiányzó csomagkerület az összesített previewNew/previewRetry értékeket is ismeretlenné teszi, nem részösszeget mutat teljesként.
+
+## Még szükséges konkrét adatgazda-döntések
+
+1. Pontos, verziózott export/API szerződés: oszlopnevek, típusok, kódolás, formátum, fájl-/sorkorlát, kötelező/elhagyható mezők. Puszta fejléc-hasonlóság nem jóváhagyás.
+2. Melyik mező az állandó csomagazonosító; újracímkézés, több csomagrész és több kézbesítési kísérlet hogyan különül el? A tracking ID szöveg marad, kezdő nullával.
+3. Azonosítók kis-/nagybetűje, szóközei és karakterei jelentéshordozók-e; exact/uppercase és preserve/trim közül melyik a jóváhagyott? Addig nincs valós default.
+4. A napi dátum jelentése: tervezett kiszállítás, depóba érkezés vagy eseménynap? Időzóna, napi zárás, másnapra vitt csomag, késve érkező javítás és jövőbeli rekord kezelése.
+5. Pontos forrásstátusz → new/retry megfeleltetés, átfedés nélkül. Mi történjen törölt, visszavont, már kézbesített vagy több eseményes csomagnál?
+6. Kerület/település/körzet azonossága, telephely, aliasok és kerületváltás jóváhagyott szabálya. Nem Budapest numerikus kóddá alakítása tilos automatikusan.
+7. A fájl teljes napi állomány vagy részhalmaz/delta? Hogyan igazolható a teljesség, és mikor jelent valóban nullát a hiányzó sor? A QA nem következtet nullára.
+8. Hiteles forráskeletkezési idő, maximális elfogadott késés, forrásverzió és hibajelzés. A Firestore szerveri visszaigazolás önmagában nem a fájl frissessége.
+9. Ki jogosult olvasni és jóváhagyni a terveltérést, mely telephelyre? Adatminimalizálás, nyers ID-k/állományok tárolási és törlési szabálya, audit és felelős adatgazda.
+10. Eltérés/konfliktus esetén kézi döntési folyamat; melyik forrás elsődleges, ki javíthat és hogyan verziózott az újraszámítás? Nincs automatikus felülírás.
+
+Következő fejlesztés: a jóváhagyott verziózott kontraktussal a #8 explicit adaptert az egyetlen előnézethez kötni, majd jogosultsággal olvasott, friss demands-pillanatképpel összehasonlítani és mobil/desktop E2E-ben tesztelni. Továbbra is csak olvasás; tényleges import külön szerveroldali egyediségi/tranzakciós/audit feladat.

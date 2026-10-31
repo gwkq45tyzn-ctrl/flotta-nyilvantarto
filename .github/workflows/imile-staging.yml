@@ -41,6 +41,7 @@ jobs:
           node staging/imile-management/next-day.integration.test.mjs
           node depokapacitas/parcel-source-adapter.test.mjs
           node depokapacitas/parcel-demand-reconciliation.test.mjs
+          node depokapacitas/parcel-demand-qa.test.mjs
           node depokapacitas/source-health.test.mjs
           node depokapacitas/parcel-preview.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
