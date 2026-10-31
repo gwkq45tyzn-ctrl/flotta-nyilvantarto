@@ -50,6 +50,7 @@ jobs:
           node staging/imile-management/reports/server/trusted-report-validation.test.mjs
           node staging/imile-management/reports/server/report-http-api.test.mjs
           node --check staging/imile-management/reports/server/report-http-api.mjs
+          node --check staging/imile-management/reports/server/private-server-entry.mjs
           node --check staging/imile-management/reports/server/trusted-report-validation.mjs
           node staging/imile-management/reports/xlsx-lite.test.mjs
           node staging/imile-management/reports/report-integration.test.mjs
