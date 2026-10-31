@@ -32,7 +32,7 @@ assert.equal(r.comparisonStatus,'mismatch');
 assert.equal(r.comparisons[1].status,'missing_aggregate');
 r=calc(rows,{storedDemands:[...stored,{...stored[0]}]});
 assert.equal(r.comparisonStatus,'mismatch');
-assert.equal(r.comparisons[0].status,'mismatch');
+assert.equal(r.comparisons[0].status,'duplicate_aggregate');
 r=calc(rows,{sourceReady:false});
 assert.equal(r.comparisonStatus,'source_unavailable');
 r=calc([{...rows[0],'Dátum':'2026-11-03'}]);
