@@ -135,6 +135,17 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "Firebase Hosting: a GitHub staging service-account secret hiányzik, csak ellenőrzött preview artifact készült. Semmilyen éles telepítés nem történt." >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Firestore szabályok telepítése – kizárólag staging projekt
+        if: github.event_name == 'push' && github.ref == 'refs/heads/staging/imile-management-integration' && steps.hosting_permission.outputs.enabled == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_STAGING: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_IMILE_MANAGEMENT_STAGING }}
+        run: |
+          umask 077
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_STAGING" > "$KEY_FILE"
+          export GOOGLE_APPLICATION_CREDENTIALS="$KEY_FILE"
+          npx --yes firebase-tools@15.34.2 deploy --only firestore:rules --project imile-management-staging --config firebase.depo-qa.json --non-interactive
       - name: Firebase Hosting előnézet publikálása – csak staging csatorna
         if: github.event_name == 'push' && steps.hosting_permission.outputs.enabled == 'true'
         id: deploy_preview
