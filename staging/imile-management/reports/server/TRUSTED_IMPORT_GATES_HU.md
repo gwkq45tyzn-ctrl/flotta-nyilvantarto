@@ -13,6 +13,7 @@
   - `POST /v1/reports/save` – ellenőrzött, verziózott egyetlen nap/depó mentése;
   - `GET /v1/reports/current` – jelenlegi verzió lekérése optimista csere előtt;
   - `GET /v1/reports/version` – korábbi teljes riportverzió lekérése.
+  - `POST /v1/reports/restore` – admin jogosultságú, kötelező indokkal és ismert jelenlegi verzióval működő, auditált visszaállítás; a régi archívum változatlan marad.
 - `private-server-entry.mjs`: külön futtatható, alaphelyzetben **letiltott** privát Node/Firebase Admin kiszolgáló-belépési pont. Nincs csomagolva a Firebase Hostingba.
 - `report-app.mjs`: megszűnt a közvetlen kliensoldali Firestore-riportírás. Kizárólag az engedélyezett API-n menthet; egyetlen nap/depó egységet kezel atomikusan. A korábbi verziót explicit jóváhagyással lehet javítani.
 - `report-api-config.mjs`: az API URL alaphelyzetben üres. Ezért API-telepítés nélkül a mentés és történeti API-lekérdezés letiltott, **az Excel-riport készítése és letöltése továbbra is működik**.
@@ -25,7 +26,7 @@ A CI szintetikus validációs, API, idempotencia, archive és Firestore-emuláto
 
 **Fontos:** a szerver jelenleg a beküldött részletes aggregátumok **belső következetességét** igazolja. Nem bizonyítja, hogy azok ténylegesen az eredeti iMile exportból keletkeztek. Ezt kizárólag jóváhagyott, független forrásadapter vagy a szerver által hitelesen feldolgozott nyers export alapján lehet majd igazolni.
 
-A teljes verzióarchívum garantálja, hogy a korábbi `v1`/`v2` rekordok és futáradatok visszaolvashatók; az újabb változat nem írja felül őket. Visszaállító írás külön jogosultság- és jóváhagyásvédett műveletként fejlesztendő, **nem** automatikus.
+A teljes verzióarchívum garantálja, hogy a korábbi `v1`/`v2` rekordok és futáradatok visszaolvashatók; az újabb változat nem írja felül őket. A visszaállító írás külön **admin** szerepkörhöz, konkrét indokhoz és ismert előző verzióhoz kötött szerveres műveletként már elkészült a fejlesztői ágon, de továbbra sem automatikus, és nincs telepítve.
 
 ## Automatizált kiadási ellenőrző
 
