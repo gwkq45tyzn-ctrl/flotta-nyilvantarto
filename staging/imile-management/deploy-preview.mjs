@@ -41,6 +41,10 @@ run(process.execPath,['staging/imile-management/build-preview.mjs']);
 const npx=process.platform==='win32'?'npx.cmd':'npx';
 console.log('Firebase-bejelentkezés a saját böngésződben; jelszót a script nem kér és nem tárol.');
 run(npx,['--yes','firebase-tools','login'],{shell:process.platform==='win32'});
+console.log('Staging Firestore-szabályok ellenőrzött telepítése (csak '+project+').');
+run(npx,['--yes','firebase-tools@15.34.2','deploy',
+ '--only','firestore:rules','--project',project,'--config','firebase.depo-qa.json',
+ '--non-interactive'],{shell:process.platform==='win32'});
 console.log('Kizárólag '+project+' / '+channel+' preview csatorna következik. Nincs live deployment.');
 run(npx,['--yes','firebase-tools','hosting:channel:deploy',channel,
  '--project',project,'--expires','7d'],{cwd:output,shell:process.platform==='win32'});
