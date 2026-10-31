@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {validateTrustedReport,planTrustedRevision,archiveId,
- commitTrustedReport,hashText} from './trusted-report-validation.mjs';
+ commitTrustedReport,restoreTrustedReport,hashText} from './trusted-report-validation.mjs';
 
 const day='2099-04-03',station='DS(AKE)',key=day+'__DS(AKE)';
 const courier=(id='D1',ofd=10,delivered=8,vendor='QA')=>({
@@ -204,6 +204,35 @@ async function scenario(){
  assert.equal(inv.status,'committed');
  assert.ok(db.store.has('inventoryVersions/'+archiveId(key,1)));
  assert.equal(db.store.get('inventoryVersions/'+archiveId(key,1)).total,5);
+ const correctedInventory=inventory([{area:'IX.',counts:[3,3]}]);
+ const inv2=await commitTrustedReport(auth(db,'inhub',correctedInventory,
+  {status:null,allowReplace:true,expectedVersion:1}));
+ assert.equal(inv2.version,2);
+ const restored=await restoreTrustedReport({db,verifiedUid:'admin',kind:'inhub',
+  date:day,station,fromVersion:1,expectedVersion:2,
+  reason:'Synthetic QA approved restoration'});
+ assert.equal(restored.version,3);
+ assert.equal(db.store.get('inventoryVersions/'+archiveId(key,3)).total,5);
+ assert.equal(db.store.get('inventoryVersions/'+archiveId(key,3)).restoredFromVersion,1);
+ assert.equal(db.store.get('inventoryDays/'+key).total,5);
+ assert.equal(db.store.get('inventoryVersions/'+archiveId(key,2)).total,6);
+ assert.equal(db.store.get('inventoryAudits/'+restored.auditId).action,'restore');
+ await assert.rejects(()=>restoreTrustedReport({db,verifiedUid:'admin',kind:'inhub',
+  date:day,station,fromVersion:1,expectedVersion:2,
+  reason:'Synthetic QA approved restoration'}),/replacement_not_approved/);
+ // An editor can create reports, but restoration is admin-only.
+ db.store.set('users/admin',{role:'editor',active:true});
+ await assert.rejects(()=>restoreTrustedReport({db,verifiedUid:'admin',kind:'inhub',
+  date:day,station,fromVersion:2,expectedVersion:3,
+  reason:'Synthetic QA approved restoration'}),/report_write_forbidden/);
+ db.store.set('users/admin',{role:'admin',active:true});
+ const forged=db.store.get('inventoryVersions/'+archiveId(key,1));
+ db.store.set('inventoryVersions/'+archiveId(key,1),
+  {...forged,contentHash:'f'.repeat(64)});
+ await assert.rejects(()=>restoreTrustedReport({db,verifiedUid:'admin',kind:'inhub',
+  date:day,station,fromVersion:1,expectedVersion:3,
+  reason:'Synthetic QA approved restoration'}),/restore_archive_integrity_failed/);
+ db.store.set('inventoryVersions/'+archiveId(key,1),forged);
 }
 await scenario();passed++;
 console.log('PASS: '+passed+' server-only arithmetic validation, immutable history and revision tests');
