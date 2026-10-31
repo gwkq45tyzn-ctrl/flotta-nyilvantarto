@@ -37,6 +37,7 @@ jobs:
         run: |
           node depokapacitas/district-capacity.test.mjs
           node depokapacitas/district-capacity.integration.test.mjs
+          node depokapacitas/parcel-source-adapter.test.mjs
           node depokapacitas/source-health.test.mjs
           node depokapacitas/parcel-preview.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
