@@ -100,7 +100,7 @@ check('change from provisional to final creates a new revision',()=>{
  assert.equal(plan.version,2);assert.equal(plan.history.status,'final');
 });
 check('identical import does not produce another version',()=>{
- const prev={...ofd(),version:1,contentHash:validateTrustedReport('ofd',ofd()).contentHash,status:'provisional'};
+ const prev={...ofd(),version:1,validationSource:'trusted-server',contentHash:validateTrustedReport('ofd',ofd()).contentHash,status:'provisional'};
  const p=planTrustedRevision(params('ofd',ofd(),{previous:prev}));
  assert.equal(p.result,'unchanged');
 });
@@ -124,6 +124,32 @@ check('legacy source is preserved but explicitly unverified',()=>{
  const p=planTrustedRevision(params('ofd',ofd(),{previous:prev,allowReplace:true,expectedVersion:1}));
  assert.equal(p.legacy.validationSource,'legacy-unverified');
  assert.equal(p.history.validationSource,'trusted-server');
+});
+check('legacy same hash cannot launder unverified data into trusted',()=>{
+ const prev={...ofd(),version:1,contentHash:validateTrustedReport('ofd',ofd()).contentHash,
+  status:'provisional'};
+ assert.throws(()=>planTrustedRevision(params('ofd',ofd(),{previous:prev})),
+  /replacement_not_approved/);
+ const p=planTrustedRevision(params('ofd',ofd(),
+  {previous:prev,allowReplace:true,expectedVersion:1}));
+ assert.equal(p.result,'commit');assert.equal(p.version,2);
+ assert.equal(p.legacy.validationSource,'legacy-unverified');
+ assert.equal(p.current.validationSource,'trusted-server');
+});
+check('all inventory receive-day buckets bounded before database writes',()=>{
+ const dates=Array.from({length:180},(_,i)=>{
+  const d=new Date(Date.UTC(2099,0,1+i));
+  return d.toISOString().slice(0,10);
+ });
+ const areas=Array.from({length:60},(_,i)=>({area:'District-'+i,counts:Array(180).fill(0)}));
+ const over={key,date:day,station,dates,areas,total:0};
+ assert.throws(()=>validateTrustedReport('inhub',over),/invalid_areas/);
+});
+check('large history snapshot refused even with valid numerical totals',()=>{
+ const rows=Array.from({length:300},(_,i)=>({
+  daCode:'DA-'+i,daName:'A'.repeat(160),vendor:'V'.repeat(160),ofd:1,delivered:1}));
+ const candidate=ofd(rows);
+ assert.equal(validateTrustedReport('ofd',candidate).snapshot.courierCount,300);
 });
 check('version archive id deterministic and path safe',()=>{
  const name=archiveId('2099-04-03__DS%2FAKE',1);
