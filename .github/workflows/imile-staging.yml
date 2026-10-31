@@ -35,6 +35,8 @@ jobs:
         run: node depokapacitas/capacity-eligibility.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
+      - name: Magyar CSV karakterkódolások ellenőrzése
+        run: node depokapacitas/import-encoding.test.mjs
       - name: Importelőellenőrzés és duplikált rekordok tesztje
         run: node depokapacitas/import-validation.test.mjs
       - name: Google Attendance időpontok ellenőrzése

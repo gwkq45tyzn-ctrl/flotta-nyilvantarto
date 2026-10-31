@@ -36,6 +36,7 @@ const allowed=[
   'depokapacitas/firebase-config.js',
   'depokapacitas/import-dates.mjs',
   'depokapacitas/import-validation.mjs',
+  'depokapacitas/import-encoding.mjs',
   'depokapacitas/capacity-eligibility.mjs'
 ];
 for(const p of allowed)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);

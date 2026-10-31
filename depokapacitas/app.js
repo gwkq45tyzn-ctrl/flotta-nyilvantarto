@@ -7,6 +7,7 @@ import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
+import {decodeCsv} from './import-encoding.mjs';
 
 const $=id=>document.getElementById(id);
 const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[]},unsubscribe:[]};
@@ -95,7 +96,7 @@ async function removeRow(col,id){if(!canWrite())throw Error('Nincs jogosultság.
 async function cancelBooking(id){const ref=doc(db,'bookings',id);await runTransaction(db,async tx=>{const booking=await tx.get(ref);if(!booking.exists())throw Error('A foglalás már nem található.');const x=booking.data();tx.delete(ref);tx.delete(doc(db,'driverClaims',x.date+'__'+x.driverId));});toast('Foglalás feloldva.');}
 const lookup=(obj,...names)=>{const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();const entries=Object.entries(obj);for(const n of names){const f=entries.find(([k])=>normalize(k)===normalize(n));if(f)return f[1];}return '';};
 function keyed(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return 'r'+(h>>>0).toString(36)+'_'+s.length;}
-async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});const target=type==='attendance'&&(wb.SheetNames.find(x=>x.toLowerCase().includes('mobile attendance')))||wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
+async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const buffer=await file.arrayBuffer();const csv=/\.csv$/i.test(file.name);const wb=csv?XLSX.read(decodeCsv(buffer),{type:'string',raw:true,cellDates:false}):XLSX.read(buffer,{type:'array',cellDates:false});const target=type==='attendance'&&(wb.SheetNames.find(x=>x.toLowerCase().includes('mobile attendance')))||wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
 function requireValue(value,label){
  const v=String(value??'').trim();
  if(!v)throw Error('Hiányzik: '+label);

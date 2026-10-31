@@ -98,7 +98,8 @@ try{
    'staging/imile-management/shared-records.mjs',
    'depokapacitas/index.html','depokapacitas/app.js','depokapacitas/style.css',
    'depokapacitas/firebase-config.js','depokapacitas/import-dates.mjs',
-   'depokapacitas/import-validation.mjs','depokapacitas/capacity-eligibility.mjs'
+   'depokapacitas/import-validation.mjs','depokapacitas/capacity-eligibility.mjs',
+   'depokapacitas/import-encoding.mjs'
   ];
   for(const p of paths)assert.ok(existsSync(join(preview,p)),'Preview missing '+p);
   assert.ok(!existsSync(join(preview,'features')),'Live fleet features must not be copied');
