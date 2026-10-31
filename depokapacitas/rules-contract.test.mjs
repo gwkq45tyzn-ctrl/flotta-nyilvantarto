@@ -32,7 +32,10 @@ assert.match(rules,/data\.keys\(\)\.hasAll\(fields\)/);
 assert.match(rules,/data\.keys\(\)\.hasOnly\(fields\)/);
 
 for (const [name,body] of Object.entries({users,drivers,vehicles,capacities,demands,results,bookings,claims,attendance,sourceRows})){
-  assert.match(body,/exactFields\(request\.resource\.data,/,'Missing strict required-fields validation: '+name);
+  if(name==='attendance'){
+    assert.match(body,/request\.resource\.data\.keys\(\)\.hasAll\(/,'Missing required attendance keys');
+    assert.match(body,/request\.resource\.data\.keys\(\)\.hasOnly\(/,'Missing strict attendance keys');
+  }else assert.match(body,/exactFields\(request\.resource\.data,/,'Missing strict required-fields validation: '+name);
   assert.match(body,/allow (create|create, update): if (admin|editor)\(\)/,'Missing write authorization: '+name);
 }
 assert.match(drivers,/validDriverCode\(driverId\)/);
