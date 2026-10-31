@@ -21,7 +21,7 @@ test('explicit schema permits local preview only',()=>{
   assert.deepEqual(r.districts,[{district:'IX.',newCount:1,retryCount:1}]);
 });
 test('no mapping is always blocked',()=>{
-  const r=adaptParcelSource([row('001')]);
+  const r=adaptParcelSource([row('001')],{selectedDate:date});
   assert.equal(r.status,'blocked');
   assert.equal(r.uniqueCount,null);
   assert.equal(r.issues[0].reason,'mapping_missing');
