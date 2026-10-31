@@ -120,7 +120,7 @@ function checkPrevious(previous,kind,key){
  * and retained verbatim, never represented as independently server-verified.
  */
 export function planTrustedRevision({kind,candidate,previous=null,status=null,allowReplace=false,
- expectedVersion=null,actorUid,sourceName}){
+ expectedVersion=null,actorUid,sourceName,forceRevision=false}){
  if(!text(actorUid,128)||!text(sourceName,200))throw new Error('invalid_actor_or_source');
  const v=validateTrustedReport(kind,candidate),key=v.snapshot.key;
  if(kind==='ofd'&&!['provisional','final'].includes(status))
@@ -128,9 +128,12 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  if(kind==='inhub'&&status!==null)throw new Error('inventory_has_no_final_flag');
  checkPrevious(previous,kind,key);
  if(previous){
+  // Optimistic concurrency applies even to an otherwise identical retry.
+  if(expectedVersion!==null&&expectedVersion!==previous.version)
+   throw new Error('replacement_not_approved');
   // A browser-written legacy snapshot is NEVER upgraded to trusted by an
   // identical retry: explicitly approve a new server-validated revision.
-  if(previous.validationSource==='server-aggregates-only'&&
+  if(!forceRevision&&previous.validationSource==='server-aggregates-only'&&
    previous.contentHash===v.contentHash&&
    (kind==='inhub'||previous.status===status))
    return {result:'unchanged',version:previous.version,reportKey:key,contentHash:v.contentHash};
@@ -179,7 +182,8 @@ export async function commitTrustedReport({db,verifiedUid,kind,candidate,status=
   const record=await tx.get(ref);
   const previous=record.exists?record.data():null;
   const plan=planTrustedRevision({kind,candidate,previous,status,allowReplace,
-   expectedVersion,actorUid:verifiedUid,sourceName});
+   expectedVersion,actorUid:verifiedUid,sourceName,
+   forceRevision:restoreFromVersion!==null});
   if(plan.result==='unchanged')return {status:'unchanged',version:plan.version,key};
   const auditId=randomBytes(10).toString('hex').toUpperCase();
   const newHistoryRef=db.doc(hist+'/'+archiveId(key,plan.version));
