@@ -160,7 +160,8 @@ check('SHA256 deterministic',()=>assert.equal(hashText('a'),hashText('a')));
 
 class MemoryAdmin {
  constructor(){this.store=new Map();this.store.set('users/admin',{role:'admin',active:true});}
- doc(path){if(path.includes('//'))throw Error('bad path');return {path};}
+ doc(path){if(path.includes('//'))throw Error('bad path');return {path,
+  get:async()=>({exists:this.store.has(path),data:()=>structuredClone(this.store.get(path))})};}
  async runTransaction(fn){
   const reads=this.store;
   let wrote=false;
