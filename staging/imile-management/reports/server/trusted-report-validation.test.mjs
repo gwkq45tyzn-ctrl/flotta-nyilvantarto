@@ -100,7 +100,7 @@ check('change from provisional to final creates a new revision',()=>{
  assert.equal(plan.version,2);assert.equal(plan.history.status,'final');
 });
 check('identical import does not produce another version',()=>{
- const prev={...ofd(),version:1,validationSource:'trusted-server',contentHash:validateTrustedReport('ofd',ofd()).contentHash,status:'provisional'};
+ const prev={...ofd(),version:1,validationSource:'server-aggregates-only',contentHash:validateTrustedReport('ofd',ofd()).contentHash,status:'provisional'};
  const p=planTrustedRevision(params('ofd',ofd(),{previous:prev}));
  assert.equal(p.result,'unchanged');
 });
@@ -123,7 +123,7 @@ check('legacy source is preserved but explicitly unverified',()=>{
  const prev={...ofd(),version:1,contentHash:'a'.repeat(64),status:'provisional'};
  const p=planTrustedRevision(params('ofd',ofd(),{previous:prev,allowReplace:true,expectedVersion:1}));
  assert.equal(p.legacy.validationSource,'legacy-unverified');
- assert.equal(p.history.validationSource,'trusted-server');
+ assert.equal(p.history.validationSource,'server-aggregates-only');
 });
 check('legacy same hash cannot launder unverified data into trusted',()=>{
  const prev={...ofd(),version:1,contentHash:validateTrustedReport('ofd',ofd()).contentHash,
@@ -134,7 +134,7 @@ check('legacy same hash cannot launder unverified data into trusted',()=>{
   {previous:prev,allowReplace:true,expectedVersion:1}));
  assert.equal(p.result,'commit');assert.equal(p.version,2);
  assert.equal(p.legacy.validationSource,'legacy-unverified');
- assert.equal(p.current.validationSource,'trusted-server');
+ assert.equal(p.current.validationSource,'server-aggregates-only');
 });
 check('all inventory receive-day buckets bounded before database writes',()=>{
  const dates=Array.from({length:180},(_,i)=>{
