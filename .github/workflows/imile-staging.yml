@@ -46,11 +46,13 @@ jobs:
         run: |
           node staging/imile-management/reports/report-core.test.mjs
           node staging/imile-management/reports/report-statistics.test.mjs
+          node staging/imile-management/reports/inventory-statistics.test.mjs
           node staging/imile-management/reports/xlsx-lite.test.mjs
           node staging/imile-management/reports/report-integration.test.mjs
           node --check staging/imile-management/reports/report-app.mjs
           node --check staging/imile-management/reports/xlsx-lite.mjs
           node --check staging/imile-management/reports/report-statistics.mjs
+          node --check staging/imile-management/reports/inventory-statistics.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
       - name: Magyar CSV karakterkódolások ellenőrzése
