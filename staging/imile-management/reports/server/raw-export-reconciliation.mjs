@@ -13,13 +13,28 @@ import {validateTrustedReport} from './trusted-report-validation.mjs';
 
 const MAX_ROWS=10002;
 const MAX_COLS=100;
+const MAX_SOURCE_CELLS=150000;
+const MAX_SOURCE_BYTES=4*1024*1024;
+const MAX_CELL_BYTES=4096;
 const primitive=x=>x===null||typeof x==='string'||typeof x==='number'||
  typeof x==='boolean'||x instanceof Date||x===undefined;
 function ensureMatrix(matrix){
  if(!Array.isArray(matrix)||matrix.length<2||matrix.length>MAX_ROWS)
   throw Error('invalid_source_matrix');
- if(matrix.some(row=>!Array.isArray(row)||row.length>MAX_COLS||row.some(x=>!primitive(x))))
-  throw Error('invalid_source_cells');
+ let cells=0,bytes=0;
+ for(const row of matrix){
+  if(!Array.isArray(row)||row.length>MAX_COLS)throw Error('invalid_source_cells');
+  cells+=row.length;
+  if(cells>MAX_SOURCE_CELLS)throw Error('raw_source_limit_exceeded');
+  for(const value of row){
+   if(!primitive(value))throw Error('invalid_source_cells');
+   const length=Buffer.byteLength(value instanceof Date?String(value.getTime()):
+    value==null?'':String(value),'utf8');
+   if(length>MAX_CELL_BYTES)throw Error('raw_source_limit_exceeded');
+   bytes+=length;
+   if(bytes>MAX_SOURCE_BYTES)throw Error('raw_source_limit_exceeded');
+  }
+ }
  return matrix;
 }
 export function reconcileWithRawExport({kind,candidate,rawMatrix}={}){
