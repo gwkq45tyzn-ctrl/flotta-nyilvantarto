@@ -98,9 +98,15 @@ async function reportApi(path,{method='GET',payload=null}={}){
  return answer;
 }
 async function requestSave({kind,candidate,status=null,rev,identity,fileSource}){
+ const allowReplace=$('replaceApproved').checked;
+ let expectedVersion=null;
+ if(allowReplace){
+  const query=new URLSearchParams({kind,date:candidate.date,station:candidate.station}).toString();
+  const current=await reportApi('/v1/reports/current?'+query);
+  expectedVersion=current.exists?current.version:0;
+ }
  const reply=await reportApi('/v1/reports/save',{method:'POST',
-  payload:{kind,candidate,status,allowReplace:$('replaceApproved').checked,
-   expectedVersion:null,sourceName:fileSource}});
+  payload:{kind,candidate,status,allowReplace,expectedVersion,sourceName:fileSource}});
  if(rev!==revision||user?.uid!==identity||!authorized)throw Error('A munkamenet megváltozott.');
  return reply.result;
 }
