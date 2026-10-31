@@ -43,6 +43,14 @@
  </div>
  <button id="historyFetch" type="button" disabled>Archív verzió lekérdezése</button>
  <p id="historyResult" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
+ <div id="restoreOptions" hidden>
+  <h3>Admin: ellenőrzött visszaállítás</h3>
+  <p class="warning">A visszaállítás új, auditált riportverziót hoz létre. A korábbi adatok nem törlődnek. Csak a fenti gombbal előzőleg lekért, szerverileg összesítés-ellenőrzött változat állítható vissza.</p>
+  <label>Visszaállítás indoka<input id="restoreReason" type="text" maxlength="120" placeholder="Miért szükséges a korábbi riport visszaállítása?"></label>
+  <label class="check"><input id="restoreConfirm" type="checkbox"> Megtekintettem a korábbi teljes riportverziót és jóváhagyom az új, auditált visszaállítást.</label>
+  <button id="historyRestore" type="button" disabled>Korábbi riport biztonságos visszaállítása</button>
+  <p id="restoreResult" role="status" aria-live="polite"></p>
+ </div>
 </section>
 <section class="panel"><h2>Rögzített formátum</h2><p><strong>In-Hub:</strong> halványkék Excel-kimutatás; az LM Receive napjai az oszlopok, a District helyén Budapestnél kerület, máshol a település neve.</p><p><strong>OFD:</strong> sötétkék cím, világoskék fejléc, szürke futáradatok, vállalkozónként összevont cellák és teljesítményhez igazított piros/sárga/zöld jelzés. A District csak jóváhagyott napi adatból tölthető.</p></section>
 </main></body></html>
