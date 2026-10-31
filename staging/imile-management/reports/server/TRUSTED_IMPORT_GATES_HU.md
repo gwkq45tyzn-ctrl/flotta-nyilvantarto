@@ -60,3 +60,45 @@ függetlenül hitelesített eredeti iMile export, ezért a telepítési kapu
 7. Valós, vállalatilag jóváhagyott In-Hub és OFD nyers exportminták számozott forrásfejléc-/dátum-/ID-kontraktus vizsgálata, az Excel letölthető színmintáival és a napi 10 órai provisional státusszal.
 
 **Sem a GitHub `main`, sem az éles Flotta, sem az Attendance, sem a VEHICLE_Fuel_Database nem módosult. A jelenlegi `imile-qa` felület a korábbi kódot futtatja, amíg a #12 nincs bevezetve.**
+
+## Új, szintetikus forrásegyeztető (készült: 2026-10-31)
+
+A `raw-export-reconciliation.mjs` **szerveroldali, tisztán számító modul**.
+A megfelelő nyers `Sheet1` mátrixból ismét kiszámítja az OFD vagy az
+In-Hub aggregátumot, és a beküldött `candidate` objektum determinisztikus
+tartalomhash-ét hasonlítja a forrásból levezetett hash-hez.
+
+- OFD: egyetlen nap+depó összes futárját / vállalkozóját vizsgálja,
+  egyező DA-kódnak adott nap/depóban egyetlen vállalkozót enged. Nem fogad el
+  részleges vagy többnapos exportot egyetlen napi mentés igazolására.
+- In-Hub: egyetlen forrásdepó, eredeti LM Receive dátumok, területi
+  számlálók és darabszámok; azonos waybill duplikációja blokkol.
+- A bemenet maximálisan 10 002 sor, 100 oszlop, 150 000 cella, 4 MiB
+  UTF-8 cellatartalom és 4096 byte/cella; ezek csak konzervatív QA-határok,
+  nem jóváhagyott üzemi exportméretek.
+- A visszaadott ellenőrzési eredményben nincs waybill, cím, nyers DA-név
+  vagy teljes forrásmátrix. Egyéb adatvédelmi naplózás sem engedélyezett.
+- A modul **még nincs rákötve a HTTP mentési végpontra**: nincs külön
+  jóváhagyott bizalmi nyers forrásadapter, és szerveren történő személyes
+  adatkezeléshez sincs vállalati jóváhagyás.
+- Az `raw-matrix-reconciled-not-provider-attested` eredmény nem jelenti,
+  hogy a fájl ténylegesen az iMile hivatalos, változatlan exportja.
+  A felhasználótól kapott tetszőleges mátrixot összevetni ugyanazon
+  felhasználó által adott aggregátummal **nem független eredetigazolás**.
+
+### Külön Work-feladat – csak jóváhagyott/személytelenített exportokkal
+
+A korábban hitelesített Work-környezetben ellenőrizni kell, hogy a valós
+iMile export **fejlécei, Excel dátumtípusai, számformátumai, depóazonosítója
+és nagyságrendje** megegyeznek-e a parser elvárásaival. A feladat
+nem küldhet személyes adatot új szerverre, és nem írhatja át a production
+adatokat. Külön `fixture`-képzési terv készüljön maszkolt DA Code,
+futárnév, waybill és címadatokkal, a formátumváltozatok megtartásával.
+
+### Kiadási blokkoló
+
+A szerveroldali validáció, az aggregátumegyezés és a tényleges
+iMile-forráshitelesség **három külön fogalom**. Külső vagy költséges
+backend-produkció/üzemi üzemeltetés csak teljes vállalati jóváhagyás,
+személyesadat-kezelési jogalap, adatmegőrzési szabály és független
+forrásbizonyítás után vezethető be.
