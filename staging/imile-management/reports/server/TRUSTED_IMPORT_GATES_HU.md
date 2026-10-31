@@ -1,83 +1,40 @@
-# iMile Management – megbízható riportmentés és teljes verziótörténet (STAGING)
+# iMile Management – biztonságos riportmentés, szerveres ellenőrzés és teljes verzióarchívum
 
-## Biztonsági eredmény, 2026. október 31.
+Állapot: **PR #12 fejlesztői ág / staging előkészítés. NEM publikált és NEM üzemi import.**
 
-A jelenlegi publikált `imile-qa` riportfelület **még a kliensből írja**
-a `performanceDays`, `inventoryDays` és audit dokumentumokat. A 23
-sikeres Firestore-emulátoros jogosultsági teszt nem bizonyítja a belső
-rekordok darabszámainak, egyediségének vagy tartalomhash-ének hitelességét.
-Jogosult, de módosított kliensből írt logikailag hibás adatot a meglévő
-Firestore-szabályok nem feltétlenül utasítják el. Emiatt a kiépített QA
-**nem tekinthető vállalatilag jóváhagyott üzemi importnak**.
+## Mi készült el a #12 fejlesztői ágon?
 
-## Ebben a PR-ben elkészült
+- `trusted-report-validation.mjs`: kizárólag szerveroldali, pontos mezőalakot és összegeket ellenőrző OFD/In-Hub validáló.
+- Az OFD futár- és a raktári területi adatok aritmetikáját, egyediségét, dátumait és határértékeit a szerver újraszámítja.
+- A kliens által megadott hash/role/verzió nem hiteles. A szerver maga képez determinisztikus SHA256-ot és tranzakcióval ír.
+- A tranzakció minden módosításnál **teljes, visszakereshető riportverziót**, aktuális állapotot és auditrekordot készít.
+- Régi kliensből származó állapot megőrizhető, de `legacy-unverified` jelöléssel.
+- `report-http-api.mjs`: Firebase-ID-token ellenőrzést és visszavonás-ellenőrzést igénylő, pontos originre korlátozott, mérethatáros HTTP API:
+  - `POST /v1/reports/save` – ellenőrzött, verziózott egyetlen nap/depó mentése;
+  - `GET /v1/reports/current` – jelenlegi verzió lekérése optimista csere előtt;
+  - `GET /v1/reports/version` – korábbi teljes riportverzió lekérése.
+- `private-server-entry.mjs`: külön futtatható, alaphelyzetben **letiltott** privát Node/Firebase Admin kiszolgáló-belépési pont. Nincs csomagolva a Firebase Hostingba.
+- `report-app.mjs`: megszűnt a közvetlen kliensoldali Firestore-riportírás. Kizárólag az engedélyezett API-n menthet; egyetlen nap/depó egységet kezel atomikusan. A korábbi verziót explicit jóváhagyással lehet javítani.
+- `report-api-config.mjs`: az API URL alaphelyzetben üres. Ezért API-telepítés nélkül a mentés és történeti API-lekérdezés letiltott, **az Excel-riport készítése és letöltése továbbra is működik**.
+- `depokapacitas/firestore.rules`: a hat riport- és verziógyűjtemény esetén minden közvetlen böngészős create/update/delete **tilos**; az aktív belső felhasználók olvashatnak.
+- A meglévő, böngészőből készített staging rekordok nem jelenhetnek meg szerverileg ellenőrzött KPI-ként. A UI kizárja és külön számolja a `validationSource!='trusted-server'` jelzésű rekordokat.
 
-`server/trusted-report-validation.mjs`:
-- Kizárólag megbízható Node szerverkörnyezetben, verifikált Firebase
-  tokenből származó UID-dal, Admin SDK Firestore-adatbázison alkalmazható.
-- Kötelező, pontos és véges alakú In-Hub / OFD riport.
-- A szerver újraszámolja `totalOFD`, `totalDelivered`, `courierCount`,
-  `total` értékeket. Kizárja a negatív, túlzó vagy nem egész darabszámot.
-- OFD: azonos nap + depó alatt a DA-kód csak egyszer szerepelhet;
-  DLD nem lehet OFD fölött.
-- In-Hub: minden receive dátum valódi, nem jövőbeli, rendezett, egyedi;
-  minden kerület/település egyedi; minden dátumhoz pontosan egy darabszám.
-- A szerver maga képez egy rendezett, determinisztikus SHA256 hash-t.
-  A kliens által megadott hash, verzió vagy belső státusz **nem** kerül
-  át az elfogadott riportadatba.
-- A felhasználói szerepkörre a tranzakció is rákérdez a `users/{uid}`
-  dokumentumban: aktív admin/editor menthet, viewer/anonim nem.
-- Egyetlen Firestore-tranzakcióban készül az aktuális nap/depó állapot,
-  a **teljes, változatlan tartalmú** verzió-archívum
-  (`performanceVersions` / `inventoryVersions`) és az audit esemény.
-- Azonos hash+státusz: idempotens, új verzió nélkül. Eltérő adat:
-  kifejezett jóváhagyás + ismert korábbi verzió.
-- Korábbi `final` eredmény nem írható át `provisional` eredménnyel.
-- Korábbi staging kliensből származó riport archiválható, de
-  `legacy-unverified` megjelölést kap; a hash visszamenőleg nem bizonyítja
-  az eredeti forrás valódiságát.
+## Tesztek és forrásadat-határ
 
-## Fontos különbség: szerveroldali számítás és valódi forrásigazolás
+A CI szintetikus validációs, API, idempotencia, archive és Firestore-emulátoros jogosultsági teszteket futtat. Semmilyen valós csomag- vagy futárrekord nem kerül tesztelésre.
 
-A szerveroldali összesítés-vizsgálat **nem igazolja**, hogy a felhasználó
-által beadott mennyiségek valóban megegyeznek az iMile eredeti exportjával.
-Ehhez az eredeti Excel-fájl vagy annak egy hiteles, jóváhagyott forrásadaptere
-alapján, szerveren is el kell végezni a forrás-ellenőrzést. Személyes adatot
-tartalmazó nyers fájl szerverre továbbítása nem megengedett külön céges
-adatkezelési és adatmegőrzési jóváhagyás nélkül.
+**Fontos:** a szerver jelenleg a beküldött részletes aggregátumok **belső következetességét** igazolja. Nem bizonyítja, hogy azok ténylegesen az eredeti iMile exportból keletkeztek. Ezt kizárólag jóváhagyott, független forrásadapter vagy a szerver által hitelesen feldolgozott nyers export alapján lehet majd igazolni.
 
-## Meglévő felület és szabályok
+A teljes verzióarchívum garantálja, hogy a korábbi `v1`/`v2` rekordok és futáradatok visszaolvashatók; az újabb változat nem írja felül őket. Visszaállító írás külön jogosultság- és jóváhagyásvédett műveletként fejlesztendő, **nem** automatikus.
 
-Ez a PR **még nem** állítja át a kliensmentést, és nem telepít
-szerveroldali API-t vagy új Firestore ruleset-et. A meglévő (staging)
-kliens mentési útja változatlan. A jelenleg éles adatokat, a Flotta
-production `main` ágat, a Google forrásokat és az `imile-qa` publikus
-preview-t nem módosítja.
+## Szigorú telepítési kapuk
 
-A teljes biztonsági bevezetéshez egységes átállás szükséges:
+1. Vállalati adatkezelési, adatmegőrzési és szerverüzemeltetési jóváhagyás. A futáradat személyes adat lehet; a szerverre küldött riportösszesítés is tartalmaz neveket és DA-kódokat.
+2. Privát, hitelesített szerverhost; szolgáltatásfiók csak szerveroldalon, kötelező Firebase Auth/role-ellenőrzéssel. A `private-server-entry.mjs` futtatásához a kiválasztott környezetben telepített, auditált Firebase Admin SDK szükséges.
+3. Felhős API-infrastruktúra telepítése (és esetleges költsége) csak külön engedéllyel. Nincs automatikusan beállított API URL, ezért a mentés fail-closed.
+4. Server-only API E2E valós Firestore-emulátorral (nemcsak mockkal): párhuzamos mentés, replay, token visszavonás, 1 MiB dokumentumhatár, memória-/terheléskorlát, staging cross-origin böngészőpróba.
+5. A jelenlegi, közvetlen kliensírható staging ruleset-et **csak az API-val és új klienssel együttesen** szabad leváltani, a korábbi konfiguráció biztonsági mentésével és rollback-tervvel.
+6. A hat régebbi, 2099. márciusi szintetikus cloud tesztdokumentum adminisztratív kezelése külön dokumentált jóváhagyás legyen. Nem töröljük a régi riportokat titokban.
+7. Valós, vállalatilag jóváhagyott In-Hub és OFD nyers exportminták számozott forrásfejléc-/dátum-/ID-kontraktus vizsgálata, az Excel letölthető színmintáival és a napi 10 órai provisional státusszal.
 
-1. Belső, vállalatilag jóváhagyott, hitelesített szerverhost és
-   `verifyIdToken` HTTP-belépési pont; semmilyen Admin SDK / service
-   account titok nem lehet a kliensben vagy GitHubban.
-2. A `report-app.mjs` ne közvetlenül a Firestore-ra írjon, hanem csak
-   validált szerveroldali műveleten keresztül, amely a nyers export és
-   a csomagolt táblázat kapcsolatát is igazolja.
-3. A kliensből történő **mindennemű** create/update/delete legyen
-   letiltva az aktuális riportsnapshots, auditok és verzióarchívum
-   kollekcióiban; Firestore Admin SDK-ra csak a zárt backend kapjon jogot.
-4. Server-only API role, race, idempotencia, határérték, 1MiB-es
-   dokumentumméret, replay, token érvényesség és korrigálhatóság E2E.
-5. A régi staging hat mesterséges riport/audit dokumentumát kizárólag
-   dokumentált, külön felhatalmazott adminisztratív tisztítással kezeljük.
-6. Verzióarchívum visszaállítási próba: a `v1` és `v2` teljes tartalma
-   lekérhető, a régi unverified tartalom egyértelműen jelölt.
-7. Csak ezután egyben történő szerver-, rules- és web-átállítás
-   külön staging QA és rollback terv alapján. Nem aktiválunk
-   fizetős felhőszolgáltatást kifejezett jóváhagyás nélkül.
-
-## Zárt végső követelmény
-
-A statisztikák és riportok megjelenítésében az ismertlen/missing/cache
-nem szerepelhet hiteles nullaként, a napi előzetes riport nem számíthat
-végleges napi sikerességi KPI-nak. A statisztikai forrásazonosítás, történet
-és átállás minden esetben auditálható kell legyen.
+**Sem a GitHub `main`, sem az éles Flotta, sem az Attendance, sem a VEHICLE_Fuel_Database nem módosult. A jelenlegi `imile-qa` felület a korábbi kódot futtatja, amíg a #12 nincs bevezetve.**
