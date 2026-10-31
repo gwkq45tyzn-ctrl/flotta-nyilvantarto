@@ -49,6 +49,7 @@ jobs:
           node staging/imile-management/reports/inventory-statistics.test.mjs
           node staging/imile-management/reports/server/trusted-report-validation.test.mjs
           node staging/imile-management/reports/server/report-http-api.test.mjs
+          node staging/imile-management/reports/server/private-server-entry.test.mjs
           node --check staging/imile-management/reports/server/report-http-api.mjs
           node --check staging/imile-management/reports/server/private-server-entry.mjs
           node --check staging/imile-management/reports/server/trusted-report-validation.mjs
