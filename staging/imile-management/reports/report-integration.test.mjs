@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const here=new URL('./',import.meta.url);
+const read=p=>readFileSync(new URL(p,here),'utf8');
+const menu=read('../index.html'),builder=read('../build-preview.mjs');
+const html=read('./index.html'),app=read('./report-app.mjs'),xls=read('./report-xlsx.mjs');
+assert.match(menu,/id="reportsLink"/);
+for(const name of ['reports/index.html','reports/report-app.mjs','reports/report-core.mjs','reports/report-xlsx.mjs'])
+ assert.ok(builder.includes("'staging/imile-management/"+name+"'"),'not packaged: '+name);
+assert.match(html,/cdn\.jsdelivr\.net\/npm\/exceljs@4\.4\.0/);
+assert.match(html,/Kizárólag staging|Staging \/ QA/);
+assert.match(app,/getDocFromServer/);assert.match(app,/allowedProfile/);
+assert.match(app,/firebaseConfig\.projectId!=='imile-management-staging'/);
+assert.match(app,/readScalar/);
+assert.match(app,/generateExcel\(window\.ExcelJS,matrix,result\)/);
+assert.doesNotMatch(app,/\b(?:setDoc|updateDoc|deleteDoc|addDoc|writeBatch|runTransaction|fetch)\s*\(/);
+assert.doesNotMatch(xls,/\b(?:setDoc|updateDoc|deleteDoc|addDoc|writeBatch|runTransaction|fetch)\s*\(/);
+assert.match(xls,/COLORS\.navy/);assert.match(xls,/COLORS\.blue/);
+assert.match(xls,/mergeCells\('A1:N1'\)/);
+assert.match(xls,/District/);assert.match(xls,/Grand Total/);
+console.log('PASS: daily reports staging menu, packaging, internal auth, visual templates, zero cloud writes');
