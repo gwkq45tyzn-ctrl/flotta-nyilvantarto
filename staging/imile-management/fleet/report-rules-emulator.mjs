@@ -57,5 +57,29 @@ try{
  await expect('audit mutation forbidden',false,()=>updateDoc(doc(db.admin,'performanceAudits',a1),{action:'replace'}));
  await expect('report deletion forbidden',false,()=>deleteDoc(doc(db.admin,'performanceDays',key)));
  await expect('audit deletion forbidden',false,()=>deleteDoc(doc(db.admin,'performanceAudits',a1)));
+ const ik='2099-02-02__DS(AKE)',ia='I'.repeat(20),ib='J'.repeat(20);
+ const inventory=(actor,auditId,version=1,hash='d'.repeat(64),prev=null)=>({
+  key:ik,date:'2099-02-02',station:'DS(AKE)',dates:['2099-02-01'],
+  areas:[{area:'11',counts:[7]}],total:7,contentHash:hash,
+  sourceName:'SYNTHETIC_INHUB.xlsx',version,lastAuditId:auditId,
+  createdAt:prev?.createdAt||serverTimestamp(),createdBy:prev?.createdBy||actor,
+  updatedAt:serverTimestamp(),updatedBy:actor
+ });
+ const invAudit=(actor,version,hash,prior='')=>({
+  reportKey:ik,version,contentHash:hash,priorHash:prior,action:prior?'replace':'create',
+  actor,at:serverTimestamp(),sourceName:'SYNTHETIC_INHUB.xlsx'
+ });
+ const invPush=(role,auditId,r,a)=>{
+  const batch=writeBatch(db[role]);batch.set(doc(db[role],'inventoryDays',ik),r);
+  if(a)batch.set(doc(db[role],'inventoryAudits',auditId),a);
+  return batch.commit();
+ };
+ await expect('viewer inventory write denied',false,()=>invPush('viewer',ia,inventory('viewer',ia),invAudit('viewer',1,'d'.repeat(64))));
+ await expect('editor inventory without audit denied',false,()=>invPush('editor',ia,inventory('editor',ia),null));
+ await expect('editor inventory plus audit allowed',true,()=>invPush('editor',ia,inventory('editor',ia),invAudit('editor',1,'d'.repeat(64))));
+ const invOld=(await getDoc(doc(db.editor,'inventoryDays',ik))).data();
+ await expect('editor audited inventory correction allowed',true,()=>invPush('editor',ib,inventory('editor',ib,2,'e'.repeat(64),invOld),invAudit('editor',2,'e'.repeat(64),'d'.repeat(64))));
+ await expect('inventory audit immutable',false,()=>updateDoc(doc(db.admin,'inventoryAudits',ia),{priorHash:'unknown'}));
+ await expect('inventory snapshot cannot be deleted',false,()=>deleteDoc(doc(db.admin,'inventoryDays',ik)));
  console.log('PASS: '+passed+' synthetic authenticated Firestore report/audit rules cases');
 }finally{await env.cleanup();}
