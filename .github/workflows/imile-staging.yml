@@ -37,6 +37,8 @@ jobs:
         run: |
           node depokapacitas/district-capacity.test.mjs
           node depokapacitas/district-capacity.integration.test.mjs
+          node depokapacitas/source-health.test.mjs
+          node depokapacitas/parcel-preview.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
       - name: Magyar CSV karakterkódolások ellenőrzése
@@ -88,6 +90,8 @@ jobs:
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+      - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
       - name: A flotta belépési pontjának érintetlensége
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
