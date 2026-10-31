@@ -42,6 +42,12 @@ jobs:
           node depokapacitas/parcel-source-adapter.test.mjs
           node depokapacitas/source-health.test.mjs
           node depokapacitas/parcel-preview.test.mjs
+      - name: Napi In-Hub és DA OFD riportmotor – adat- és UI-regresszió
+        run: |
+          node staging/imile-management/reports/report-core.test.mjs
+          node staging/imile-management/reports/report-integration.test.mjs
+          node --check staging/imile-management/reports/report-app.mjs
+          node --check staging/imile-management/reports/report-xlsx.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
       - name: Magyar CSV karakterkódolások ellenőrzése
