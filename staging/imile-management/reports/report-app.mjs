@@ -1,82 +1,175 @@
-import{initializeApp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import{getAuth,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import{getFirestore,doc,getDocFromServer}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
-import{firebaseConfig}from'../../../depokapacitas/firebase-config.js';
-import{allowedProfile}from'../session-policy.mjs';
-import{inhub,ofd}from'./report-core.mjs';
-import{generateExcel}from'./report-xlsx.mjs';
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,query,
+ orderBy,limit,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
+import {allowedProfile} from '../session-policy.mjs';
+import {inhub,ofd} from './report-core.mjs';
+import {readXlsxFirstSheet,writeReportXlsx} from './xlsx-lite.mjs';
+import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash} from './report-statistics.mjs';
+
 const $=id=>document.getElementById(id);
-let permitted=false,run=0,ready=null,filename=null;
-function clear(){run++;ready=null;filename=null;$('download').disabled=true;$('preview').hidden=true;$('stats').replaceChildren();}
-$('file').onchange=clear;$('kind').onchange=clear;
+const field=(id,value)=>{$(id).textContent=String(value)};
+const plain=(x)=>x==null?'—':String(x);
+const pct=x=>x===null?'—':(x*100).toFixed(2).replace('.',',')+'%';
+const entry=(values)=>{
+ const tr=document.createElement('tr');
+ for(const value of values){const td=document.createElement('td');td.textContent=plain(value);tr.append(td);}
+ return tr;
+};
+let authorized=false,canSave=false,revision=0,excelBuffer=null,excelName=null;
+let currentReport=null,sourceName=null,db=null,user=null,stats=null;
+function clearReport(){
+ revision++;excelBuffer=null;excelName=null;currentReport=null;sourceName=null;
+ $('download').disabled=true;$('save').disabled=true;$('preview').hidden=true;
+ $('stats').replaceChildren();$('approve').checked=false;
+}
+$('file').addEventListener('change',clearReport);
+$('kind').addEventListener('change',clearReport);
 function preview(report){
  $('preview').hidden=false;
- $('summary').textContent=report.kind==='inhub'
- ?'Összes csomag: '+report.total+' · Területek: '+report.rows.length+' · Dátumok: '+report.dates.length
- :'OFD: '+report.totalOfd+' · DLD: '+report.totalDelivered+' · Futárok: '+report.uniqueCouriers+' · Vállalkozói csoportok: '+report.vendors.length+' · Sikeresség: '+(report.rate*100).toFixed(2)+'%';
- const list=report.kind==='inhub'?report.rows.map(r=>[r.area,r.counts.reduce((a,n)=>a+n,0)]):report.vendors.map(r=>[r.vendor,r.delivered+'/'+r.ofd+' · '+(r.rate*100).toFixed(2)+'%']);
- for(const [area,value]of list.slice(0,40)){
-  const tr=document.createElement('tr');
-  for(const v of [area,value]){const td=document.createElement('td');td.textContent=String(v);tr.append(td);}
-  $('stats').append(tr);
- }
-}
-function readScalar(value){
- if(value===null||value===undefined)return null;
- if(value instanceof Date||typeof value==='string'||typeof value==='number'||typeof value==='boolean')return value;
- throw Error('Összetett cellatípus, külső hivatkozás vagy képlet található a nyers exportban. Az automatikus feldolgozás leállt.');
-}
-function extract(matrixBook){
- const sheet=matrixBook.getWorksheet('sheet1')||matrixBook.worksheets[0];
- if(!sheet)throw Error('A feltöltött Excel nem tartalmaz sheet1 munkalapot.');
- if(sheet.rowCount>10002||sheet.columnCount>80)throw Error('Túl nagy bemeneti táblázat.');
- const matrix=[];
- for(let i=1;i<=sheet.rowCount;i++){
-  const line=[];for(let j=1;j<=sheet.columnCount;j++)line.push(readScalar(sheet.getRow(i).getCell(j).value));
-  matrix.push(line);
- }
- if(!matrix.length)throw Error('Üres Excel-forrás.');return matrix;
+ field('summary',report.kind==='inhub'
+  ?'Összes csomag: '+report.total+' · Területek: '+report.rows.length+' · Dátumok: '+report.dates.length
+  :'OFD: '+report.totalOfd+' · DLD: '+report.totalDelivered+' · Futárok: '+report.uniqueCouriers+
+   ' · Vállalkozói csoportok: '+report.vendors.length+' · Kézbesítés: '+pct(report.rate));
+ $('stats').replaceChildren();
+ const list=report.kind==='inhub'
+  ?report.rows.map(x=>[x.area,x.counts.reduce((a,v)=>a+v,0)])
+  :report.vendors.map(x=>[x.vendor+' · '+x.station,x.delivered+'/'+x.ofd+' · '+pct(x.rate)]);
+ for(const values of list.slice(0,100))$('stats').append(entry(values));
 }
 $('form').onsubmit=async event=>{
- event.preventDefault();if(!permitted)return;clear();
- const revision=run,file=$('file').files?.[0],kind=$('kind').value;
- if(!file||!/\.xlsx$/i.test(file.name)||file.size>8*1024*1024){$('message').textContent='Legfeljebb 8 MB-os .xlsx export szükséges.';return;}
- if(typeof window.ExcelJS?.Workbook!=='function'){$('message').textContent='Az Excel-motor nem töltődött be. A feldolgozás tiltva.';return;}
- $('prepare').disabled=true;$('message').textContent='Ellenőrzés és helyi Excel-készítés…';
+ event.preventDefault();if(!authorized)return;clearReport();
+ const rev=revision,file=$('file').files?.[0],kind=$('kind').value;
+ if(!file||!/\.xlsx$/i.test(file.name)||file.size>8*1024*1024){
+  field('message','Legfeljebb 8 MB-os .xlsx fájl szükséges.');return;
+ }
+ $('prepare').disabled=true;field('message','A fájl ellenőrzése és a helyi Excel generálása…');
  try{
-  const input=new window.ExcelJS.Workbook();
-  await input.xlsx.load(await file.arrayBuffer());
-  if(revision!==run||!permitted)return;
-  const matrix=extract(input),result=kind==='inhub'?inhub(matrix):ofd(matrix);
+  const matrix=await readXlsxFirstSheet(await file.arrayBuffer());
+  if(rev!==revision||!authorized)return;
+  const result=kind==='inhub'?inhub(matrix):ofd(matrix);
   if(result.status!=='ready'){
-   $('message').textContent='A riport nem készíthető el: '+result.status+'. '+(result.issues||[]).slice(0,5).map(x=>'sor '+x.line+': '+x.reason).join('; ');
-   return;
+   field('message','Riport tiltva: '+result.status+' · '+(result.issues||[])
+    .slice(0,6).map(x=>'sor '+x.line+': '+x.reason).join('; '));return;
   }
-  const buffer=await generateExcel(window.ExcelJS,matrix,result);
-  if(revision!==run||!permitted)return;
-  ready=buffer;filename=kind==='inhub'?'iMile_InHub_Inventory_kesz.xlsx':'iMile_DA_OFD_Performance_kesz.xlsx';
+  const bytes=writeReportXlsx(matrix,result);
+  if(rev!==revision||!authorized)return;
+  excelBuffer=bytes;excelName=kind==='inhub'
+   ?'iMile_InHub_Inventory_kesz.xlsx':'iMile_DA_OFD_Performance_kesz.xlsx';
+  currentReport=result;sourceName=file.name.slice(0,200);
   $('download').disabled=false;preview(result);
-  $('message').textContent='Elkészült a Sheet2. A fájl helyben maradt; nincs Firestore-mentés vagy automatikus statisztikai import.';
- }catch(error){if(revision===run)$('message').textContent='A feldolgozás leállt: '+(error?.message||'Ismeretlen hiba');}
- finally{if(revision===run)$('prepare').disabled=false;}
+  if(result.kind==='ofd'&&canSave){
+   try{
+    const planned=planPerformanceSnapshots(result);
+    $('save').disabled=planned.some(x=>x.rows.length>300);
+    field('saveNote',planned.length+' nap/depó rekord készíthető. A mentés csak külön jóváhagyással történik.');
+   }catch(error){field('saveNote','Adatmentés blokkolva: '+error.message);$('save').disabled=true;}
+  }else field('saveNote',result.kind==='inhub'
+   ?'Az In-Hub-riport csak letölthető. A későbbi raktárstatisztikához külön adatmentési kontroll készül.'
+   :'A statisztikai mentéshez admin vagy editor jogosultság szükséges.');
+  field('message','A Sheet2 elkészült. Az Excel helyben, a böngésződben keletkezett.');
+ }catch(error){if(rev===revision)field('message','A fájl feldolgozása sikertelen: '+error.message);}
+ finally{if(rev===revision)$('prepare').disabled=false;}
 };
 $('download').onclick=()=>{
- if(!permitted||!ready)return;
- const url=URL.createObjectURL(new Blob([ready],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
- const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ if(!authorized||!excelBuffer)return;
+ const url=URL.createObjectURL(new Blob([excelBuffer],
+  {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+ const a=document.createElement('a');a.href=url;a.download=excelName;document.body.append(a);
+ a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-if(firebaseConfig.projectId!=='imile-management-staging')$('access').textContent='Helytelen Firebase-projekt: hozzáférés tiltva.';
+async function loadStats(){
+ if(!authorized||!db)return;
+ field('statStatus','Szerveri statisztikák betöltése…');
+ $('courierStats').replaceChildren();$('vendorStats').replaceChildren();stats=null;
+ try{
+  const all=await getDocsFromServer(query(collection(db,'performanceDays'),orderBy('date','desc'),limit(250)));
+  if(!authorized)return;
+  const snapshot=buildPerformanceStatistics(all.docs.map(d=>d.data()));stats=snapshot;
+  const warning=snapshot.partial?' · FIGYELEM: hibás vagy duplikált forrás!':'';
+  field('statStatus',snapshot.reportDays+' nap/depó riport · '+snapshot.totalOFD+
+   ' OFD · '+snapshot.totalDelivered+' kézbesített · '+pct(snapshot.rate)+warning+
+   ' · Legfeljebb a 250 legutóbbi rekord (szerverről).');
+  for(const r of snapshot.couriers.slice(0,100))$('courierStats').append(
+   entry([r.daCode,r.daName,r.days,r.ofd,r.delivered,pct(r.rate),r.vendors.join(', ')]));
+  for(const r of snapshot.vendors.slice(0,100))$('vendorStats').append(
+   entry([r.date,r.station,r.vendor,r.couriers,r.ofd,r.delivered,pct(r.rate),r.spr.toFixed(1)]));
+  if(!snapshot.couriers.length)$('courierStats').append(entry(['Még nincs mentett napi OFD-riport.']));
+ }catch(error){field('statStatus','A szerveri statisztikák nem ellenőrizhetők: '+error.message);}
+}
+$('refreshStats').onclick=loadStats;
+$('save').onclick=async()=>{
+ if(!authorized||!canSave||!currentReport||currentReport.kind!=='ofd'||!db||!user)return;
+ if(!$('approve').checked){field('saveNote','Mentés előtt jelöld be a jóváhagyást.');return;}
+ const rev=revision,identity=user.uid,report=currentReport;
+ const status=$('reportState').value;
+ if(!['provisional','final'].includes(status))return;
+ if(status==='final'&&!$('confirmFinal').checked){
+  field('saveNote','Végleges napi riporthoz külön megerősítés szükséges.');return;
+ }
+ $('save').disabled=true;
+ field('saveNote','Jogosultság-ellenőrzött, auditált Firestore-tranzakció…');
+ try{
+  const profile=(await getDocFromServer(doc(db,'users',identity))).data();
+  if(!allowedProfile(profile)||!['admin','editor'].includes(profile.role))throw Error('Nincs érvényes mentési jogosultság.');
+  if(rev!==revision||!authorized||user?.uid!==identity)return;
+  const batches=planPerformanceSnapshots(report);
+  if(batches.some(b=>b.rows.length>300))throw Error('Egy nap/depó legfeljebb 300 futárt tartalmazhat.');
+  const prepared=await Promise.all(batches.map(async x=>({...x,contentHash:await snapshotHash(x)})));
+  const changes=await runTransaction(db,async tx=>{
+   // Firestore requires reading all current documents before any write.
+   const refs=prepared.map(p=>doc(db,'performanceDays',p.key));
+   const old=await Promise.all(refs.map(ref=>tx.get(ref)));
+   let changed=0;
+   for(let i=0;i<prepared.length;i++){
+    const p=prepared[i],previous=old[i].exists()?old[i].data():null;
+    if(previous&&previous.contentHash===p.contentHash&&previous.status===status)continue;
+    if(previous&&!$('replaceApproved').checked)
+     throw Error('Ehhez a naphoz/depóhoz már van riport. Javításhoz külön cserejóváhagyás szükséges: '+p.key);
+    if(previous?.status==='final'&&status!=='final')
+     throw Error('Végleges napi riport nem minősíthető vissza előzetessé.');
+    const auditRef=doc(collection(db,'performanceAudits')),version=(previous?.version||0)+1;
+    const data={
+     key:p.key,date:p.date,station:p.station,status,rows:p.rows,
+     totalOFD:p.totalOFD,totalDelivered:p.totalDelivered,courierCount:p.courierCount,
+     contentHash:p.contentHash,sourceName,version,lastAuditId:auditRef.id,
+     createdAt:previous?previous.createdAt:serverTimestamp(),
+     createdBy:previous?previous.createdBy:identity,
+     updatedAt:serverTimestamp(),updatedBy:identity
+    };
+    tx.set(refs[i],data);
+    tx.set(auditRef,{
+     reportKey:p.key,version,contentHash:p.contentHash,priorHash:previous?.contentHash||'',
+     action:previous?'replace':'create',status,actor:identity,at:serverTimestamp(),sourceName
+    });
+    changed++;
+   }
+   return changed;
+  });
+  if(rev!==revision||!authorized)return;
+  field('saveNote',changes?'Sikeres mentés: '+changes+' napi depórekord. Audit és verziókövetés kész.':
+   'Azonos tartalom és státusz: nincs új mentés, nincs duplikáció.');
+  $('approve').checked=false;$('replaceApproved').checked=false;
+  await loadStats();
+ }catch(error){field('saveNote','A mentés nem történt meg: '+error.message);}
+ finally{if(rev===revision&&authorized&&currentReport?.kind==='ofd')$('save').disabled=false;}
+};
+if(firebaseConfig.projectId!=='imile-management-staging')field('access','Nem staging projekt: hozzáférés tiltva.');
 else{
- const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);
- onAuthStateChanged(auth,async user=>{
-  const revision=++run;permitted=false;clear();$('controls').hidden=true;$('file').value='';
-  if(!user){window.location.replace('../index.html');return;}
+ const app=initializeApp(firebaseConfig),auth=getAuth(app);db=getFirestore(app);
+ onAuthStateChanged(auth,async current=>{
+  const authRev=++revision;authorized=false;canSave=false;user=null;clearReport();
+  $('controls').hidden=true;$('file').value='';$('save').disabled=true;stats=null;
+  if(!current){window.location.replace('../index.html');return;}
   try{
-   const profile=(await getDocFromServer(doc(db,'users',user.uid))).data();
-   if(run!==revision+1)return;
-   if(!allowedProfile(profile)){$('access').textContent='Nincs aktív belső jogosultság.';return;}
-   permitted=true;$('controls').hidden=false;
-   $('access').textContent='Belső hozzáférés: '+profile.role+' · helyi, csak olvasó feldolgozás';
-  }catch{$('access').textContent='A szerveri jogosultság nem ellenőrizhető; feldolgozás tiltva.';}
+   const profile=(await getDocFromServer(doc(db,'users',current.uid))).data();
+   if(authRev+1!==revision)return;
+   if(!allowedProfile(profile)){field('access','Nincs aktív belső jogosultság.');return;}
+   authorized=true;user=current;canSave=['admin','editor'].includes(profile.role);
+   $('controls').hidden=false;$('saveOptions').hidden=!canSave;
+   field('access','Belső hozzáférés: '+profile.role+' · helyi XLSX és ellenőrzött szerveri statisztika');
+   loadStats();
+  }catch{field('access','A jogosultság nem ellenőrizhető; hozzáférés tiltva.');}
  });
 }
