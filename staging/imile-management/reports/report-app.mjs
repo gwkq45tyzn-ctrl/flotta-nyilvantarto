@@ -134,7 +134,7 @@ async function loadStats(){
   const all=await getDocsFromServer(query(collection(db,'performanceDays'),orderBy('date','desc'),limit(250)));
   if(!authorized)return;
   const records=all.docs.map(d=>d.data());
-  const verified=records.filter(d=>d.validationSource==='trusted-server');
+  const verified=records.filter(d=>d.validationSource==='server-aggregates-only');
   const excluded=records.length-verified.length;
   const snapshot=buildPerformanceStatistics(verified);stats=snapshot;
   const warning=snapshot.partial?' · FIGYELEM: hibás vagy duplikált forrás!':'';
@@ -152,7 +152,7 @@ async function loadStats(){
   const all=await getDocsFromServer(query(collection(db,'inventoryDays'),orderBy('date','desc'),limit(180)));
   if(!authorized)return;
   const records=all.docs.map(d=>d.data());
-  const verified=records.filter(d=>d.validationSource==='trusted-server');
+  const verified=records.filter(d=>d.validationSource==='server-aggregates-only');
   const excluded=records.length-verified.length;
   const history=inventoryHistory(verified);
   $('inventoryStats').replaceChildren();
