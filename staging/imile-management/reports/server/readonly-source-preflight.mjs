@@ -47,8 +47,7 @@ function issueForInhub(matrix,line,sourceReason,h){
  if(!pvalue(city))return 'missing_city';
  if(/^budapest$/i.test(pvalue(city))&&!cityOrDistrict(city,zip))
   return 'invalid_budapest_postcode';
- if(!pvalue(date)||typeof date!=='string')return 'invalid_lm_receive_datetime';
- return 'invalid_parcel_or_area';
+ return 'invalid_lm_receive_datetime';
 }
 function headMap(matrix,kind){
  const observed=schema[kind]?.headers;
@@ -62,7 +61,9 @@ function typeIssues(matrix,kind,headers){
  for(let i=1;i<matrix.length;i++){
   const row=matrix[i];
   if(!Array.isArray(row))continue;
-  if(row.every(v=>v==null||v===''))continue;
+  if(row.every(v=>pvalue(v)===''))continue;
+  const station=row[headers.get(kind==='inhub'?'Inventory Station':'Station')];
+  if(!validStation(station))issues.push({line:i+1,reason:'invalid_source_station'});
   for(const [field,wanted]of Object.entries(types)){
    const v=row[headers.get(field)];
    if(v!==undefined&&v!==null&&v!==''&&typeof v!==wanted)

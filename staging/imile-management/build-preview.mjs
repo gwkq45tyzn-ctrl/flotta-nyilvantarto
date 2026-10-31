@@ -18,6 +18,7 @@ const allowed=[
   'staging/imile-management/reports/report-api-config.mjs',
   'staging/imile-management/reports/report-core.mjs',
   'staging/imile-management/reports/xlsx-lite.mjs',
+  'staging/imile-management/reports/physical-excel-rows.mjs',
   'staging/imile-management/reports/report-statistics.mjs',
   'staging/imile-management/reports/inventory-statistics.mjs',
   'staging/imile-management/session-policy.mjs',
