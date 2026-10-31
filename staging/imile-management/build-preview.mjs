@@ -24,6 +24,7 @@ const allowed=[
   'staging/imile-management/central-alerts.mjs',
   'staging/imile-management/fleet/index.html',
   'staging/imile-management/fleet/app.mjs',
+  'staging/imile-management/fleet/availability.mjs',
   'staging/imile-management/fleet/operations.html',
   'staging/imile-management/fleet/operations.css',
   'staging/imile-management/fleet/operations-app.mjs',
