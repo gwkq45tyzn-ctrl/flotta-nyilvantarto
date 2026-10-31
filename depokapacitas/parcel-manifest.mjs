@@ -65,7 +65,7 @@ export function previewParcelManifest(rawRows,{date,storedDemands=[],sourceReady
     comparisons.length>0&&comparisons.every(x=>x.status==='match')?'match':'mismatch';
   return {date,verified:ready,uniqueCount:verified.uniqueCount,
     duplicateCount:verified.issues.filter(x=>x.reason==='duplicate_parcel').length,
-    inputErrors,issues:verified.issues,comparisons,comparisonStatus,
+    inputErrors,issues:verified.issues.map(x=>({reason:x.reason,line:x.line??null})),comparisons,comparisonStatus,
     hasRecords:verified.hasRecords,
     // Never return raw tracking IDs: callers only receive diagnostic counts.
     invalidCount:inputErrors.length+verified.issues.filter(x=>x.reason!=='duplicate_parcel').length
