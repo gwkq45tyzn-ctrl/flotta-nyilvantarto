@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';import {readFileSync}from'node:fs';import {inhub,ofd}from'./report-core.mjs';import {planInventorySnapshot}from'./inventory-statistics.mjs';import {planPerformanceSnapshots}from'./report-statistics.mjs';import {reconcileWithRawExport}from'./server/raw-export-reconciliation.mjs';
 const data=JSON.parse(readFileSync(new URL('./fixtures/masked-export-matrices.json',import.meta.url),'utf8'));
+const schema=JSON.parse(readFileSync(new URL('./fixtures/observed-schema.json',import.meta.url),'utf8'));
+for(const kind of ['inhub','ofd']){assert.deepEqual(data[kind][0],schema[kind].headers);for(const row of data[kind].slice(1))row.forEach((v,i)=>assert.equal(typeof v,schema[kind].types[i]));}
 let passed=0;const test=(name,fn)=>{fn();passed++;};
 test('full observed schemas and numeric cells',()=>{assert.equal(data.inhub[0].length,26);assert.equal(data.ofd[0].length,35);assert.equal(typeof data.ofd[1][4],'number');assert.equal(typeof data.inhub[1][1],'string');});
 test('InHub independent district/city totals',()=>{const r=inhub(data.inhub);assert.equal(r.total,4);assert.deepEqual(r.rows,[{area:'9',counts:[1,1]},{area:'11',counts:[0,1]},{area:'Dunaharaszti',counts:[0,1]}]);const c=planInventorySnapshot(r,data.inhub,'2099-06-01');assert.equal(reconcileWithRawExport({kind:'inhub',candidate:c,rawMatrix:data.inhub}).matching,true);});
