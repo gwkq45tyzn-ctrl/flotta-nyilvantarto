@@ -1,3 +1,4 @@
+import {prepareNextDay} from './next-day-forecast.mjs';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
@@ -73,6 +74,47 @@ function centralTaskList(limit=null){
     (missing.length?'<p class="empty">A teendőlista ellenőrzése még nem teljes.</p>':'<p class="empty">A közös staging adatok között nincs aktuális Flotta-figyelmeztetés.</p>'))+
     more+jump+detail);
 }
+function nextDayPanel(){
+ let forecast;try{forecast=prepareNextDay({
+   baseDate:state.date,today:todayAtDepot(),
+   demands:get('demands'),bookings:get('bookings'),
+   drivers:get('drivers'),vehicles:get('vehicles'),
+   sourcesReady:assessSources(state.sourceMeta,{online:navigator.onLine}).trusted
+ });}catch{return section('Következő napi kapacitástervezés','<p class="notice">Érvénytelen tervezési dátum; előrejelzés nem adható.</p>');}
+ const statuses={
+   unavailable:'Az adatforrások nem érhetők el teljesen – előrejelzés nem adható.',
+   incomplete:'Hiányzó vagy ütköző kerületi csomagigény – a terv még nem teljes.',
+   shortage:'Tervezett kapacitáshiány legalább egy kerületben.',
+   needs_confirmation:'A tervezett kapacitás megvan, de visszaigazolás vagy ellenőrzés szükséges.',
+   ready:'A rögzített, visszaigazolt kapacitás minden ismert kerületben elegendő.'
+ };
+ const health=assessSources(state.sourceMeta,{online:navigator.onLine});
+ const format=n=>n===null?'—':fmt(n);
+ const gap=n=>n===null?'Ismeretlen':
+   label((n>=0?'+':'')+fmt(n),n<0?'red':'green');
+ const rows=forecast.rows.map(x=>td(
+   esc(x.district),format(x.newCount),format(x.retryCount),format(x.demand),
+   format(x.plannedCapacity),format(x.confirmedCapacity),
+   gap(x.plannedGap),gap(x.confirmedGap)
+ ));
+ const warnings=[
+   forecast.invalidBookingCount?'Ütköző vagy hibás foglalások: '+forecast.invalidBookingCount+' db.':'',
+   forecast.pendingCount?'Visszaigazolásra váró érvényes foglalások: '+forecast.pendingCount+' db.':'',
+   forecast.missingDemandDistricts.length?'Hiányzó kerületi igény: '+forecast.missingDemandDistricts.join(', ')+'.':'',
+   forecast.issues.length?'Adatütközések/ellenőrzendő sorok: '+forecast.issues.length+' db.':''
+ ].filter(Boolean);
+ return '<div id="nextDayForecast">'+section('Következő napi kapacitástervezés · '+esc(forecast.date),
+   '<p class="inline-note">Tervezett = minden érvényes foglalás; visszaigazolt = csak a megerősített, ütközésmentes futár–autó párok. Nem adjuk össze ugyanazt a futárt kétszer. A csomagadatok még aggregált adatok; a csomagszintű átfedés nem bizonyított.</p>'+
+   '<p class="notice" data-forecast-status="'+forecast.status+'">'+esc(statuses[forecast.status])+' '+esc(health.message)+(warnings.length?' '+esc(warnings.join(' ')):'')+'</p>'+
+   '<div class="grid kpis">'+
+   kpi('Következő napi igény',forecast.totalDemand,'Új és ismételt kézbesítések együtt')+
+   kpi('Tervezett kapacitás',forecast.plannedCapacity,'Érvényes beosztásból')+
+   kpi('Visszaigazolt kapacitás',forecast.confirmedCapacity,'Megerősített futár–autó párokból')+
+   kpi('Megerősített eltérés',forecast.confirmedGap,'Negatív = még nem fedezett csomag',forecast.confirmedGap!==null&&forecast.confirmedGap<0?'red':'')+
+   '</div>'+
+   table(['Kerület','Új','Újra','Összes igény','Tervezett','Megerősített','Tervezett eltérés','Megerősített eltérés'],rows)
+ )+'</div>';
+}
 function alertsView(){return datebar()+centralTaskList(null);}
 function overview(){
  const t=totals();
@@ -106,7 +148,7 @@ function overview(){
    plan.issues.length?plan.issues.length+' adatütközés vagy kizárt foglalás. Ellenőrizd a kerületi igényeket és a beosztásokat.':'',
    'Az új és újrakézbesítendő csomagok mennyiségi adatok; egyedi csomagazonosító nélkül a két kategória átfedése még nem ellenőrizhető.'
  ].filter(Boolean);
- return datebar()+centralTaskList(8)+
+ return datebar()+nextDayPanel()+centralTaskList(8)+
    '<div class="notice" id="sourceHealth" role="status" data-source-status="'+health.status+'">'+esc(health.message)+
    '<br>Szerveri visszaigazolás: '+(health.confirmedAt?esc(new Date(health.confirmedAt).toLocaleString('hu-HU',{timeZone:'Europe/Budapest'})):'még nincs')+
    '. A forrásfájl kelte nincs megadva. <button type="button" id="refreshSources" class="secondary">Adatok újraellenőrzése</button></div>'+
@@ -133,7 +175,7 @@ function overview(){
 function drivers(){const list=get('drivers').filter(x=>(x.name+' '+x.daCode+' '+x.vendor).toLowerCase().includes(state.search));const edit=canWrite()?section('Depókapacitás megadása (külön az alapadatoktól)',frm('capacity',select('driverId','Futár',get('drivers'),x=>x.name+' · '+x.daCode)+field('capacity','Napi csomagkapacitás','number',0,'min="0" max="10000"'))):'';return '<p class="inline-note">A futártörzs közös adat: a Flotta kezeli. Itt csak a depóhoz szükséges kapacitás állítható.</p>'+edit+section('Futártörzs · '+list.length+' fő',table(['Futár','DA-kód','Vállalkozó','Napi kapacitás'],list.map(x=>td(esc(x.name),esc(x.daCode),esc(x.vendor),fmt(byId('driverCapacities',x.id)?.capacity??x.capacity??0)))));}
 function vehicles(){const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));return '<p class="inline-note">Az autók és a műszaki státuszok közös törzsadatai a Flotta rendszerből származnak. A Kapacitáskezelő nem írja felül őket.</p>'+section('Autónyilvántartás · '+list.length+' db',table(['Rendszám','Típus','Állapot','Mai foglalás'],list.map(x=>{const b=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);return td(esc(x.plate),esc(x.model),status(x.status),b?esc(byId('drivers',b.driverId)?.name||'—'):'Szabad');})));}
 function planning(){const ds=get('drivers').filter(eligibleDriver).slice().sort((a,b)=>a.name.localeCompare(b.name));const vs=get('vehicles').filter(x=>x.status==='Elérhető').slice().sort((a,b)=>a.plate.localeCompare(b.plate));const today=get('bookings').filter(x=>x.date===state.date).sort((a,b)=>(a.district||'').localeCompare(b.district||''));const taken=new Set(today.map(x=>x.vehicleId));const available=vs.filter(x=>!taken.has(x.id));const form=canWrite()?section('Futár és autó összerendelése',frm('booking',field('date','Munkanap','date',state.date)+select('driverId','Futár',ds,x=>x.name+' · '+x.daCode)+select('vehicleId','Szabad autó',available,x=>x.plate)+field('district','Kerület','text','','placeholder="pl. IX."')+'<label>Státusz<select name="status"><option value="planned">Tervezett</option><option value="confirmed">Visszaigazolt</option></select></label>','Foglalás mentése')+'<p class="small">Egy autó egy nap csak egy futárhoz foglalható. Ugyanaz a futár sem kaphat két autót ugyanarra a napra.</p>'):'';
-return datebar()+centralTaskList(5)+attendanceVehicleSummary()+form+section('Napi foglalások · '+today.length,table(['Futár','Autó','Kerület','Kapacitás','Státusz','Elérhetőség',''],today.map(x=>td(esc(byId('drivers',x.driverId)?.name||'Ismeretlen'),esc(byId('vehicles',x.vehicleId)?.plate||'—'),esc(x.district),fmt(x.capacity),status(x.status),bookingAssessment(x).eligible?label('Rendben','green'):label('Nem elérhető','red'),canWrite()?'<button class="danger" data-cancel="'+esc(x.id)+'">Feloldás</button>':''))));}
+return datebar()+nextDayPanel()+centralTaskList(5)+attendanceVehicleSummary()+form+section('Napi foglalások · '+today.length,table(['Futár','Autó','Kerület','Kapacitás','Státusz','Elérhetőség',''],today.map(x=>td(esc(byId('drivers',x.driverId)?.name||'Ismeretlen'),esc(byId('vehicles',x.vehicleId)?.plate||'—'),esc(x.district),fmt(x.capacity),status(x.status),bookingAssessment(x).eligible?label('Rendben','green'):label('Nem elérhető','red'),canWrite()?'<button class="danger" data-cancel="'+esc(x.id)+'">Feloldás</button>':''))));}
 function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
 function results(){const rs=get('results');const dates=['day','week','month'];const summaries=dates.map(mode=>{const data=rs.filter(x=>inRange(x,mode));return {mode,label:{day:'Napi',week:'Heti',month:'Havi'}[mode],picked:data.reduce((s,x)=>s+number(x.picked),0),success:data.reduce((s,x)=>s+number(x.success),0),failed:data.reduce((s,x)=>s+number(x.failed),0)};});
 const byDriver=new Map();for(const r of rs.filter(x=>inRange(x,state.mode))){const x=byDriver.get(r.driverId)||{picked:0,success:0,failed:0,days:new Set()};x.picked+=number(r.picked);x.success+=number(r.success);x.failed+=number(r.failed);x.days.add(r.date);byDriver.set(r.driverId,x);}
@@ -324,8 +366,8 @@ async function previewMasterComparison(form){
  toast('A flottaadatok összehasonlítása elkészült; nincs adatírás.');
 }
 document.addEventListener('click',event=>{if(event.target.closest('#refreshSources'))window.location.reload();});
-for(const name of ['online','offline'])window.addEventListener(name,()=>{if(state.view==='overview')render();});
-setInterval(()=>{if(state.view==='overview'&&!$('shell').hidden)render();},30000);
+for(const name of ['online','offline'])window.addEventListener(name,()=>{if(['overview','planning'].includes(state.view))render();});
+setInterval(()=>{if(state.view==='overview'&&!$('shell').hidden)render();else if(state.view==='planning'&&$('nextDayForecast'))$('nextDayForecast').outerHTML=nextDayPanel();},30000);
 document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
 $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}

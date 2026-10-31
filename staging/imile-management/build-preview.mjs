@@ -40,7 +40,7 @@ const allowed=[
   'depokapacitas/import-encoding.mjs',
   'depokapacitas/capacity-eligibility.mjs',
   'depokapacitas/district-capacity.mjs',
-  'depokapacitas/source-health.mjs',
+  'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
   'depokapacitas/parcel-preview.mjs',

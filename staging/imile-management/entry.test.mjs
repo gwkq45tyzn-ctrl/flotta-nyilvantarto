@@ -101,7 +101,7 @@ try{
    'depokapacitas/firebase-config.js','depokapacitas/import-dates.mjs',
    'depokapacitas/import-validation.mjs','depokapacitas/capacity-eligibility.mjs',
    'depokapacitas/import-encoding.mjs',
-   'depokapacitas/source-health.mjs','depokapacitas/parcel-preview.html',
+   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs','depokapacitas/parcel-preview.html',
    'depokapacitas/parcel-preview.css','depokapacitas/parcel-preview-app.mjs',
    'depokapacitas/parcel-preview.mjs'
   ];
