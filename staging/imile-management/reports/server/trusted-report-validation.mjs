@@ -156,9 +156,13 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  * Archived historical snapshots are complete, immutable document copies.
  */
 export async function commitTrustedReport({db,verifiedUid,kind,candidate,status=null,
- allowReplace=false,expectedVersion=null,sourceName}){
+ allowReplace=false,expectedVersion=null,sourceName,requireAdmin=false,
+ restoreFromVersion=null,restoreReason=null}){
  if(!db||typeof db.runTransaction!=='function'||!text(verifiedUid,128))
   throw new Error('server_auth_required');
+ if(restoreFromVersion!==null&&(!requireAdmin||!allowReplace||
+  !Number.isInteger(restoreFromVersion)||restoreFromVersion<1||
+  !text(restoreReason,120)))throw new Error('invalid_restore_approval');
  const prefix=kind==='ofd'?'performance':'inventory';
  if(!['ofd','inhub'].includes(kind))throw new Error('invalid_report_kind');
  const key=reportKey(candidate?.date,candidate?.station);
@@ -168,7 +172,8 @@ export async function commitTrustedReport({db,verifiedUid,kind,candidate,status=
  return db.runTransaction(async tx=>{
   const roleSnap=await tx.get(db.doc('users/'+verifiedUid));
   const role=roleSnap.exists?roleSnap.data():null;
-  if(!role||role.active!==true||!['admin','editor'].includes(role.role))
+  if(!role||role.active!==true||!['admin','editor'].includes(role.role)||
+   (requireAdmin&&role.role!=='admin'))
    throw new Error('report_write_forbidden');
   const ref=db.doc(col+'/'+key);
   const record=await tx.get(ref);
@@ -188,14 +193,54 @@ export async function commitTrustedReport({db,verifiedUid,kind,candidate,status=
   const auditRef=db.doc(audits+'/'+auditId);
   if(legacyRef&&!legacySnapshot.exists)tx.create(legacyRef,withinArchiveLimit({
    ...plan.legacy,archivedAt:time,unverifiedLegacy:true}));
-  tx.create(newHistoryRef,{...plan.history,recordedAt:time});
+  tx.create(newHistoryRef,{...plan.history,recordedAt:time,
+   ...(restoreFromVersion!==null?{restoredFromVersion:restoreFromVersion,restoreReason}:{})});
   tx.set(ref,{...plan.current,sourceName,createdAt:previous?.createdAt||time,
    createdBy:previous?.createdBy||verifiedUid,updatedAt:time,updatedBy:verifiedUid,
    lastAuditId:auditId});
   tx.create(auditRef,{reportKey:key,version:plan.version,
    contentHash:plan.contentHash,priorHash:plan.previousHash,actor:verifiedUid,
-   action:previous?'replace':'create',recordedAt:time,sourceName,
+   action:restoreFromVersion!==null?'restore':previous?'replace':'create',
+   ...(restoreFromVersion!==null?{restoredFromVersion:restoreFromVersion,restoreReason}:{}),
+   recordedAt:time,sourceName,
    archiveId:archiveId(key,plan.version)});
   return {status:'committed',version:plan.version,key,auditId};
  });
+}
+
+
+/**
+ * Admin-only audited restoration. The referenced archive is immutable to
+ * browser clients and is revalidated before a NEW revision is created.
+ * Previous current report is never overwritten without history and audit.
+ */
+export async function restoreTrustedReport({db,verifiedUid,kind,date,station,
+ fromVersion,expectedVersion,reason}={}){
+ if(!db||typeof db.doc!=='function'||!text(verifiedUid,128))
+  throw new Error('server_auth_required');
+ if(!['ofd','inhub'].includes(kind)||!Number.isInteger(fromVersion)||
+  fromVersion<1||fromVersion>999999||!Number.isInteger(expectedVersion)||
+  expectedVersion<1||expectedVersion>999999||!text(reason,120)||
+  reason.length<10)throw new Error('invalid_restore_approval');
+ const key=reportKey(date,station);
+ const archiveCollection=kind==='ofd'?'performanceVersions':'inventoryVersions';
+ const archived=await db.doc(archiveCollection+'/'+archiveId(key,fromVersion)).get();
+ if(!archived.exists)throw new Error('restore_archive_not_found');
+ const d=archived.data();
+ if(d.key!==key||d.version!==fromVersion||
+  d.validationSource!=='server-aggregates-only'||
+  d.unverifiedLegacy===true||d.kind!==kind)
+  throw new Error('restore_archive_untrusted');
+ // Never reuse a stored client hash as proof: calculate over all archive data.
+ const fields=kind==='ofd'?
+  ['key','date','station','rows','totalOFD','totalDelivered','courierCount']:
+  ['key','date','station','dates','areas','total'];
+ const candidate=Object.fromEntries(fields.map(k=>[k,d[k]]));
+ const verified=validateTrustedReport(kind,candidate);
+ if(d.contentHash!==verified.contentHash)
+  throw new Error('restore_archive_integrity_failed');
+ return commitTrustedReport({db,verifiedUid,kind,candidate,
+  status:kind==='ofd'?d.status:null,allowReplace:true,expectedVersion,
+  sourceName:'RESTORE_v'+fromVersion+'_'+reason,
+  requireAdmin:true,restoreFromVersion:fromVersion,restoreReason:reason});
 }
