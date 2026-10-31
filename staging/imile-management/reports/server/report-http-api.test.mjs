@@ -67,6 +67,19 @@ await check('validated second revision preserves v1',async()=>{
  assert.equal(db.docs.get('performanceVersions/'+archiveId(key,1)).rows[0].delivered,8);
  assert.equal(db.docs.get('performanceVersions/'+archiveId(key,2)).rows[0].delivered,9);
 });
+await check('editor sees current version for safe replacement',async()=>{
+ active='editor';
+ const r=await json(await api(req('GET','/v1/reports/current?kind=ofd&date='+date+
+  '&station=DS(AKE)')));
+ assert.equal(r.status,200);assert.equal(r.body.exists,true);
+ assert.equal(r.body.version,2);
+ assert.equal(r.body.status,'provisional');
+});
+await check('unknown daily report gives absent current version',async()=>{
+ const r=await json(await api(req('GET','/v1/reports/current?kind=ofd&date=2099-04-04'+
+  '&station=DS(AKE)')));
+ assert.equal(r.status,200);assert.equal(r.body.exists,false);
+});
 await check('viewer reads archived historical details',async()=>{
  active='viewer';
  const r=await json(await api(req('GET','/v1/reports/version?kind=ofd&date='+date+
