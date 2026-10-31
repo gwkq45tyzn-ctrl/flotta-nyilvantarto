@@ -38,7 +38,8 @@ const allowed=[
   'depokapacitas/import-dates.mjs',
   'depokapacitas/import-validation.mjs',
   'depokapacitas/import-encoding.mjs',
-  'depokapacitas/capacity-eligibility.mjs'
+  'depokapacitas/capacity-eligibility.mjs',
+  'depokapacitas/district-capacity.mjs'
 ];
 for(const p of allowed)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);
 if(existsSync(target))throw Error('Preview directory exists. Remove it manually before rebuilding: '+target);
