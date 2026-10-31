@@ -6,7 +6,7 @@
  * A server must inject a verified Firebase project and enforce its own ingress
  * controls. This API verifies aggregate consistency, NOT original source data.
  */
-import {archiveId,commitTrustedReport,reportKey} from './trusted-report-validation.mjs';
+import {archiveId,commitTrustedReport,reportKey,restoreTrustedReport} from './trusted-report-validation.mjs';
 
 const MAX_JSON_BYTES=512*1024;
 const response=(code,body,origin)=>new Response(JSON.stringify(body),{
@@ -74,7 +74,7 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
   let url;
   try{url=new URL(req.url);}catch{return fail(400,'invalid_request_url',origin);}
   if(!['POST','GET'].includes(req.method))return fail(405,'method_not_allowed',origin);
-  if(!['/v1/reports/save','/v1/reports/version','/v1/reports/current'].includes(url.pathname))
+  if(!['/v1/reports/save','/v1/reports/version','/v1/reports/current','/v1/reports/restore'].includes(url.pathname))
    return fail(404,'not_found',origin);
   const token=parseBearer(req.headers.get('authorization'));
   if(!token)return fail(401,'bearer_required',origin);
@@ -119,6 +119,29 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
      record.unverifiedLegacy||record.validationSource==='legacy-unverified'
       ?'legacy-unverified':'server-aggregate-checked-not-source-attested'},origin);
    }catch{return fail(503,'storage_unavailable',origin);}
+  }
+  if(url.pathname==='/v1/reports/restore'){
+   let body;
+   try{body=await readBody(req);}
+   catch(e){return fail(e.message==='invalid_media_type'?415:400,msg(e),origin);}
+   if(!keys(body,['kind','date','station','fromVersion','expectedVersion','reason','confirmed'])||
+    !Object.hasOwn(kinds,body.kind)||body.confirmed!==true||
+    !Number.isSafeInteger(body.fromVersion)||!Number.isSafeInteger(body.expectedVersion)||
+    typeof body.reason!=='string')return fail(400,'invalid_restore_envelope',origin);
+   try{
+    const result=await restoreTrustedReport({db,verifiedUid:uid,kind:body.kind,
+     date:body.date,station:body.station,fromVersion:body.fromVersion,
+     expectedVersion:body.expectedVersion,reason:body.reason});
+    return response(200,{result,sourceValidation:'server-aggregate-checked-not-source-attested'},origin);
+   }catch(e){
+    const error=msg(e);
+    if(error==='report_write_forbidden')return fail(403,error,origin);
+    if(error==='restore_archive_not_found')return fail(404,error,origin);
+    if(error==='replacement_not_approved'||error==='cannot_downgrade_final')
+     return fail(409,error,origin);
+    return fail(/^(invalid_|restore_archive_)/.test(error)?422:503,
+      /^(invalid_|restore_archive_)/.test(error)?error:'restore_failed',origin);
+   }
   }
   if(url.pathname!=='/v1/reports/save')return fail(405,'method_not_allowed',origin);
   let body;
