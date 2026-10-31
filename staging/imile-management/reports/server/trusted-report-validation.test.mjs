@@ -156,15 +156,15 @@ async function scenario(){
  const db=new MemoryAdmin();
  let r=await commitTrustedReport(auth(db,'ofd',ofd()));
  assert.equal(r.status,'committed');assert.equal(r.version,1);
- assert.equal(db.store.size,5); // users, current, immutable history, audit
+ assert.equal(db.store.size,4); // users, current, immutable history, audit
  assert.ok(db.store.has('performanceVersions/'+archiveId(key,1)));
  assert.equal(db.store.get('performanceVersions/'+archiveId(key,1)).rows[0].ofd,10);
  r=await commitTrustedReport(auth(db,'ofd',ofd()));
- assert.equal(r.status,'unchanged');assert.equal(db.store.size,5);
+ assert.equal(r.status,'unchanged');assert.equal(db.store.size,4);
  const corrected=ofd([courier('D1',10,9)]);
  await assert.rejects(()=>commitTrustedReport(auth(db,'ofd',corrected)),/replacement_not_approved/);
  r=await commitTrustedReport(auth(db,'ofd',corrected,{allowReplace:true,expectedVersion:1,status:'final'}));
- assert.equal(r.version,2);assert.equal(db.store.size,7);
+ assert.equal(r.version,2);assert.equal(db.store.size,6);
  assert.equal(db.store.get('performanceVersions/'+archiveId(key,1)).rows[0].delivered,8);
  assert.equal(db.store.get('performanceVersions/'+archiveId(key,2)).rows[0].delivered,9);
  await assert.rejects(()=>commitTrustedReport(auth(db,'ofd',ofd(),
