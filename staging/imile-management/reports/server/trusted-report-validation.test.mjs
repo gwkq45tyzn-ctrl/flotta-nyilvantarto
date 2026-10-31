@@ -142,7 +142,8 @@ check('all inventory receive-day buckets bounded before database writes',()=>{
   return d.toISOString().slice(0,10);
  });
  const areas=Array.from({length:60},(_,i)=>({area:'District-'+i,counts:Array(180).fill(0)}));
- const over={key,date:day,station,dates,areas,total:0};
+ const futureDay='2099-12-31';
+ const over={key:futureDay+'__DS(AKE)',date:futureDay,station,dates,areas,total:0};
  assert.throws(()=>validateTrustedReport('inhub',over),/invalid_areas/);
 });
 check('large history snapshot refused even with valid numerical totals',()=>{
