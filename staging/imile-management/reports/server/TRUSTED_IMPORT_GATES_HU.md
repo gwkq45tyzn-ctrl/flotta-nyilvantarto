@@ -17,7 +17,7 @@
 - `report-app.mjs`: megszűnt a közvetlen kliensoldali Firestore-riportírás. Kizárólag az engedélyezett API-n menthet; egyetlen nap/depó egységet kezel atomikusan. A korábbi verziót explicit jóváhagyással lehet javítani.
 - `report-api-config.mjs`: az API URL alaphelyzetben üres. Ezért API-telepítés nélkül a mentés és történeti API-lekérdezés letiltott, **az Excel-riport készítése és letöltése továbbra is működik**.
 - `depokapacitas/firestore.rules`: a hat riport- és verziógyűjtemény esetén minden közvetlen böngészős create/update/delete **tilos**; az aktív belső felhasználók olvashatnak.
-- A meglévő, böngészőből készített staging rekordok nem jelenhetnek meg szerverileg ellenőrzött KPI-ként. A UI kizárja és külön számolja a `validationSource!='trusted-server'` jelzésű rekordokat.
+- A meglévő, böngészőből készített staging rekordok nem jelenhetnek meg szerverileg ellenőrzött KPI-ként. A UI kizárja és külön számolja a `validationSource!='server-aggregates-only'` jelzésű rekordokat.
 
 ## Tesztek és forrásadat-határ
 
