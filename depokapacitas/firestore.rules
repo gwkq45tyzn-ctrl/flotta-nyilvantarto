@@ -427,10 +427,7 @@ service cloud.firestore {
         'reportKey','version','contentHash','priorHash','action','status',
         'actor','at','sourceName'
       ])
-        && id.matches('^[A-Za-z0-9]{20}
-  }
-}
-) && textField(d.reportKey,300)
+        && id.matches('^[A-Za-z0-9]{20}') && textField(d.reportKey,300)
         && d.version is int && d.version >= 1 && d.version <= 1000000
         && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}')
         && d.priorHash is string && (d.priorHash == '' || d.priorHash.matches('^[a-f0-9]{64}'))
