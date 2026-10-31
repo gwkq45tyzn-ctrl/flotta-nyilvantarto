@@ -138,12 +138,16 @@ async function loadStats(){
   const excluded=records.length-verified.length;
   const snapshot=buildPerformanceStatistics(verified);stats=snapshot;
   const warning=snapshot.partial?' · FIGYELEM: hibás vagy duplikált forrás!':'';
-  field('statStatus',snapshot.reportDays+' nap/depó riport · '+snapshot.totalOFD+
-   ' OFD · '+snapshot.totalDelivered+' kézbesített · '+pct(snapshot.rate)+warning+
+  field('statStatus',snapshot.reportDays+' nap/depó riport · operatív (előzetest is tartalmaz): '+snapshot.totalOFD+
+   ' OFD · '+snapshot.totalDelivered+' kézbesített · '+pct(snapshot.rate)+
+   ' · VÉGLEGES KPI: '+snapshot.totalFinalOFD+' OFD / '+snapshot.totalFinalDelivered+
+   ' DLD · '+pct(snapshot.finalRate)+' ('+snapshot.finalReportDays+' végleges és '+
+   snapshot.provisionalReportDays+' előzetes riport)'+warning+
    ' · Legfeljebb a 250 legutóbbi rekord (szerverről).'+
    (excluded?' · '+excluded+' korábbi, nem szerverileg ellenőrzött rekord kizárva.':''));
   for(const r of snapshot.couriers.slice(0,100))$('courierStats').append(
-   entry([r.daCode,r.daName,r.days,r.ofd,r.delivered,pct(r.rate),r.vendors.join(', ')]));
+   entry([r.daCode,r.daName,r.days,r.ofd,r.delivered,pct(r.rate),
+    r.finalOfd,r.finalDelivered,pct(r.finalRate),r.vendors.join(', ')]));
   for(const r of snapshot.vendors.slice(0,100))$('vendorStats').append(
    entry([r.date,r.station,r.vendor,r.couriers,r.ofd,r.delivered,pct(r.rate),r.spr.toFixed(1)]));
   if(!snapshot.couriers.length)$('courierStats').append(entry(['Még nincs mentett napi OFD-riport.']));
