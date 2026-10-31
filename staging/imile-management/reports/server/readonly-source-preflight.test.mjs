@@ -125,4 +125,20 @@ check('wrong receive-date chronology blocks In-Hub scope',()=>{
  assert.equal(preview('inhub',sourceInHub,{date:'2099-05-30',
  station:scopeInHub.station}).reason,'inventory_scope_or_candidate_invalid');
 });
+check('Excel physical row number remains accurate after a blank source row',()=>{
+ const m=structuredClone(sourceInHub);
+ m.splice(2,0,Array(m[0].length).fill(''));
+ m[3][25]='9999';
+ const result=preview('inhub',m,scopeInHub);
+ assert.equal(result.reason,'raw_source_blocked');
+ assert.equal(result.issues[0].line,4);
+});
+check('whitespace-only source rows are ignored consistently',()=>{
+ const m=structuredClone(sourceInHub);
+ m.splice(2,0,Array(m[0].length).fill('   '));
+ const result=preview('inhub',m,scopeInHub);
+ assert.equal(result.status,'ready');
+ assert.equal(result.sourceRows,4);
+ assert.equal(result.selectedSourceRows,4);
+});
 console.log('PASS: '+count+' read-only scoped source preflight, privacy and repair-diagnostic tests');
