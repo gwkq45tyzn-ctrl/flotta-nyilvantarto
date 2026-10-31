@@ -30,7 +30,7 @@ A napi VEHICLE_Fuel_Database beosztás **ellenőrzésre** szolgál: ha eltér a 
 
 **Fontos nyitott követelmény:** a felhasználó egyelőre csak az **átvételi km** mező bevezetését jelezte. A tényleges visszaadás km-adatát nem szabad kitalálni vagy az átvételi értékkel helyettesíteni. A jelenlegi staging Flotta-művelet mind kiadáskor, mind visszavételkor kilométeróra-állást kér, ezért a Log Out automatikus tranzakciójához záró km mező vagy külön, km- nélküli és ellenőrizendő visszaadási folyamat szükséges. A teljes, km-ben is lezárt automatikus visszaadást **nem tekinthetjük késznek**, amíg ez nincs megoldva.
 
-A Google Apps Script staging `Code.gs` változata már felismeri a fejlécből a Vehicle Plate / Vehicle ID / License Plate / Rendszám / Autó rendszáma elnevezést. Az eddigi 16 oszlopos sorokat változatlanul szinkronizálja, az új, érvényes `vehicleId` mezőt pedig opcionálisan viszi a Firestore `attendance` dokumentumba. **A km-óra mező szinkronja még nincs beépítve**, és a változások nem kerültek éles szinkronra publikálásra. A szkript projektazonosítója a repóban placeholder. A forrás Google-táblát nem módosítjuk.
+A Google Apps Script staging `Code.gs` változata már felismeri a fejlécből a Vehicle Plate / Vehicle ID / License Plate / Rendszám / Autó rendszáma elnevezést. Az eddigi 16 oszlopos sorokat változatlanul szinkronizálja, az új, érvényes `vehicleId` mezőt pedig opcionálisan viszi a Firestore `attendance` dokumentumba. **A km-óra mező szinkronja még nincs beépítve a kiadott staging verzióban**; a hozzá tartozó javítás külön felülvizsgálati ágon készül, nem publikálható éles szinkronként. A szkript projektazonosítója a repóban placeholder. A forrás Google-táblát nem módosítjuk.
 
 A Google Apps Script staging `Code.gs` változata már felismeri a fejlécből a Vehicle Plate / Vehicle ID / License Plate / Rendszám / Autó rendszáma elnevezést. Az eddigi 16 oszlopos sorokat változatlanul szinkronizálja, az új, érvényes `vehicleId` mezőt pedig opcionálisan viszi a Firestore `attendance` dokumentumba. A staging Firestore Rules forrásában a `vehicleId` opcionális és validált. A változások még **nincsenek éles szinkronra publikálva**. A szkript projektazonosítója a repóban placeholder, így nem tekinthető aktiváltnak.
 
@@ -63,3 +63,18 @@ A jelenlegi staging megvalósítás **olvasó rekonstrukció**, nem rögzít él
 6. Tényleges depóadatokon csak külön GO/NO-GO döntéssel, előbb naplózós előnézetben, majd részleges bevezetéssel.
 
 A GitHub `main` ág, az éles flotta és a VEHICLE_Fuel_Database változatlan marad. Az Attendance Google Sheet és Form későbbi bővítését a forrás kezelője intézi; az iMile Management ezt kizárólag olvashatóan követi.
+
+
+## 2026-10-31 – opcionális km-beolvasás és automatikus visszavétel zárási korlát
+
+A `fix/attendance-odometer-validation-20261031` fejlesztői ágon a csak olvasó
+szinkron opcionálisan felismeri a külön Pickup / Return Odometer mezőket vagy az
+egyetlen „Kilométeróra állás” mezőt. A hiányzó adatot nem pótolja és nem kerekíti;
+számszerű Firestore egészértékként viszi át (`pickupOdometer`,
+`returnOdometer`), ha az eredeti forráson ténylegesen megjelent.
+
+**Fontos:** érvényes átvételi km nélkül nincs autókiadás, a fotók megérkezése
+önmagában nem zárja le a kiadást. Hiányzó vagy kisebb záró km esetén
+`return_review` marad a nyitott használat, a jármű nem számít szabadnak.
+A kötelező visszaadási kilométer adatforrás és a szerveroldali tranzakció
+egyelőre hiányzik. A kódban végrehajtott módosítás nem telepítés.
