@@ -34,7 +34,7 @@
     .module .symbol{font-size:38px}
     .module .footer{color:#62738a;font-size:13px}
     .module.depo{border-top:5px solid #079b77}
-    .module.fleet{border-top:5px solid #2864b7}
+    .module.fleet{border-top:5px solid #2864b7}.module.reports{border-top:5px solid #7952b3}
     .message{min-height:1.5em;font-size:14px;color:#a12424}
     .status{color:#50627b}
     [hidden]{display:none!important}
@@ -89,6 +89,13 @@
           <p>Beosztás, autófoglalás, kapacitástervezés, jelenlét, csomagigény, futárteljesítmény.</p>
           <div class="footer">Ugyanaz a Firebase Auth munkamenet; a depóalkalmazás ismét ellenőrzi a hozzáférést.</div>
           <a class="action" href="../../depokapacitas/index.html" id="depoLink">DepóKapacitás megnyitása</a>
+        </article>
+        <article class="card module reports">
+          <span class="symbol" aria-hidden="true">📑</span>
+          <h3>Napi riportok</h3>
+          <p>In-Hub Inventory és OFD Monitoring: nyers Excelből a mintával egyező Sheet2.</p>
+          <div class="footer">Belső staging QA. Helyi előnézet és .xlsx letöltés; statisztikai adatbázis-mentés még nincs bekapcsolva.</div>
+          <a class="action secondary" href="./reports/index.html" id="reportsLink">Riportkészítő megnyitása (staging)</a>
         </article>
       </div>
     </section>
