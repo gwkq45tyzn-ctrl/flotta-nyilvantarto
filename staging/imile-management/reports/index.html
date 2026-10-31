@@ -23,13 +23,13 @@
 </section>
 <section class="panel">
  <h2>Futár- és vállalkozói teljesítmény</h2>
- <p class="muted">Az adatokat friss szerveri válaszból kérjük le. A százalékok súlyozottak, a napi előzetes és végleges állapotok elkülönülnek.</p>
+ <p class="muted">Az adatokat friss szerveri válaszból kérjük le. A százalékok súlyozottak. A 10 óra körüli előzetes eredmény csak operatív tájékoztatás; a végleges napi KPI kizárólag végleges riportokból számítódik.</p>
  <button type="button" id="refreshStats">Statisztika frissítése</button>
  <p id="statStatus" role="status">Még nincs szerveri statisztika betöltve.</p>
  <h3>In-Hub raktárpillanatképek</h3>
  <p id="inventoryStatStatus" role="status">Még nincs raktárstatisztika betöltve.</p>
  <div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Raktári csomag</th><th>Területek</th></tr></thead><tbody id="inventoryStats"></tbody></table></div>
- <h3>Futárok</h3><div class="scroll"><table><thead><tr><th>DA Code</th><th>Futár</th><th>Riportnap</th><th>OFD</th><th>DLD</th><th>Sikeresség</th><th>Vállalkozók</th></tr></thead><tbody id="courierStats"></tbody></table></div>
+ <h3>Futárok</h3><div class="scroll"><table><thead><tr><th>DA Code</th><th>Futár</th><th>Riportnap</th><th>Összes OFD (előzetessel)</th><th>Összes DLD</th><th>Operatív %</th><th>Végleges OFD</th><th>Végleges DLD</th><th>Végleges KPI %</th><th>Vállalkozók</th></tr></thead><tbody id="courierStats"></tbody></table></div>
  <h3>Vállalkozók – napi teljesítmény</h3><div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Vállalkozó</th><th>Futárok</th><th>OFD</th><th>DLD</th><th>DLD%</th><th>SPR</th></tr></thead><tbody id="vendorStats"></tbody></table></div>
 </section>
 <section class="panel">
