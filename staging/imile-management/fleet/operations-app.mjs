@@ -44,7 +44,25 @@ function render(){
   const td=el('td'),edit=el('button','Szerkesztés');edit.disabled=!recordWritable();edit.setAttribute('aria-label','Szerkesztés: '+row.id);edit.onclick=()=>{baseline=row;buildForm();$('recordForm').scrollIntoView({block:'center'});};td.append(edit);tr.append(td);$('recordRows').append(tr);
  }
  if(!rows.length){const row=el('tr'),cell=el('td','Nincs mentett adat.');cell.colSpan=fields.length+1;row.append(cell);$('recordRows').append(row);}
- $('assignments').replaceChildren();for(const a of data.fleetAssignments.filter(x=>x.active))$('assignments').append(el('p',a.vehicleId+' → '+a.driverId+' · '+a.mileage+' km'));
+ $('assignments').replaceChildren();
+ for(const a of data.fleetAssignments.filter(x=>x.active===true)){
+  const line=el('div');line.className='actions';line.append(el('span',a.vehicleId+' → '+a.driverId+' · '+a.mileage+' km'));
+  if(writable()){
+   const button=el('button','Visszavétel előkészítése');button.type='button';
+   button.onclick=()=>{
+    const form=$('movementForm');
+    form.elements.vehicleId.value=a.vehicleId;
+    form.elements.driverId.value=a.driverId;
+    form.elements.action.value='return';
+    form.elements.date.value=today();
+    form.elements.mileage.value=String(a.mileage);
+    $('movementMessage').textContent='Visszavétel előkészítve: '+a.vehicleId+' / '+a.driverId+'. Ellenőrizd a valós km-órát, majd mentsd a műveletet.';
+    form.scrollIntoView({block:'center'});
+   };
+   line.append(button);
+  }
+  $('assignments').append(line);
+}
  if(!data.fleetAssignments.some(x=>x.active))$('assignments').append(el('p','Nincs aktív járműkiadás.'));
  $('movementRows').replaceChildren();for(const m of data.fleetMovements.slice().sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))){const tr=el('tr');for(const v of [m.date,m.vehicleId,m.driverId,m.action==='checkout'?'Kiadás':'Visszavétel',m.mileage,m.note])tr.append(el('td',v));$('movementRows').append(tr);}
  $('warnings').replaceChildren();for(const item of expiryWarnings(data.fleetRecords,today())){const f=schemas[data.fleetRecords.find(x=>x.id===item.id).kind].fields.find(x=>x.key===item.field);const p=el('p',item.id+' · '+f.label+': '+item.date+' · '+(item.days<0?'Lejárt '+(-item.days)+' napja':item.days+' nap múlva'));p.className='warning';$('warnings').append(p);}
@@ -77,7 +95,13 @@ else{
    uid=user.uid;role=profile.role;$('identity').textContent=(profile.name||'Felhasználó')+' · '+role;
    for(const control of $('movementForm').elements)control.disabled=!writable();
    buildForm();const loaded=new Set();
-   for(const name of Object.keys(data))unsubs.push(onSnapshot(collection(db,name),snapshot=>{if(rev!==generation)return;data[name]=snapshot.docs.map(d=>({...d.data(),id:d.id}));loaded.add(name);refreshChoices();render();$('workspace').hidden=false;setStatus(loaded.size===Object.keys(data).length?'● Élő staging Firestore kapcsolat':'Adatok betöltése…');},error=>{if(rev!==generation)return;setStatus('Adatkapcsolati hiba ('+name+'): '+error.message,true);}));
+   for(const name of Object.keys(data))unsubs.push(onSnapshot(collection(db,name),snapshot=>{if(rev!==generation)return;data[name]=snapshot.docs.map(d=>({...d.data(),id:d.id}));loaded.add(name);
+ if(loaded.size===Object.keys(data).length){
+  try{refreshChoices();render();$('workspace').hidden=false;setStatus('● Élő staging Firestore kapcsolat · minden alapforrás betöltve');}
+  catch(error){$('workspace').hidden=true;setStatus('A Flotta-adatok nem jeleníthetők meg megbízhatóan: '+error.message,true);}
+ }else{
+  $('workspace').hidden=true;setStatus('Flotta-adatok betöltése: '+loaded.size+'/'+Object.keys(data).length+' forrás…');
+ }},error=>{if(rev!==generation)return;$('workspace').hidden=true;setStatus('Flotta-adatkapcsolati hiba ('+name+'): '+error.message,true);}));
   }catch(error){if(rev===generation)setStatus('Jogosultságellenőrzési hiba: '+error.message,true);}
  });
 }
