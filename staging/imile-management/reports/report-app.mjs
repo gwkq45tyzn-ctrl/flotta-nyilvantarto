@@ -133,11 +133,15 @@ async function loadStats(){
  try{
   const all=await getDocsFromServer(query(collection(db,'performanceDays'),orderBy('date','desc'),limit(250)));
   if(!authorized)return;
-  const snapshot=buildPerformanceStatistics(all.docs.map(d=>d.data()));stats=snapshot;
+  const records=all.docs.map(d=>d.data());
+  const verified=records.filter(d=>d.validationSource==='trusted-server');
+  const excluded=records.length-verified.length;
+  const snapshot=buildPerformanceStatistics(verified);stats=snapshot;
   const warning=snapshot.partial?' · FIGYELEM: hibás vagy duplikált forrás!':'';
   field('statStatus',snapshot.reportDays+' nap/depó riport · '+snapshot.totalOFD+
    ' OFD · '+snapshot.totalDelivered+' kézbesített · '+pct(snapshot.rate)+warning+
-   ' · Legfeljebb a 250 legutóbbi rekord (szerverről).');
+   ' · Legfeljebb a 250 legutóbbi rekord (szerverről).'+
+   (excluded?' · '+excluded+' korábbi, nem szerverileg ellenőrzött rekord kizárva.':''));
   for(const r of snapshot.couriers.slice(0,100))$('courierStats').append(
    entry([r.daCode,r.daName,r.days,r.ofd,r.delivered,pct(r.rate),r.vendors.join(', ')]));
   for(const r of snapshot.vendors.slice(0,100))$('vendorStats').append(
@@ -147,13 +151,17 @@ async function loadStats(){
  try{
   const all=await getDocsFromServer(query(collection(db,'inventoryDays'),orderBy('date','desc'),limit(180)));
   if(!authorized)return;
-  const history=inventoryHistory(all.docs.map(d=>d.data()));
+  const records=all.docs.map(d=>d.data());
+  const verified=records.filter(d=>d.validationSource==='trusted-server');
+  const excluded=records.length-verified.length;
+  const history=inventoryHistory(verified);
   $('inventoryStats').replaceChildren();
   for(const row of history.rows.slice(0,100))
    $('inventoryStats').append(entry([row.date,row.station,row.total,row.areas]));
   field('inventoryStatStatus',history.rows.length+' raktárpillanatkép'+
    (history.errors.length?' · FIGYELEM: hibás forrásrekord!':'')+
-   ' · legfeljebb 180 szerveri napi állapot.');
+   ' · legfeljebb 180 szerveri napi állapot.'+
+   (excluded?' · '+excluded+' korábbi, nem szerverileg ellenőrzött rekord kizárva.':''));
  }catch(error){field('inventoryStatStatus','Raktári statisztika nem ellenőrizhető: '+error.message);}
 }
 $('refreshStats').onclick=loadStats;
