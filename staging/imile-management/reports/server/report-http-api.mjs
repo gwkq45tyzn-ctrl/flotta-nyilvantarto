@@ -6,7 +6,7 @@
  * A server must inject a verified Firebase project and enforce its own ingress
  * controls. This API verifies aggregate consistency, NOT original source data.
  */
-import {archiveId,commitTrustedReport,reportKey,restoreTrustedReport} from './trusted-report-validation.mjs';
+import {archiveId,commitTrustedReport,reportKey,restoreTrustedReport,validateTrustedReport} from './trusted-report-validation.mjs';
 
 const MAX_JSON_BYTES=512*1024;
 const response=(code,body,origin)=>new Response(JSON.stringify(body),{
@@ -115,9 +115,23 @@ export function createReportApi({db,verifyIdToken,allowedOrigin,projectId}={}){
     const record=snap.data();
     if(record.key!==key||record.version!==version)
      return fail(409,'history_integrity_failed',origin);
+    // A claimed origin is not evidence: legacy documents must not be
+    // represented as server-checked, even if the source marker is missing.
+    const trusted=record.validationSource==='server-aggregates-only'&&
+     record.unverifiedLegacy!==true&&record.kind===kind;
+    if(trusted){
+     try{
+      const required=kind==='ofd'?
+       ['key','date','station','rows','totalOFD','totalDelivered','courierCount']:
+       ['key','date','station','dates','areas','total'];
+      const input=Object.fromEntries(required.map(name=>[name,record[name]]));
+      const checked=validateTrustedReport(kind,input);
+      if(checked.contentHash!==record.contentHash)
+       return fail(409,'history_integrity_failed',origin);
+     }catch{return fail(409,'history_integrity_failed',origin);}
+    }
     return response(200,{version:record,sourceValidation:
-     record.unverifiedLegacy||record.validationSource==='legacy-unverified'
-      ?'legacy-unverified':'server-aggregate-checked-not-source-attested'},origin);
+     trusted?'server-aggregate-checked-not-source-attested':'legacy-unverified'},origin);
    }catch{return fail(503,'storage_unavailable',origin);}
   }
   if(url.pathname==='/v1/reports/restore'){
