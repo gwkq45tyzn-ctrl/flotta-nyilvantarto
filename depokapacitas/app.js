@@ -6,6 +6,7 @@ import {parseDay,parseTime} from './import-dates.mjs';
 import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
 import {summarizeDistrictCapacity} from './district-capacity.mjs';
+import {previewParcelManifest} from './parcel-manifest.mjs';
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
@@ -14,6 +15,7 @@ import {decodeCsv} from './import-encoding.mjs';
 
 const $=id=>document.getElementById(id);
 const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[]},unsubscribe:[],loaded:new Set(),errors:new Set()};
+let localParcelPreview=null; // summary only, never raw parcel identifiers
 const names={overview:'Áttekintés',alerts:'Összes teendő',planning:'Beosztás és foglalás',drivers:'Futárok',vehicles:'Autók',demands:'Kerületi csomagigény',results:'Futárteljesítmény',attendance:'Jelenlét és fotók',import:'Excel és adatok',admin:'Felhasználók'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n||0).toLocaleString('hu-HU');
@@ -171,7 +173,38 @@ function drivers(){const list=get('drivers').filter(x=>(x.name+' '+x.daCode+' '+
 function vehicles(){const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));return '<p class="inline-note">Az autók és a műszaki státuszok közös törzsadatai a Flotta rendszerből származnak. A Kapacitáskezelő nem írja felül őket.</p>'+section('Autónyilvántartás · '+list.length+' db',table(['Rendszám','Típus','Állapot','Mai foglalás'],list.map(x=>{const b=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);return td(esc(x.plate),esc(x.model),status(x.status),b?esc(byId('drivers',b.driverId)?.name||'—'):'Szabad');})));}
 function planning(){const ds=get('drivers').filter(eligibleDriver).slice().sort((a,b)=>a.name.localeCompare(b.name));const vs=get('vehicles').filter(x=>x.status==='Elérhető').slice().sort((a,b)=>a.plate.localeCompare(b.plate));const today=get('bookings').filter(x=>x.date===state.date).sort((a,b)=>(a.district||'').localeCompare(b.district||''));const taken=new Set(today.map(x=>x.vehicleId));const available=vs.filter(x=>!taken.has(x.id));const form=canWrite()?section('Futár és autó összerendelése',frm('booking',field('date','Munkanap','date',state.date)+select('driverId','Futár',ds,x=>x.name+' · '+x.daCode)+select('vehicleId','Szabad autó',available,x=>x.plate)+field('district','Kerület','text','','placeholder="pl. IX."')+'<label>Státusz<select name="status"><option value="planned">Tervezett</option><option value="confirmed">Visszaigazolt</option></select></label>','Foglalás mentése')+'<p class="small">Egy autó egy nap csak egy futárhoz foglalható. Ugyanaz a futár sem kaphat két autót ugyanarra a napra.</p>'):'';
 return datebar()+nextDayPanel()+centralTaskList(5)+attendanceVehicleSummary()+form+section('Napi foglalások · '+today.length,table(['Futár','Autó','Kerület','Kapacitás','Státusz','Elérhetőség',''],today.map(x=>td(esc(byId('drivers',x.driverId)?.name||'Ismeretlen'),esc(byId('vehicles',x.vehicleId)?.plate||'—'),esc(x.district),fmt(x.capacity),status(x.status),bookingAssessment(x).eligible?label('Rendben','green'):label('Nem elérhető','red'),canWrite()?'<button class="danger" data-cancel="'+esc(x.id)+'">Feloldás</button>':''))));}
-function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
+function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))))+parcelPreviewSection();}
+function parcelPreviewSection(){
+ const report=localParcelPreview?.date===state.date?localParcelPreview:null;
+ const form='<form id="parcelPreviewForm" class="form-grid">'+
+   '<label>Csomagszintű lista CSV vagy Excel formátumban'+
+   '<input type="file" name="file" accept=".csv,.xlsx,.xls" required></label>'+
+   '<button type="submit" class="secondary">Csak helyi ellenőrzés</button></form>'+
+   '<p class="inline-note">Elvárt oszlopok: Date / Dátum, Tracking ID / Csomagszám / AWB, District / Kerület, Kind / Kategória (New / Retry vagy Új / Újrakézbesítendő). A fájlt nem töltjük fel, a csomagazonosítókat nem tároljuk és nem mutatjuk meg a riportban. Legfeljebb 5000 sor.</p>';
+ if(!report)return section('Csomagszintű duplázás-ellenőrzés · csak helyben',form);
+ const messages={
+   match:'A helyi, egyedi csomagszámokon alapuló mennyiségek egyeznek a rögzített kerületi összesítéssel.',
+   mismatch:'Eltérés van a helyi csomaglista és a rögzített kerületi terv között.',
+   invalid_manifest:'A csomaglista hiányos vagy ellentmondásos – nincs hitelesített eredmény.',
+   source_unavailable:'A kerületi összesítés adatforrása nem elérhető; az egyezőség nem dönthető el.'
+ };
+ const data=report.comparisons.slice(0,100).map(x=>td(
+   esc(x.district),
+   x.manifestNew===null?'—':fmt(x.manifestNew),
+   x.manifestRetry===null?'—':fmt(x.manifestRetry),
+   x.storedNew===null?'—':fmt(x.storedNew),
+   x.storedRetry===null?'—':fmt(x.storedRetry),
+   label(x.status==='match'?'Egyezik':x.status==='missing_manifest'?'Hiányzik a listából':x.status==='missing_aggregate'?'Nincs kerületi terv':x.status==='duplicate_aggregate'?'Ismételt kerületi terv':'Eltérés',x.status==='match'?'green':'red')
+ ));
+ return section('Csomagszintű duplázás-ellenőrzés · csak helyben',
+   form+'<p class="notice">'+esc(messages[report.comparisonStatus])+'</p>'+
+   '<p>Azonosítható egyedi csomagok: <strong>'+fmt(report.uniqueCount)+
+   '</strong> · azonos duplikált sorok: '+fmt(report.duplicateCount)+
+   ' · hibás vagy ellentmondó sorok: '+fmt(report.invalidCount)+'</p>'+
+   table(['Kerület','Listában új','Listában újra','Tervben új','Tervben újra','Egyezőség'],data)+
+   (report.comparisons.length>100?'<p class="inline-note">Csak az első 100 kerület látható.</p>':'')
+ );
+}
 function results(){const rs=get('results');const dates=['day','week','month'];const summaries=dates.map(mode=>{const data=rs.filter(x=>inRange(x,mode));return {mode,label:{day:'Napi',week:'Heti',month:'Havi'}[mode],picked:data.reduce((s,x)=>s+number(x.picked),0),success:data.reduce((s,x)=>s+number(x.success),0),failed:data.reduce((s,x)=>s+number(x.failed),0)};});
 const byDriver=new Map();for(const r of rs.filter(x=>inRange(x,state.mode))){const x=byDriver.get(r.driverId)||{picked:0,success:0,failed:0,days:new Set()};x.picked+=number(r.picked);x.success+=number(r.success);x.failed+=number(r.failed);x.days.add(r.date);byDriver.set(r.driverId,x);}
 const list=[...byDriver].map(([id,r])=>td(esc(byId('drivers',id)?.name||id),r.days.size,fmt(r.picked),fmt(r.success),fmt(r.failed),(r.picked?Math.round(100*r.success/r.picked)+'%':'—'),(r.days.size?(r.picked/r.days.size).toFixed(1):'—')));
@@ -329,6 +362,19 @@ function csvExport(){
  const a=document.createElement('a');a.href=url;a.download='depo_'+state.view+'_'+state.date+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 document.addEventListener('click',e=>{if(e.target.id==='exportCsv')csvExport();});
+async function previewParcels(form){
+ const file=form.elements.file.files?.[0];
+ if(!file)throw Error('Válassz csomaglistát.');
+ if(file.size>8*1024*1024)throw Error('Az ellenőrzéshez legfeljebb 8 MB-os fájl használható.');
+ const parsed=await parseFile(file,'parcel');
+ const report=previewParcelManifest(parsed.rows,{
+   date:state.date,storedDemands:get('demands'),
+   sourceReady:state.loaded.has('demands')&&!state.errors.has('demands')
+ });
+ localParcelPreview=report; // only aggregated, non-identifying output
+ render();
+ toast(report.verified?'A csomagszintű ellenőrzés elkészült.':'A csomaglista eltéréseket tartalmaz.',!report.verified);
+}
 async function previewMasterComparison(form){
  if(state.role!=='admin')throw Error('Csak az adminisztrátor ellenőrizheti a közös törzsadatokat.');
  const file=form.elements.fleetBackup.files[0];
@@ -343,7 +389,7 @@ async function previewMasterComparison(form){
  out.innerHTML='<div class="grid kpis" style="margin-top:16px">'+totals.map(([name,value])=>kpi(esc(name),value, name.includes('Blokkoló')?'Élesítés előtt javítani kell':'Ellenőrzési adat',value>0&&name.includes('Blokkoló')?'red':'')).join('')+'</div><p class="inline-note">'+(plan.readyForReview?'A törzsadatok egyeztetésre előkészítve, de az automatikus import továbbra is le van tiltva.':'A feltárt eltérések rendezéséig az adatátvétel nem engedélyezhető.')+'</p>'+section('Ellenőrzendő eltérések',table(['Típus','Terület','Azonosító','Érintett mezők'],plan.problems.slice(0,100).map(x=>td(esc(x.type),esc(x.target||x.kind),esc(x.id||x.fleetId||'—'),esc((x.fields||[]).join(', '))))));
  toast('A flottaadatok összehasonlítása elkészült; nincs adatírás.');
 }
-document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
+document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='parcelPreviewForm'){e.preventDefault();try{await previewParcels(e.target);}catch(ex){toast('Nem sikerült ellenőrizni a csomaglistát: '+ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
 $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}
 else {
@@ -351,5 +397,5 @@ else {
  $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const f=new FormData(e.target);try{await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(ex){$('loginError').textContent='Hibás belépési adatok, letiltott fiók vagy nem elérhető szolgáltatás.';}});
  $('logout').addEventListener('click',()=>signOut(auth));
  $('signoutDenied').addEventListener('click',()=>signOut(auth));
- onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}try{const r=await getDoc(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
+ onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){localParcelPreview=null;state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}try{const r=await getDoc(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
 }

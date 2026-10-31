@@ -38,6 +38,8 @@ jobs:
           node depokapacitas/district-capacity.test.mjs
           node depokapacitas/district-capacity.integration.test.mjs
           node depokapacitas/next-day-forecast.test.mjs
+          node depokapacitas/parcel-manifest.test.mjs
+          node staging/imile-management/parcel-manifest.integration.test.mjs
           node staging/imile-management/next-day.integration.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
