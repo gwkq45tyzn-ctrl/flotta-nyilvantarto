@@ -5,7 +5,7 @@
 
 <script type="module" src="./report-app.mjs"></script></head><body>
 <header><div><a href="../index.html">← iMile Management · rendszerválasztó</a><h1>Napi riportok</h1><p>In-Hub Inventory és DA OFD Performance · staging</p></div></header><main>
-<p class="warning"><strong>Staging / QA – nem éles.</strong> A fájl helyben, a böngészőben kerül feldolgozásra; nem mentjük Firestore-ba. Az Excel-motor külső CDN nélkül, helyben működik. A statisztikák kizárólag a jóváhagyott mentés után kerülnek a staging Firestore-ba; üzemi személyes adatok kezeléséhez vállalati jóváhagyás szükséges.</p>
+<p class="warning"><strong>Staging / QA – nem éles.</strong> A fájl helyben, a böngészőben kerül feldolgozásra; nem mentjük Firestore-ba. Az Excel-motor külső CDN nélkül, helyben működik. A biztonságos szervermentés csak ellenőrzött API végponttal kapcsolható be; addig kizárólag Excel-letöltés működik. üzemi személyes adatok kezeléséhez vállalati jóváhagyás szükséges.</p>
 <section class="panel"><p id="access" role="status">Belső jogosultság ellenőrzése…</p><div id="controls" hidden><h2>Sheet2 készítése</h2><p class="muted">Válaszd ki az iMile-ból exportált nyers .xlsx fájlt. A rendszer a jóváhagyott oszlopok szerint összesít, majd az eredeti színvilággal kész Excel-fájlt ad.</p>
 <form id="form"><div class="fields"><label>Riport<select id="kind"><option value="inhub">In-Hub Inventory</option><option value="ofd">DA OFD Monitoring</option></select></label><label>Excel forrás (.xlsx)<input id="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label></div><button id="prepare" type="submit">Riport elkészítése</button><button type="button" id="download" class="secondary" disabled>Excel letöltése</button></form><p id="message" role="status" aria-live="polite"></p></div></section>
 <section class="panel" id="preview" hidden><h2>Összesítés</h2><p id="summary"></p><div class="scroll"><table><thead><tr><th>Terület / vállalkozó</th><th>Összesítés</th></tr></thead><tbody id="stats"></tbody></table></div></section>
@@ -23,14 +23,34 @@
 </section>
 <section class="panel">
  <h2>Futár- és vállalkozói teljesítmény</h2>
- <p class="muted">Az adatokat friss szerveri válaszból kérjük le. A százalékok súlyozottak, a napi előzetes és végleges állapotok elkülönülnek.</p>
+ <p class="muted">Az adatokat friss szerveri válaszból kérjük le. A százalékok súlyozottak. A 10 óra körüli előzetes eredmény csak operatív tájékoztatás; a végleges napi KPI kizárólag végleges riportokból számítódik.</p>
  <button type="button" id="refreshStats">Statisztika frissítése</button>
  <p id="statStatus" role="status">Még nincs szerveri statisztika betöltve.</p>
  <h3>In-Hub raktárpillanatképek</h3>
  <p id="inventoryStatStatus" role="status">Még nincs raktárstatisztika betöltve.</p>
  <div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Raktári csomag</th><th>Területek</th></tr></thead><tbody id="inventoryStats"></tbody></table></div>
- <h3>Futárok</h3><div class="scroll"><table><thead><tr><th>DA Code</th><th>Futár</th><th>Riportnap</th><th>OFD</th><th>DLD</th><th>Sikeresség</th><th>Vállalkozók</th></tr></thead><tbody id="courierStats"></tbody></table></div>
+ <h3>Futárok</h3><div class="scroll"><table><thead><tr><th>DA Code</th><th>Futár</th><th>Riportnap</th><th>Összes OFD (előzetessel)</th><th>Összes DLD</th><th>Operatív %</th><th>Végleges OFD</th><th>Végleges DLD</th><th>Végleges KPI %</th><th>Vállalkozók</th></tr></thead><tbody id="courierStats"></tbody></table></div>
  <h3>Vállalkozók – napi teljesítmény</h3><div class="scroll"><table><thead><tr><th>Nap</th><th>Depó</th><th>Vállalkozó</th><th>Futárok</th><th>OFD</th><th>DLD</th><th>DLD%</th><th>SPR</th></tr></thead><tbody id="vendorStats"></tbody></table></div>
+</section>
+<section class="panel">
+ <h2>Korábbi riportverzió visszakeresése</h2>
+ <p class="muted">Teljes, változatlan napi archívumpéldány lekérése hitelesített szerverről. A korábbi kliensből származó rekord „legacy-unverified” megjelölést kap. Ez nem automatikus visszaállítás vagy import.</p>
+ <div class="fields">
+  <label>Riport<select id="historyKind"><option value="ofd">OFD Performance</option><option value="inhub">In-Hub Inventory</option></select></label>
+  <label>Riport napja<input id="historyDay" type="date"></label>
+  <label>Depó<input id="historyStation" type="text" placeholder="DS(AKE)" maxlength="160"></label>
+  <label>Verzió<input id="historyVersion" type="number" value="1" min="1" max="999999"></label>
+ </div>
+ <button id="historyFetch" type="button" disabled>Archív verzió lekérdezése</button>
+ <p id="historyResult" role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere"></p>
+ <div id="restoreOptions" hidden>
+  <h3>Admin: ellenőrzött visszaállítás</h3>
+  <p class="warning">A visszaállítás új, auditált riportverziót hoz létre. A korábbi adatok nem törlődnek. Csak a fenti gombbal előzőleg lekért, szerverileg összesítés-ellenőrzött változat állítható vissza.</p>
+  <label>Visszaállítás indoka<input id="restoreReason" type="text" maxlength="120" placeholder="Miért szükséges a korábbi riport visszaállítása?"></label>
+  <label class="check"><input id="restoreConfirm" type="checkbox"> Megtekintettem a korábbi teljes riportverziót és jóváhagyom az új, auditált visszaállítást.</label>
+  <button id="historyRestore" type="button" disabled>Korábbi riport biztonságos visszaállítása</button>
+  <p id="restoreResult" role="status" aria-live="polite"></p>
+ </div>
 </section>
 <section class="panel"><h2>Rögzített formátum</h2><p><strong>In-Hub:</strong> halványkék Excel-kimutatás; az LM Receive napjai az oszlopok, a District helyén Budapestnél kerület, máshol a település neve.</p><p><strong>OFD:</strong> sötétkék cím, világoskék fejléc, szürke futáradatok, vállalkozónként összevont cellák és teljesítményhez igazított piros/sárga/zöld jelzés. A District csak jóváhagyott napi adatból tölthető.</p></section>
 </main></body></html>

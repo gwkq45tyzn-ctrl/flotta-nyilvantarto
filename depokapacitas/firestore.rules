@@ -410,17 +410,9 @@ service cloud.firestore {
     }
     match /performanceDays/{id} {
       allow read: if member();
-      allow create: if editor() && validPerformanceSnapshot(id,request.resource.data)
-        && request.resource.data.version == 1
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.createdBy == request.auth.uid;
-      allow update: if editor() && validPerformanceSnapshot(id,request.resource.data)
-        && request.resource.data.version == resource.data.version + 1
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.lastAuditId != resource.data.lastAuditId
-        && (resource.data.status != 'final' || request.resource.data.status == 'final');
-      allow delete: if false;
+      // Admin SDK server-only; authenticated browsers must not create,
+      // overwrite or delete current reporting data or audit entries.
+      allow create, update, delete: if false;
     }
     function validPerformanceAudit(id, d) {
       return exactFields(d,[
@@ -447,8 +439,9 @@ service cloud.firestore {
     }
     match /performanceAudits/{id} {
       allow read: if member();
-      allow create: if editor() && validPerformanceAudit(id,request.resource.data);
-      allow update, delete: if false;
+      // Admin SDK server-only; authenticated browsers must not create,
+      // overwrite or delete current reporting data or audit entries.
+      allow create, update, delete: if false;
     }
 
     // STAGING daily warehouse inventory: aggregated only (never waybills).
@@ -474,16 +467,9 @@ service cloud.firestore {
     }
     match /inventoryDays/{id} {
       allow read: if member();
-      allow create: if editor() && validInventorySnapshot(id,request.resource.data)
-        && request.resource.data.version == 1
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.createdBy == request.auth.uid;
-      allow update: if editor() && validInventorySnapshot(id,request.resource.data)
-        && request.resource.data.version == resource.data.version + 1
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.lastAuditId != resource.data.lastAuditId;
-      allow delete: if false;
+      // Admin SDK server-only; authenticated browsers must not create,
+      // overwrite or delete current reporting data or audit entries.
+      allow create, update, delete: if false;
     }
     function validInventoryAudit(id,d) {
       return exactFields(d,['reportKey','version','contentHash','priorHash','action','actor','at','sourceName'])
@@ -506,8 +492,18 @@ service cloud.firestore {
     }
     match /inventoryAudits/{id} {
       allow read: if member();
-      allow create: if editor() && validInventoryAudit(id,request.resource.data);
-      allow update, delete: if false;
+      // Admin SDK server-only; authenticated browsers must not create,
+      // overwrite or delete current reporting data or audit entries.
+      allow create, update, delete: if false;
+    }
+
+    match /performanceVersions/{id} {
+      allow read: if member();
+      allow create, update, delete: if false;
+    }
+    match /inventoryVersions/{id} {
+      allow read: if member();
+      allow create, update, delete: if false;
     }
 
     match /{path=**} { allow read, write: if false; }

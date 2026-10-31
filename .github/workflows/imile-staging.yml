@@ -47,6 +47,16 @@ jobs:
           node staging/imile-management/reports/report-core.test.mjs
           node staging/imile-management/reports/report-statistics.test.mjs
           node staging/imile-management/reports/inventory-statistics.test.mjs
+          node staging/imile-management/reports/server/trusted-report-validation.test.mjs
+          node staging/imile-management/reports/server/raw-export-reconciliation.test.mjs
+          node --check staging/imile-management/reports/server/raw-export-reconciliation.mjs
+          node staging/imile-management/reports/server/report-http-api.test.mjs
+          node staging/imile-management/reports/server/private-server-entry.test.mjs
+          node staging/imile-management/reports/server/release-gate.test.mjs
+          node --check staging/imile-management/reports/server/release-gate.mjs
+          node --check staging/imile-management/reports/server/report-http-api.mjs
+          node --check staging/imile-management/reports/server/private-server-entry.mjs
+          node --check staging/imile-management/reports/server/trusted-report-validation.mjs
           node staging/imile-management/reports/xlsx-lite.test.mjs
           node staging/imile-management/reports/report-integration.test.mjs
           node --check staging/imile-management/reports/report-app.mjs
@@ -107,6 +117,10 @@ jobs:
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
+      - name: Admin SDK – valódi Firestore tranzakciók és verzióarchívum (kizárólag emulátor)
+        run: |
+          npm install --prefix staging/imile-management/fleet --no-save --package-lock=false --ignore-scripts --no-audit --no-fund firebase-admin@13.5.0
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "FIREBASE_PROJECT_ID=demo-imile-fleet node staging/imile-management/fleet/report-admin-emulator.mjs"
       - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
       - name: A flotta belépési pontjának érintetlensége
