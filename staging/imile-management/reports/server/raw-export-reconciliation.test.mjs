@@ -98,4 +98,15 @@ test('excessive raw source columns blocked',()=>assert.throws(()=>{
 test('missing source rows blocked',()=>assert.throws(()=>{
  doInHub([inhubHead]);
 },/invalid_source_matrix/));
+test('oversized raw text cell blocked before transformation',()=>assert.throws(()=>{
+ doInHub([inhubHead,['W1','2099-04-30','X'.repeat(4097),'1117','DS(AKE)']]);
+},/raw_source_limit_exceeded/));
+test('excessive raw cell count blocked before transformation',()=>assert.throws(()=>{
+ const large=[inhubHead,...Array.from({length:1501},()=>Array(100).fill('x'))];
+ doInHub(large);
+},/raw_source_limit_exceeded/));
+test('excessive raw UTF8 bytes blocked before transformation',()=>assert.throws(()=>{
+ const rows=Array.from({length:1100},(_,i)=>['W'+i,'2099-04-30','A'.repeat(4000),'1117','DS(AKE)']);
+ doInHub([inhubHead,...rows]);
+},/raw_source_limit_exceeded/));
 console.log('PASS: '+passed+' raw export reconciliation, conflict and data-minimization tests');
