@@ -9,7 +9,7 @@ const config={
   identityMode:'exact',identityWhitespace:'preserve',districtMode:'exact'
 };
 const row=(id,extra={})=>({WorkDay:date,AWBText:id,Zone:'IX.',DeliveryKind:'N',...extra});
-const adapt=(data,patch={})=>adaptParcelSource(data,{config,...patch});
+const adapt=(data,patch={})=>adaptParcelSource(data,{config,selectedDate:date,...patch});
 let n=0;
 function test(label,fn){try{fn();n++;}catch(e){throw Error(label+': '+e.message,{cause:e});}}
 
@@ -60,8 +60,17 @@ test('mismatched new retry blocks all outputs',()=>{
   assert.equal(r.status,'blocked');assert.equal(r.issues[0].reason,'conflicting_tracking_identity');
 });
 test('same ID on another day is independent',()=>{
-  const r=adapt([row('001'),row('001',{WorkDay:'2026-11-03',DeliveryKind:'R'})]);
-  assert.equal(r.status,'preview');assert.equal(r.uniqueCount,2);
+  const rows=[row('001'),row('001',{WorkDay:'2026-11-03',DeliveryKind:'R'})];
+  const monday=adapt(rows,{selectedDate:date});
+  const tuesday=adapt(rows,{selectedDate:'2026-11-03'});
+  assert.equal(monday.status,'preview');assert.equal(monday.uniqueCount,1);
+  assert.equal(tuesday.status,'preview');assert.equal(tuesday.uniqueCount,1);
+  assert.equal(tuesday.districts[0].retryCount,1);
+});
+test('selected day is mandatory for safe daily aggregates',()=>{
+  const r=adaptParcelSource([row('001')],{config});
+  assert.equal(r.status,'blocked');assert.equal(r.uniqueCount,null);
+  assert.equal(r.issues[0].reason,'selected_day_required');
 });
 test('selected day excludes other dates',()=>{
   const r=adapt([row('001'),row('001',{WorkDay:'2026-11-03',DeliveryKind:'R'})],{selectedDate:date});
