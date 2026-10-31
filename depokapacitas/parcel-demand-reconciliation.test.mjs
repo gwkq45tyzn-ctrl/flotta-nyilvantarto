@@ -60,7 +60,8 @@ test('duplicate demand entries blocked from matching',()=>{
 });
 for(const value of [-1,'1',1.5,null,undefined,10000001]){
  test('invalid demand cannot match '+String(value),()=>{
-  const r=check(p([row('A')]),[demand('IX.',value,0)]);
+  const invalid=demand('IX.',0,0);invalid.newCount=value;
+  const r=check(p([row('A')]),[invalid]);
   assert.equal(r.rows[0].status,'invalid_plan_counts');
   assert.equal(r.rows[0].planNew,null);
  });
