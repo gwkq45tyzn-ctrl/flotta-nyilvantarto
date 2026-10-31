@@ -19,7 +19,7 @@ const entry=(values)=>{
  for(const value of values){const td=document.createElement('td');td.textContent=plain(value);tr.append(td);}
  return tr;
 };
-let authorized=false,canSave=false,revision=0,excelBuffer=null,excelName=null;
+let authorized=false,canSave=false,canRestore=false,inspectedArchive=null,revision=0,excelBuffer=null,excelName=null;
 let currentReport=null,currentSourceMatrix=null,sourceName=null,db=null,user=null,stats=null;
 $('inventoryDay').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function clearReport(){
@@ -200,21 +200,60 @@ $('save').onclick=async()=>{
  }catch(error){field('saveNote','Az OFD-mentés nem történt meg: '+error.message);}
  finally{if(rev===revision&&authorized&&reportApiReady)$('save').disabled=false;}
 };
+for(const id of ['historyKind','historyDay','historyStation','historyVersion'])
+ $(id).addEventListener('input',()=>{inspectedArchive=null;$('historyRestore').disabled=true;$('restoreConfirm').checked=false;});
 $('historyFetch').onclick=async()=>{
  if(!reportApiReady||!authorized)return;
+ inspectedArchive=null;$('historyRestore').disabled=true;$('restoreConfirm').checked=false;
+ const authRevision=revision,uid=user?.uid;
  const kind=$('historyKind').value,date=$('historyDay').value,
   station=$('historyStation').value.trim(),version=$('historyVersion').value;
  try{
   const query=new URLSearchParams({kind,date,station,version}).toString();
   const reply=await reportApi('/v1/reports/version?'+query);
+  if(authRevision!==revision||user?.uid!==uid)return;
   field('historyResult','Verzió '+version+' · '+reply.sourceValidation+' · '+JSON.stringify(reply.version));
+  if(canRestore&&reply.version?.validationSource==='server-aggregates-only'&&
+   reply.version?.unverifiedLegacy!==true){
+   inspectedArchive={kind,date,station,version:Number(version)};
+   $('historyRestore').disabled=false;
+  }
  }catch(error){field('historyResult','A korábbi riportverzió nem érhető el: '+error.message);}
+};
+$('historyRestore').onclick=async()=>{
+ if(!authorized||!canRestore||!reportApiReady||!inspectedArchive||!user)return;
+ const version=inspectedArchive,
+  reason=$('restoreReason').value.trim(),uid=user.uid,authRevision=revision;
+ if(reason.length<10||reason.length>120||!$('restoreConfirm').checked){
+  field('restoreResult','A visszaállításhoz legalább 10 karakteres indok és külön megerősítés szükséges.');
+  return;
+ }
+ $('historyRestore').disabled=true;
+ field('restoreResult','A jelenlegi verzió és az admin jogosultság szerveroldali ellenőrzése…');
+ try{
+  const params=new URLSearchParams({kind:version.kind,date:version.date,station:version.station});
+  const current=await reportApi('/v1/reports/current?'+params);
+  if(!current.exists)throw Error('A napi riport már nem érhető el.');
+  if(authRevision!==revision||user?.uid!==uid||!authorized||!canRestore)return;
+  const restored=await reportApi('/v1/reports/restore',{method:'POST',payload:{
+   kind:version.kind,date:version.date,station:version.station,
+   fromVersion:version.version,expectedVersion:current.version,
+   reason,confirmed:true}});
+  if(authRevision!==revision||user?.uid!==uid)return;
+  field('restoreResult','Új, auditált riportverzió: '+restored.result.version+
+   ' · visszaállított forrásverzió: '+version.version);
+  inspectedArchive=null;$('restoreConfirm').checked=false;$('restoreReason').value='';
+  await loadStats();
+ }catch(error){
+  field('restoreResult','A visszaállítás nem történt meg: '+error.message);
+  if(authRevision===revision&&inspectedArchive)$('historyRestore').disabled=false;
+ }
 };
 if(firebaseConfig.projectId!=='imile-management-staging')field('access','Nem staging projekt: hozzáférés tiltva.');
 else{
  const app=initializeApp(firebaseConfig),auth=getAuth(app);db=getFirestore(app);
  onAuthStateChanged(auth,async current=>{
-  const authRev=++revision;authorized=false;canSave=false;user=null;clearReport();
+  const authRev=++revision;authorized=false;canSave=false;canRestore=false;inspectedArchive=null;user=null;clearReport();
   $('controls').hidden=true;$('file').value='';$('save').disabled=true;stats=null;
   if(!current){window.location.replace('../index.html');return;}
   try{
@@ -222,8 +261,11 @@ else{
    if(authRev+1!==revision)return;
    if(!allowedProfile(profile)){field('access','Nincs aktív belső jogosultság.');return;}
    authorized=true;user=current;canSave=['admin','editor'].includes(profile.role);
+   canRestore=profile.role==='admin';
    $('controls').hidden=false;$('saveOptions').hidden=!canSave;
    $('historyFetch').disabled=!reportApiReady;
+   $('restoreOptions').hidden=!canRestore||!reportApiReady;
+   $('historyRestore').disabled=true;
    if(!reportApiReady)field('saveNote','A biztonságos szerveroldali API még nincs aktiválva. A kész Excel letölthető.');
    field('access','Belső hozzáférés: '+profile.role+' · helyi XLSX és ellenőrzött szerveri statisztika');
    loadStats();
