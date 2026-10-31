@@ -391,25 +391,16 @@ service cloud.firestore {
         'createdAt','createdBy','updatedAt','updatedBy'
       ])
         && d.key == id && validDay(d.date) && textField(d.station,160)
-        && id.matches('^' + d.date + '__[^/]{1,240}
-  }
-}
-)
+        && id.matches('^' + d.date + '__[^/]{1,240}')
         && d.status in ['provisional','final']
         && d.rows is list && d.rows.size() > 0 && d.rows.size() <= 300
         && nonNegative(d.totalOFD,10000000) && nonNegative(d.totalDelivered,10000000)
         && d.totalDelivered <= d.totalOFD
         && nonNegative(d.courierCount,300) && d.courierCount == d.rows.size()
-        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}
-  }
-}
-)
+        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}')
         && textField(d.sourceName,200)
         && d.version is int && d.version >= 1 && d.version <= 1000000
-        && d.lastAuditId is string && d.lastAuditId.matches('^[A-Za-z0-9]{20}
-  }
-}
-)
+        && d.lastAuditId is string && d.lastAuditId.matches('^[A-Za-z0-9]{20}')
         && d.createdAt is timestamp && textField(d.createdBy,128)
         && d.updatedAt == request.time && d.updatedBy == request.auth.uid
         && existsAfter(/databases/$(database)/documents/performanceAudits/$(d.lastAuditId))
@@ -441,14 +432,8 @@ service cloud.firestore {
 }
 ) && textField(d.reportKey,300)
         && d.version is int && d.version >= 1 && d.version <= 1000000
-        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}
-  }
-}
-)
-        && d.priorHash is string && (d.priorHash == '' || d.priorHash.matches('^[a-f0-9]{64}
-  }
-}
-))
+        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}')
+        && d.priorHash is string && (d.priorHash == '' || d.priorHash.matches('^[a-f0-9]{64}'))
         && d.action in ['create','replace'] && d.status in ['provisional','final']
         && d.actor == request.auth.uid && d.at == request.time
         && textField(d.sourceName,200)
