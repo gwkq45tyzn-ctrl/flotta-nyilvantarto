@@ -59,6 +59,7 @@ jobs:
         run: |
           node staging/imile-management/attendance-handover.test.mjs
           node staging/imile-management/attendance-integration.test.mjs
+          node staging/imile-management/attendance-odometer.test.mjs
       - name: Közös napi teendők és Flotta figyelmeztetések ellenőrzése
         run: |
           node staging/imile-management/central-alerts.test.mjs
