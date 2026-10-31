@@ -10,6 +10,10 @@ import {createHash,randomBytes} from 'node:crypto';
 export const VALIDATION_VERSION=1;
 const DATE=/^20\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const DAY_LIMIT=10000000;
+// Conservative limits: Firestore's array elements have protobuf overhead beyond JSON.
+const MAX_ARCHIVE_JSON_BYTES=400000;
+const MAX_INVENTORY_BUCKETS=10000;
+const MAX_DOCUMENT_ID_UTF8_BYTES=1200;
 const isDay=x=>typeof x==='string'&&DATE.test(x)&&
   new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x;
 const text=(x,max=160)=>typeof x==='string'&&x.length>0&&x.length<=max&&
@@ -22,11 +26,16 @@ const cmp=(a,b)=>a.localeCompare(b,'hu',{numeric:true});
 export const reportKey=(date,station)=>{
  if(!isDay(date)||!text(station))throw new Error('invalid_day_or_station');
  const id=date+'__'+encodeURIComponent(station);
- if(id.length>500)throw new Error('station_key_too_long');
+ if(Buffer.byteLength(id,'utf8')>500)throw new Error('station_key_too_long');
  return id;
 };
 export const hashText=value=>createHash('sha256').update(value,'utf8').digest('hex');
 
+const withinArchiveLimit=value=>{
+ if(Buffer.byteLength(JSON.stringify(value),'utf8')>MAX_ARCHIVE_JSON_BYTES)
+  throw new Error('report_document_too_large');
+ return value;
+};
 const strictFields={
  ofd:['key','date','station','rows','totalOFD','totalDelivered','courierCount'],
  inhub:['key','date','station','dates','areas','total']
@@ -58,6 +67,7 @@ export function validateTrustedReport(kind,candidate){
   const snapshot={key,date,station,rows,totalOFD:ofd,totalDelivered:delivered,courierCount:rows.length};
   const canonical=JSON.stringify({date,station,rows:rows.map(x=>[
    x.daCode,x.daName,x.vendor,x.ofd,x.delivered]),ofd,delivered});
+  withinArchiveLimit(snapshot);
   return {kind,canonical,snapshot,contentHash:hashText(canonical)};
  }
  if(!Array.isArray(candidate.dates)||candidate.dates.length===0||candidate.dates.length>180||
@@ -65,7 +75,8 @@ export function validateTrustedReport(kind,candidate){
   new Set(candidate.dates).size!==candidate.dates.length||
   !same(candidate.dates,[...candidate.dates].sort()))
   throw new Error('invalid_receive_days');
- if(!Array.isArray(candidate.areas)||candidate.areas.length===0||candidate.areas.length>250)
+ if(!Array.isArray(candidate.areas)||candidate.areas.length===0||candidate.areas.length>250||
+  candidate.areas.length*candidate.dates.length>MAX_INVENTORY_BUCKETS)
   throw new Error('invalid_areas');
  const areas=[],seen=new Set();
  for(const row of candidate.areas){
@@ -80,6 +91,7 @@ export function validateTrustedReport(kind,candidate){
  const total=areas.reduce((n,row)=>n+row.counts.reduce((v,x)=>v+x,0),0);
  if(!count(total)||candidate.total!==total)throw new Error('untrusted_inventory_aggregate');
  const snapshot={key,date,station,dates:[...candidate.dates],areas,total};
+ withinArchiveLimit(snapshot);
  const canonical=JSON.stringify({date,station,dates:snapshot.dates,
   areas:areas.map(x=>[x.area,...x.counts])});
  return {kind,canonical,snapshot,contentHash:hashText(canonical)};
@@ -88,7 +100,8 @@ export function archiveId(reportKey,version){
  if(!Number.isInteger(version)||version<1||version>1000000)throw new Error('invalid_version');
  // Encoded doc ID has no slash. Dates and station share a stable identity.
  const id=encodeURIComponent(reportKey)+'__v'+String(version).padStart(6,'0');
- if(id.length>1200)throw new Error('history_key_too_long');
+ if(Buffer.byteLength(id,'utf8')>MAX_DOCUMENT_ID_UTF8_BYTES)
+  throw new Error('history_key_too_long');
  return id;
 }
 function checkPrevious(previous,kind,key){
@@ -115,7 +128,10 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  if(kind==='inhub'&&status!==null)throw new Error('inventory_has_no_final_flag');
  checkPrevious(previous,kind,key);
  if(previous){
-  if(previous.contentHash===v.contentHash&&
+  // A browser-written legacy snapshot is NEVER upgraded to trusted by an
+  // identical retry: explicitly approve a new server-validated revision.
+  if(previous.validationSource==='trusted-server'&&
+   previous.contentHash===v.contentHash&&
    (kind==='inhub'||previous.status===status))
    return {result:'unchanged',version:previous.version,reportKey:key,contentHash:v.contentHash};
   if(!allowReplace||expectedVersion!==previous.version)throw new Error('replacement_not_approved');
@@ -125,7 +141,8 @@ export function planTrustedRevision({kind,candidate,previous=null,status=null,al
  const version=(previous?.version||0)+1;
  const verified={...v.snapshot,kind,contentHash:v.contentHash,status:kind==='ofd'?status:null,
   version,validationVersion:VALIDATION_VERSION,validationSource:'trusted-server'};
- const history={...verified,actorUid,sourceName,previousHash:previous?.contentHash||''};
+ const history=withinArchiveLimit({...verified,actorUid,sourceName,
+  previousHash:previous?.contentHash||''});
  const legacy=previous&&previous.validationSource!=='trusted-server'
   ?{...previous,kind,validationSource:'legacy-unverified',archivedBy:actorUid}
   :null;
@@ -169,8 +186,8 @@ export async function commitTrustedReport({db,verifiedUid,kind,candidate,status=
   if(historySnapshot.exists)throw new Error('history_revision_already_exists');
   const time=new Date();
   const auditRef=db.doc(audits+'/'+auditId);
-  if(legacyRef&&!legacySnapshot.exists)tx.create(legacyRef,{
-   ...plan.legacy,archivedAt:time,unverifiedLegacy:true});
+  if(legacyRef&&!legacySnapshot.exists)tx.create(legacyRef,withinArchiveLimit({
+   ...plan.legacy,archivedAt:time,unverifiedLegacy:true}));
   tx.create(newHistoryRef,{...plan.history,recordedAt:time});
   tx.set(ref,{...plan.current,sourceName,createdAt:previous?.createdAt||time,
    createdBy:previous?.createdBy||verifiedUid,updatedAt:time,updatedBy:verifiedUid,
