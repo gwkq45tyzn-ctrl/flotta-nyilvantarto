@@ -194,7 +194,7 @@ function parcelPreviewSection(){
    x.manifestRetry===null?'—':fmt(x.manifestRetry),
    x.storedNew===null?'—':fmt(x.storedNew),
    x.storedRetry===null?'—':fmt(x.storedRetry),
-   label(x.status==='match'?'Egyezik':x.status==='missing_manifest'?'Hiányzik a listából':x.status==='missing_aggregate'?'Nincs kerületi terv':'Eltérés',x.status==='match'?'green':'red')
+   label(x.status==='match'?'Egyezik':x.status==='missing_manifest'?'Hiányzik a listából':x.status==='missing_aggregate'?'Nincs kerületi terv':x.status==='duplicate_aggregate'?'Ismételt kerületi terv':'Eltérés',x.status==='match'?'green':'red')
  ));
  return section('Csomagszintű duplázás-ellenőrzés · csak helyben',
    form+'<p class="notice">'+esc(messages[report.comparisonStatus])+'</p>'+
