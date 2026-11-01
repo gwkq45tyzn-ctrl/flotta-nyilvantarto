@@ -36,6 +36,13 @@ jobs:
           node --test staging/imile-management/qa/attendance-publisher/source-header-gate.test.mjs
           node --check depokapacitas/attendance-atomic-plan.mjs
           node staging/imile-management/depo-booking-physical.integration.test.mjs
+      - name: 'Saját Attendance PWA: hét-hét fotó, jogosultság és reggeli visszavétel'
+        run: |
+          node --test staging/imile-management/attendance/core.test.mjs
+          node --test staging/imile-management/attendance/roster.test.mjs
+          node --check staging/imile-management/attendance/roster.mjs
+          node --check staging/imile-management/attendance/app.mjs
+          node --check staging/imile-management/attendance/core.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
         run: node depokapacitas/tests/check.mjs
       - name: Közös futár/autó törzs és duplikációs tesztek
@@ -123,6 +130,10 @@ jobs:
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+      - name: 'Saját Attendance PWA – Firestore tranzakciók és szerepkörök emulátorban'
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-attendance-own --config firebase.staging-emulator.json "node staging/imile-management/fleet/attendance-rules-emulator.mjs"
+      - name: 'Saját Attendance: privát hét-hét fénykép – Firestore és Storage emulátor'
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore,storage --project demo-attendance-storage --config firebase.attendance-storage-emulator.json "node staging/imile-management/fleet/attendance-storage-emulator.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"

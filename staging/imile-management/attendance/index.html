@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="hu"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#153e78"><meta name="robots" content="noindex,nofollow">
+<title>iMile Attendance · AKE</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.mjs"></script>
+</head><body>
+<header class="topbar"><div class="logo">i<span>Mile</span></div><div><strong>Attendance</strong><small>AKE · céges járművek</small></div><button id="logout" hidden>Kilépés</button></header>
+<main>
+<section id="loginPanel" class="panel" hidden>
+  <h1>Bejelentkezés</h1><p>Csak jogosult cégesautó-futárok és belső munkatársak.</p>
+  <form id="loginForm"><label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+    <label>Jelszó<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary" type="submit">Belépés</button></form>
+</section>
+<section id="loadingPanel" class="panel"><h1>iMile Attendance</h1><p>Jogosultság és adatkapcsolat ellenőrzése…</p></section>
+<section id="deniedPanel" class="panel" hidden><h1>Nincs jogosultság</h1><p>Ehhez a rendszerhez külön futár- vagy belső jogosultság szükséges.</p></section>
+<section id="courierPanel" hidden>
+ <div class="hero"><span class="eyebrow">FUTÁR FELÜLET</span><h1 id="courierName">Saját autóátvétel</h1><p id="courierStatus">A járművet a becsekkoláskor magad választod ki.</p></div>
+ <section id="checkinSection" class="panel" hidden><h2>Autó átvétele</h2><p>Válaszd ki a ténylegesen felvett autót. Csak szabad, ellenőrzött jármű látható.</p>
+  <form id="checkinForm">
+    <label>Rendszám<select name="plate" id="plateSelect" required><option value="">Válassz autót…</option></select></label>
+    <label>Kezdő kilométeróra (km)<input name="km" type="number" min="0" max="100000000" step="1" inputmode="numeric" required></label>
+    <div class="photos" id="inPhotos"></div>
+    <label class="tick"><input type="checkbox" name="condition" required> Az autót és a rendszámot ellenőriztem, a fotók most készültek.</label>
+    <button class="primary" id="checkinButton" type="submit">Becsekkolás és autóátvétel</button>
+  </form>
+ </section>
+ <section id="checkoutSection" class="panel" hidden><h2>Autó leadása</h2><p id="currentCar"></p>
+  <p class="hint">A kulcsot tedd a kijelölt ládába! A kicsekkolás után az autó reggeli ellenőrzésre vár, nem válik azonnal szabaddá.</p>
+  <form id="checkoutForm">
+   <label>Záró kilométeróra (km)<input name="km" type="number" min="0" max="100000000" step="1" inputmode="numeric" required></label>
+   <div class="photos" id="outPhotos"></div>
+   <label>Új sérülés vagy észrevétel (nem kötelező)<textarea name="damageNote" maxlength="1000" rows="3" placeholder="Ha probléma van, írd le röviden."></textarea></label>
+   <label class="tick"><input type="checkbox" name="keyDropped" required> A kulcsot a kijelölt ládába helyeztem.</label>
+   <button class="primary" id="checkoutButton" type="submit">Kicsekkolás és visszaadás bejelentése</button>
+  </form>
+ </section>
+ <section id="waitingSection" class="panel" hidden><h2>Visszaadás rögzítve</h2><p>Az autó a reggeli fizikai ellenőrzésig zárolva marad. Új autót egyelőre nem vehetsz át.</p></section>
+</section>
+<section id="adminPanel" hidden>
+ <div class="hero"><span class="eyebrow">BELSŐ ELLENŐRZÉS</span><h1>Járműátadások és reggeli visszavétel</h1><p>A futárok önállóan választanak autót. Itt látod, ki melyikkel ment el és mi vár ellenőrzésre.</p></div>
+ <div class="stats" id="stats"></div>
+ <section class="panel">
+  <h2>Másnapi futár- és autókapacitás</h2>
+  <p>Csak a várható létszámot tervezzük, előre nem kötünk rendszámot futárhoz. Az üzemképes és a ténylegesen szabad autókat külön mutatjuk.</p>
+  <form id="rosterForm" class="roster-form">
+    <label>Munkanap<input type="date" name="date" id="rosterDate" required></label>
+    <label>Cégesautós futár<select name="driverId" id="rosterDriver" required><option value="">Válassz futárt…</option></select></label>
+    <label>Várható részvétel<select name="status" required><option value="planned">Tervezett</option><option value="confirmed">Megerősített</option><option value="cancelled">Nem jön</option></select></label>
+    <button class="primary" type="submit">Futárterv mentése</button>
+  </form>
+  <div id="rosterStats" class="stats"></div>
+  <div id="rosterList" class="stack"></div>
+ </section>
+ <section class="panel"><h2>Visszaadás ellenőrzésre vár</h2><p>Visszavétel előtt fizikailag ellenőrizd az autót, a kulcsot és a tisztaságot.</p>
+  <div id="reviewList" class="stack"></div>
+  <div class="bulk" id="bulkPanel" hidden><h3>Összes visszavétele</h3>
+    <label class="tick"><input type="checkbox" id="bulkCars"> Minden felsorolt autót fizikailag ellenőriztem.</label>
+    <label class="tick"><input type="checkbox" id="bulkKeys"> Minden felsorolt kulcs a ládában van.</label>
+    <label class="tick"><input type="checkbox" id="bulkClean"> Mindegyik autó tiszta, sérülési probléma nincs.</label>
+    <button class="primary" id="bulkReview" type="button">Összes visszavétele</button>
+  </div>
+ </section>
+ <section class="panel"><h2>Jelenleg kiadott autók</h2><div id="activeList" class="stack"></div></section>
+</section>
+<dialog id="photosDialog" class="photos-dialog"><div class="dialog-head"><h2 id="photosTitle">Autófotók</h2><button id="closePhotos" type="button">Bezárás</button></div><div id="photosContent" class="photos"></div></dialog>
+<div id="notice" role="status" aria-live="polite" class="notice" hidden></div>
+<p class="footer">iMile Management · staging · Google-táblázatoktól független · GPS később</p>
+</main></body></html>

@@ -1,0 +1,32 @@
+rules_version = '2';
+service firebase.storage {
+ match /b/{bucket}/o {
+  function signedIn() { return request.auth != null; }
+  function staff() {
+    return signedIn()
+      && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+      && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true
+      && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin','editor','viewer'];
+  }
+  function courier() {
+    return signedIn()
+      && firestore.exists(/databases/(default)/documents/courierAccess/$(request.auth.uid))
+      && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true;
+  }
+  match /attendance/{uid}/{sid}/{stage}/{photo} {
+    // Only a signed-in courier can CREATE original images under their own
+    // immutable event prefix. No overwrites, deletes, or public access.
+    allow read: if (signedIn() && request.auth.uid == uid) || staff();
+    allow create: if resource == null && courier() && request.auth.uid == uid
+      && sid.matches('^s_[a-f0-9]{32}$')
+      && stage in ['in','out']
+      && photo in ['front.jpg','left.jpg','right.jpg','back.jpg',
+                   'cabinFront.jpg','cabinRear.jpg','cargo.jpg']
+      && request.resource.size > 0
+      && request.resource.size <= 8 * 1024 * 1024
+      && request.resource.contentType == 'image/jpeg';
+    allow update, delete: if false;
+  }
+  match /{allPaths=**} { allow read, write: if false; }
+ }
+}
