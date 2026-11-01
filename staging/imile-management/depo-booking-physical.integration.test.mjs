@@ -6,6 +6,7 @@ const preflight=read('../../depokapacitas/booking-physical-guard.mjs');
 const build=read('./build-preview.mjs');
 const workflow=read('../../.github/workflows/imile-staging.yml');
 const rules=read('../../depokapacitas/firestore.rules');
+const emulator=read('./qa/physical-booking-rules-emulator.mjs');
 assert.match(app,/import \{assessDailyPhysicalUse,bookingSourcesTrusted\} from '\.\/booking-physical-guard\.mjs'/);
 assert.match(app,/getDocsFromServer\(collection\(db,'attendance'\)\)/);
 assert.match(app,/!bookingSourcesTrusted\(state\.sourceMeta,\{online:navigator\.onLine\}\)/);
@@ -20,6 +21,10 @@ assert.match(app,/if\(!physical\.eligible\)throw Error/);
 assert.match(build,/'depokapacitas\/booking-physical-guard\.mjs'/);
 assert.match(workflow,/booking-physical-guard\.test\.mjs/);
 assert.match(workflow,/depo-booking-physical\.integration\.test\.mjs/);
+assert.match(workflow,/physical-booking-rules-emulator\.mjs/);
+assert.match(emulator,/initializeTestEnvironment/);
+assert.match(emulator,/same-day checkout to wrong courier after booking denied/);
+assert.match(emulator,/future-day plan not blocked by current Fleet checkout/);
 assert.doesNotMatch(preflight,/\b(?:setDoc|runTransaction|fetch|writeBatch|addDoc|deleteDoc)\s*\(/);
 // The server now checks manual Fleet assignment claims for current/earlier
 // Budapest calendar days and blocks a reverse same-day Fleet checkout.
