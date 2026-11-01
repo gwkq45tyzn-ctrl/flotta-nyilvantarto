@@ -46,6 +46,7 @@ function proofValid(proof){
   proof?.consistentReadWithinTransaction===true&&
   proof?.sourceGenerationVerified===true&&
   Number.isSafeInteger(proof?.sourceRevision)&&proof.sourceRevision>=0&&
+  proof.sourceRevision<Number.MAX_SAFE_INTEGER&&
   proof.pendingSourceChanges===0;
 }
 /**
@@ -103,6 +104,14 @@ export function planAttendanceAtomicGuard({
   if(old.errors.length)return deny('invalid_original_snapshot');
   const before=old.events.find(e=>e.id===mutation.eventId);
   const after=parsed.events.find(e=>e.id===mutation.eventId);
+  // The proposed same-commit mutation must affect exactly this event;
+  // changes to other event IDs require their own projection/revision checks.
+  const previous=new Map(old.events.map(e=>[e.id,eventFingerprint(e)]));
+  const proposed=new Map(parsed.events.map(e=>[e.id,eventFingerprint(e)]));
+  const changedIds=[...new Set([...previous.keys(),...proposed.keys()])]
+   .filter(id=>previous.get(id)!==proposed.get(id));
+  if(changedIds.length!==1||changedIds[0]!==mutation.eventId)
+   return deny('multiple_or_missing_event_changes');
   if(mutation.action==='upsert'&&!after)return deny('updated_event_missing');
   if(mutation.action==='delete'&&after)return deny('deleted_event_still_present');
   if(mutation.action==='delete'&&!before)return deny('event_to_delete_missing');
