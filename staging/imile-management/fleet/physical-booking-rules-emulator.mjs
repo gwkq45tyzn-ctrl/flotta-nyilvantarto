@@ -45,7 +45,7 @@ try{
   for(const role of ['editor','viewer'])await setDoc(doc(db,'users',role),{
    name:'Fictional QA',role,active:true
   });
-  for(let i=1;i<=7;i++){
+  for(let i=1;i<=9;i++){
    const id='QA100'+i,driver='DA100'+i;
    await setDoc(doc(db,'vehicles',id),fixtureVehicle(id));
    await setDoc(doc(db,'drivers',driver),fixtureDriver(driver));
@@ -81,6 +81,17 @@ try{
   ()=>checkout(editor,{date:today,car:'QA1005',driver:'DA1003',id:'00000000000000000025'}));
  await check('same-day checkout to booked courier permitted',true,
   ()=>checkout(editor,{date:today,car:'QA1005',driver:'DA1005',id:'00000000000000000026'}));
+// Race safety: two different authenticated writers may attempt checkout and
+// booking for the same car simultaneously. At most one can commit.
+ const concurrent=await Promise.allSettled([
+  booking(editor,today,'QA1008','DA1008'),
+  checkout(editor,{date:today,car:'QA1008',driver:'DA1009',id:'00000000000000000028'})
+ ]);
+ const successful=concurrent.filter(x=>x.status==='fulfilled').length;
+ if(successful!==1){
+  failed++;console.error('FAIL concurrent booking-vs-checkout: expected exactly one commit, got '+successful);
+ }else passed++;
+
  console.log(JSON.stringify({suite:'depo-physical-booking-rules',passed,failed,
   emulator:'127.0.0.1:8787',data:'synthetic',date:today},null,2));
 }finally{await env.cleanup();}
