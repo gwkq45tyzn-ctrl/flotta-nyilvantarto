@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {assessAttendanceHeader, MOBILE_ATTENDANCE_LEGACY_HEADERS as legacy, REQUIRED_NEW_HEADERS} from './source-header-gate.mjs';
+import {assessAttendanceHeader, MOBILE_ATTENDANCE_LEGACY_HEADERS as legacy, ATTENDANCE_LOG_FORM_HEADERS as attendanceLog, REQUIRED_NEW_HEADERS} from './source-header-gate.mjs';
 
 const candidate=[...legacy,...REQUIRED_NEW_HEADERS];
 function expectSafe(headers,reason){
@@ -24,6 +24,23 @@ test('current live Mobile Attendance A1:P1 remains rejected; no inferred car or 
  ]);
  const r=expectSafe([...legacy],'legacy_16_column_source');
  assert.deepEqual(r.missingHeaders,['Source Event ID','Vehicle Plate']);
+});
+test('separate 10-column Attendance Log Google Forms destination cannot be mistaken for Mobile Attendance',()=>{
+ assert.deepEqual(attendanceLog,[
+  'Timestamp','Date','Employee / Driver Name','DA / Employee Code',
+  'Vendor','Attendance Type','Location / Site','Remarks','Matched Time',
+  'Working Hours'
+ ]);
+ const r=expectSafe([...attendanceLog],'attendance_log_form_response_without_identity');
+ assert.equal(r.sourceTab,'Attendance Log');
+ assert.equal(r.sourceOwnershipUnverified,true);
+ assert.deepEqual(r.missingHeaders,['Source Event ID','Vehicle Plate']);
+ expectSafe([...attendanceLog,...Array(16).fill('')],
+  'attendance_log_form_response_without_identity');
+});
+test('wrong short form shape cannot be treated as an approved source',()=>{
+ expectSafe(attendanceLog.slice(0,9),'invalid_header_input');
+ expectSafe([...attendanceLog.slice(0,9),'Driver Name'],'unrecognized_short_attendance_header');
 });
 test('wider sheet grid trailing blanks are NOT source columns',()=>{
  expectSafe([...legacy,...Array(10).fill('')],'legacy_16_column_source');
