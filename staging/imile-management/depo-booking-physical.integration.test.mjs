@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
+const app=read('../../depokapacitas/app.js'),policy=read('../../depokapacitas/booking-occupancy.mjs');
+const rules=read('../../depokapacitas/firestore.rules'),build=read('./build-preview.mjs'),ci=read('../../.github/workflows/imile-staging.yml');
+assert.match(app,/getDocsFromServer\(collection\(db,'attendance'\)\)/);
+for(const key of ['fleetAssignments','fleetDriverAssignments','attendanceVehicleGuards'])assert.ok(app.includes("tx.get(doc(db,'"+key+"'"));
+assert.ok(app.includes('bookingSourcesTrusted(state.sourceMeta'));
+assert.ok(app.includes("getDocFromServer(doc(db,'users',user.uid))"));
+assert.ok(app.includes('if(!checked.eligible)throw Error'));
+assert.ok(policy.includes('assessDailyPhysicalUse({'));
+assert.ok(policy.includes('deriveAttendanceHandovers({events,drivers,vehicles})'));
+for(const module of ['booking-physical-guard','booking-occupancy']){assert.ok(build.includes("'depokapacitas/"+module+".mjs'"));assert.ok(ci.includes(module+'.test.mjs'));}
+assert.ok(ci.includes('physical-booking-rules-emulator.mjs'));
+assert.ok(rules.includes('sameDayOccupancy(request.resource.data)'));
+assert.ok(rules.includes('bookingDriverOccupancy(request.resource.data)'));
+assert.ok(rules.includes('checkoutBookingCompatible(d)'));
+assert.match(rules,/match \/attendanceVehicleGuards\/\{id\}[\s\S]*?allow write: if false/);
+console.log('PASS: shared #27 physical guard + trusted same-day projection, transaction and deployment wiring');

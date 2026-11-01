@@ -43,8 +43,8 @@ service cloud.firestore {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId) {
-      return exists(/databases/$(database)/documents/driverCapacities/$(driverId))
-        ? get(/databases/$(database)/documents/driverCapacities/$(driverId)).data.capacity
+      let capacity = get(/databases/$(database)/documents/driverCapacities/$(driverId));
+      return capacity != null ? capacity.data.capacity
         : get(/databases/$(database)/documents/drivers/$(driverId)).data.capacity;
     }
 
@@ -139,8 +139,18 @@ service cloud.firestore {
         + '-' + (d.day() < 10 ? '0' : '') + string(d.day());
     }
     function checkoutBookingCompatible(d) {
-      let p = /databases/$(database)/documents/bookings/$(depotDayKey(request.time) + '__' + d.vehicleId);
-      return !exists(p) || get(p).data.driverId == d.driverId;
+      let day = depotDayKey(request.time);
+      let p = /databases/$(database)/documents/bookings/$(day + '__' + d.vehicleId);
+      let reverse = /databases/$(database)/documents/driverClaims/$(day + '__' + d.driverId);
+      return (!exists(p) || get(p).data.driverId == d.driverId)
+        && (!exists(reverse) || get(reverse).data.bookingId == day + '__' + d.vehicleId);
+    }
+    function bookingDriverOccupancy(d) {
+      let p = /databases/$(database)/documents/fleetDriverAssignments/$(d.driverId);
+      let b = getAfter(/databases/$(database)/documents/bookings/$(d.bookingId)).data;
+      return bookingDay(d) != budapestDayAt(request.time) || !exists(p)
+        || get(p).data.active == false
+        || (get(p).data.active == true && get(p).data.vehicleId == b.vehicleId);
     }
     function sameDayOccupancy(d) {
       let manual = /databases/$(database)/documents/fleetAssignments/$(d.vehicleId);
@@ -175,8 +185,6 @@ service cloud.firestore {
         && optionalText(request.resource.data.district,60)
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
-        && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
-        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && nonNegative(request.resource.data.capacity,10000)
@@ -196,6 +204,7 @@ service cloud.firestore {
       allow create: if editor()
         && exactFields(request.resource.data,['date','driverId','bookingId'])
         && validDay(request.resource.data.date)
+        && bookingDriverOccupancy(request.resource.data)
         && validDriverCode(request.resource.data.driverId)
         && textField(request.resource.data.bookingId,120)
         && key == request.resource.data.date + '__' + request.resource.data.driverId
