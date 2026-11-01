@@ -117,7 +117,7 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
       - name: Depó napi foglalás és Flotta-kiadás keresztirányú Firestore-szabálypróba
         run: |
-          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/qa/physical-booking-rules-emulator.mjs"
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/physical-booking-rules-emulator.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
