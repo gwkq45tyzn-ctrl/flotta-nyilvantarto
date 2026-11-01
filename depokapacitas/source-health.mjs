@@ -10,6 +10,6 @@ export function assessSources(meta={}, {online=true,now=Date.now(),maxAge=15*60*
  else if(missing.length){status='loading';message='Még nincs minden adatforrás betöltve: '+missing.join(', ')+'.';}
  else if(keys.some(x=>meta[x]?.pending)){status='pending';message='A helyi módosítás szerveri visszaigazolásra vár.';}
  else if(keys.some(x=>meta[x]?.fromCache!==false)||confirmedAt===null){status='cached';message='Gyorsítótárazott adat: még nincs teljes szerveri visszaigazolás.';}
- else if(!Number.isFinite(now)||confirmedAt>now||now-confirmedAt>maxAge){status='stale';message='Régen vagy hibás időponttal ellenőrzött pillanatkép; frissítés szükséges.';}
+ else if(!Number.isFinite(now)||keys.some(x=>meta[x]?.serverAt>now)||now-confirmedAt>maxAge){status='stale';message='Régen vagy hibás időponttal ellenőrzött pillanatkép; frissítés szükséges.';}
  return {status,trusted:status==='ready',message,confirmedAt};
 }
