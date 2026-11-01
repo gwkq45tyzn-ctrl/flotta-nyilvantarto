@@ -46,6 +46,17 @@ try{
  await test('anonymous cannot read vehicles',false,()=>getDocs(collection(db.anonymous,'vehicles')));
  await test('unauthorized fleet edit denied',false,()=>setDoc(doc(db.courier,'vehicles',plate),{plate,model:'Fake',status:'Elérhető'}));
  await test('incomplete 7 photos denied',false,()=>create(db.courier,uid,sid,driver,plate,{inPhotos:{front:'fake'}}));
+ await env.withSecurityRulesDisabled(async ctx=>{
+  const d=ctx.firestore();
+  await setDoc(doc(d,'fleetAssignments',plate2),{vehicleId:plate2,driverId:driver,active:true,mileage:100,operationId:'SYNTHETICFLEETISSUE'});
+  await setDoc(doc(d,'fleetDriverAssignments',driver),{vehicleId:plate2,driverId:driver,active:true,mileage:100,operationId:'SYNTHETICFLEETISSUE'});
+ });
+ await test('self checkin blocked by existing physical Fleet checkout',false,()=>create(db.courier,uid,sid3,driver,plate2));
+ await env.withSecurityRulesDisabled(async ctx=>{
+  const d=ctx.firestore();
+  await updateDoc(doc(d,'fleetAssignments',plate2),{active:false});
+  await updateDoc(doc(d,'fleetDriverAssignments',driver),{active:false});
+ });
  await test('authenticated courier can atomically check in',true,()=>create(db.courier,uid,sid,driver,plate));
  await test('another courier cannot take occupied car',false,()=>create(db.other,otherUid,sid2,otherDriver,plate));
  await test('same courier cannot take second vehicle',false,()=>create(db.courier,uid,sid2,driver,plate2));
@@ -53,6 +64,13 @@ try{
  await test('other courier cannot view private session',false,()=>getDoc(doc(db.other,'vehicleSessions',sid)));
  await test('courier can read own session query',true,()=>getDocs(collection(db.courier,'vehicleLocks')));
  await test('staff can inspect all sessions',true,()=>getDocs(collection(db.editor,'vehicleSessions')));
+ const schedule={date:'2026-11-02',driverId:driver,status:'planned',changedAt:serverTimestamp(),changedBy:'editor'};
+ await test('editor can plan company driver without preassigned car',true,()=>setDoc(doc(db.editor,'courierDayPlans','2026-11-02__'+driver),schedule));
+ await test('viewer cannot change courier schedule',false,()=>setDoc(doc(db.viewer,'courierDayPlans','2026-11-02__'+driver),{...schedule,changedBy:'viewer'}));
+ await test('courier cannot edit scheduling',false,()=>setDoc(doc(db.courier,'courierDayPlans','2026-11-02__'+driver),{...schedule,changedBy:uid}));
+ await test('invalid date blocked on schedule',false,()=>setDoc(doc(db.editor,'courierDayPlans','2026-11-31__'+driver),{...schedule,date:'2026-11-31'}));
+ await test('editor may confirm presence',true,()=>updateDoc(doc(db.editor,'courierDayPlans','2026-11-02__'+driver),{status:'confirmed',changedAt:serverTimestamp(),changedBy:'editor'}));
+
  await test('viewer cannot checkout courier vehicle',false,()=>checkout(db.viewer,uid,sid,plate));
  await test('courier cannot fake review',false,()=>review(db.courier,uid,sid,plate));
  await test('courier can atomically check out',true,()=>checkout(db.courier,uid,sid,plate));
