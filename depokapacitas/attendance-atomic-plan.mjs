@@ -67,6 +67,9 @@ export function planAttendanceAtomicGuard({
  if(!Array.isArray(events))return deny('missing_event_snapshot');
  const parsed=normalizedEvents(events);
  if(parsed.errors.length)return deny(parsed.errors[0]);
+ // A future-dated event can never serve as proof of *today's* occupancy.
+ if(parsed.events.some(e=>e.eventTime.slice(0,10)>date))
+  return deny('future_attendance_event');
  if(!vehicles.some(v=>plate(v.plate||v.id)===key&&v.status==='Elérhető'))
   return deny('vehicle_unavailable');
  const reduced=deriveAttendanceHandovers({
