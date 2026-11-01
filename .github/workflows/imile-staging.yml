@@ -38,7 +38,10 @@ jobs:
           node staging/imile-management/cutover-browser.integration.test.mjs
           node --check staging/imile-management/cutover-app.mjs
       - name: Szervizben lévő autók és inaktív futárok kizárása
-        run: node depokapacitas/capacity-eligibility.test.mjs
+        run: |
+          node depokapacitas/capacity-eligibility.test.mjs
+          node depokapacitas/booking-physical-guard.test.mjs
+          node staging/imile-management/depo-booking-physical.integration.test.mjs
       - name: Kerületi új/újrakézbesítendő csomagok és kapacitás ütközésellenőrzése
         run: |
           node depokapacitas/district-capacity.test.mjs
@@ -112,6 +115,9 @@ jobs:
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+      - name: Depó napi foglalás és Flotta-kiadás keresztirányú Firestore-szabálypróba
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/physical-booking-rules-emulator.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"

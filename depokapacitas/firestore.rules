@@ -123,6 +123,33 @@ service cloud.firestore {
       allow delete: if editor();
     }
 
+    // A booking for the current Budapest day must not contradict a live
+    // manual Fleet checkout. Future-day capacity is a plan, not a physical
+    // checkout: it is deliberately not blocked by today's active key.
+    // Using UTC+2 as the conservative upper Budapest offset also covers
+    // DST changes. Around winter midnight this can hold tomorrow's booking
+    // for at most one hour earlier than the local day boundary.
+    function bookingNotFutureInBudapest(date) {
+      let parts = date.split('-');
+      return timestamp.date(int(parts[0]),int(parts[1]),int(parts[2]))
+        <= (request.time + duration.value(2, 'h')).date();
+    }
+    // Firestore caps rule document reads per write. Check vehicle and driver
+    // separately on the paired booking and driver-claim writes.
+    function bookingVehicleFleetCompatible(d) {
+      let p = /databases/$(database)/documents/fleetAssignments/$(d.vehicleId);
+      return !bookingNotFutureInBudapest(d.date)
+        || !existsAfter(p) || getAfter(p).data.active != true
+        || getAfter(p).data.driverId == d.driverId;
+    }
+    function bookingDriverFleetCompatible(d) {
+      let p = /databases/$(database)/documents/fleetDriverAssignments/$(d.driverId);
+      let bookingPath = /databases/$(database)/documents/bookings/$(d.bookingId);
+      return !bookingNotFutureInBudapest(d.date)
+        || !existsAfter(p) || getAfter(p).data.active != true
+        || getAfter(p).data.vehicleId == getAfter(bookingPath).data.vehicleId;
+    }
+
     match /bookings/{bookingId} {
       allow read: if member();
       allow create: if editor()
@@ -139,6 +166,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
+        && bookingVehicleFleetCompatible(request.resource.data)
         // Both documents must be written in one transaction. This prevents double booking.
         && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
@@ -160,7 +188,8 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
         && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == request.resource.data.date
         && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
-        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId;
+        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId
+        && bookingDriverFleetCompatible(request.resource.data);
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
@@ -365,6 +394,14 @@ service cloud.firestore {
       return issued.action == 'checkout' && issued.vehicleId == d.vehicleId
         && issued.driverId == d.driverId && validDay(issued.date) && d.date >= issued.date;
     }
+    // The reverse direction matters too: a checkout for the same business
+    // date cannot take a vehicle already booked to a different courier.
+    // A dated Fleet checkout must be entered with the real pickup date.
+    function fleetCheckoutRespectsBooking(d) {
+      let bookingPath = /databases/$(database)/documents/bookings/$(d.date + '__' + d.vehicleId);
+      return !existsAfter(bookingPath)
+        || getAfter(bookingPath).data.driverId == d.driverId;
+    }
     function validFleetMovement(id,d) {
       let v = get(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data;
       let driver = get(/databases/$(database)/documents/drivers/$(d.driverId)).data;
@@ -380,7 +417,8 @@ service cloud.firestore {
         && fleetMileageMatches(d.vehicleId,d.mileage)
         && a.active == (d.action == 'checkout')
         && (d.action != 'return' || validFleetReturnDate(d))
-        && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
+        && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'))
+        && (d.action != 'checkout' || fleetCheckoutRespectsBooking(d));
     }
     match /fleetMovements/{id} {
       allow read: if member();

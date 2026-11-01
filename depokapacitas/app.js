@@ -1,11 +1,12 @@
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocsFromServer,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
 import {parseDay,parseTime} from './import-dates.mjs';
 import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
+import {assessDailyPhysicalUse,bookingSourcesTrusted} from './booking-physical-guard.mjs';
 import {summarizeDistrictCapacity} from './district-capacity.mjs';
 import {planSharedMasterMigration} from '../staging/imile-management/shared-import-plan.mjs';
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
@@ -41,11 +42,25 @@ function section(h,body){return '<section class="panel"><h3>'+h+'</h3>'+body+'</
 function datebar(){return '<div class="filterbar"><label>Nap <input type="date" id="datePick" value="'+state.date+'"></label></div>';}
 function inRange(x,mode){const day=(x.date||x.eventDate||x.eventTime||'').slice(0,10);if(mode==='day')return day===state.date;if(mode==='month')return day.slice(0,7)===state.date.slice(0,7);const d=new Date(state.date+'T12:00:00');const monday=new Date(d);monday.setDate(d.getDate()-((d.getDay()+6)%7));const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);return day>=monday.toISOString().slice(0,10)&&day<=sunday.toISOString().slice(0,10);}
 const todayAtDepot=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const bookingAssessment=b=>assessBooking(b,get('drivers'),get('vehicles'),todayAtDepot());
-const safeBookingCapacity=b=>effectiveCapacity(b,get('drivers'),get('vehicles'),todayAtDepot());
+const bookingAssessment=b=>{
+ const base=assessBooking(b,get('drivers'),get('vehicles'),todayAtDepot());
+ if(!base.eligible||b.date<todayAtDepot())return base;
+ if(!bookingSourcesTrusted(state.sourceMeta,{online:navigator.onLine}))
+  return {eligible:false,reason:'unverified_physical_sources'};
+ const physical=assessDailyPhysicalUse({
+  date:b.date,today:todayAtDepot(),driverId:b.driverId,vehicleId:b.vehicleId,
+  assignments:get('fleetAssignments'),
+  handovers:deriveAttendanceHandovers({events:get('attendance'),
+   drivers:get('drivers'),vehicles:get('vehicles'),
+   manualBookings:get('bookings')}).handovers
+ });
+ return physical.eligible?base:physical;
+};
+const safeBookingCapacity=b=>bookingAssessment(b).eligible?
+ effectiveCapacity(b,get('drivers'),get('vehicles'),todayAtDepot()):0;
 function totals(mode='day'){const ds=get('demands').filter(x=>inRange(x,mode));const bs=get('bookings').filter(x=>inRange(x,mode));const rs=get('results').filter(x=>inRange(x,mode));const sum=(l,f)=>l.reduce((a,x)=>a+number(x[f]),0);return {newCount:sum(ds,'newCount'),retryCount:sum(ds,'retryCount'),capacity:bs.reduce((n,b)=>n+safeBookingCapacity(b),0),blockedBookings:bs.filter(b=>!bookingAssessment(b).eligible).length,picked:sum(rs,'picked'),success:sum(rs,'success'),failed:sum(rs,'failed'),drivers:new Set(bs.filter(b=>bookingAssessment(b).eligible).map(b=>b.driverId)).size,hasDemand:ds.length>0,hasResults:rs.length>0};}
 function centralTaskList(limit=null){
-  const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments'];
+  const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments','attendance'];
   const missing=criticalSources.filter(key=>!state.loaded.has(key));
   const failed=criticalSources.filter(key=>state.errors.has(key));
   const sourceHealth=failed.length?
@@ -54,7 +69,7 @@ function centralTaskList(limit=null){
   const entries=collectFleetAlerts({
     today:todayAtDepot(),vehicles:get('vehicles'),drivers:get('drivers'),
     fleetRecords:get('fleetRecords'),fleetAssignments:get('fleetAssignments'),
-    bookings:get('bookings')
+    bookings:get('bookings'),attendance:get('attendance')
   });
   const visible=limit===null?entries:entries.slice(0,limit);
   const urgent=entries.filter(x=>x.level==='urgent').length;
@@ -173,8 +188,28 @@ function overview(){
        t.hasResults?'A felvett csomagok %-a':'Nincs tényadat')+'</div>');
 }
 function drivers(){const list=get('drivers').filter(x=>(x.name+' '+x.daCode+' '+x.vendor).toLowerCase().includes(state.search));const edit=canWrite()?section('Depókapacitás megadása (külön az alapadatoktól)',frm('capacity',select('driverId','Futár',get('drivers'),x=>x.name+' · '+x.daCode)+field('capacity','Napi csomagkapacitás','number',0,'min="0" max="10000"'))):'';return '<p class="inline-note">A futártörzs közös adat: a Flotta kezeli. Itt csak a depóhoz szükséges kapacitás állítható.</p>'+edit+section('Futártörzs · '+list.length+' fő',table(['Futár','DA-kód','Vállalkozó','Napi kapacitás'],list.map(x=>td(esc(x.name),esc(x.daCode),esc(x.vendor),fmt(byId('driverCapacities',x.id)?.capacity??x.capacity??0)))));}
-function vehicles(){const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));return '<p class="inline-note">Az autók és a műszaki státuszok közös törzsadatai a Flotta rendszerből származnak. A Kapacitáskezelő nem írja felül őket.</p>'+section('Autónyilvántartás · '+list.length+' db',table(['Rendszám','Típus','Állapot','Mai foglalás'],list.map(x=>{const b=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);return td(esc(x.plate),esc(x.model),status(x.status),b?esc(byId('drivers',b.driverId)?.name||'—'):'Szabad');})));}
-function planning(){const ds=get('drivers').filter(eligibleDriver).slice().sort((a,b)=>a.name.localeCompare(b.name));const vs=get('vehicles').filter(x=>x.status==='Elérhető').slice().sort((a,b)=>a.plate.localeCompare(b.plate));const today=get('bookings').filter(x=>x.date===state.date).sort((a,b)=>(a.district||'').localeCompare(b.district||''));const taken=new Set(today.map(x=>x.vehicleId));const available=vs.filter(x=>!taken.has(x.id));const form=canWrite()?section('Futár és autó összerendelése',frm('booking',field('date','Munkanap','date',state.date)+select('driverId','Futár',ds,x=>x.name+' · '+x.daCode)+select('vehicleId','Szabad autó',available,x=>x.plate)+field('district','Kerület','text','','placeholder="pl. IX."')+'<label>Státusz<select name="status"><option value="planned">Tervezett</option><option value="confirmed">Visszaigazolt</option></select></label>','Foglalás mentése')+'<p class="small">Egy autó egy nap csak egy futárhoz foglalható. Ugyanaz a futár sem kaphat két autót ugyanarra a napra.</p>'):'';
+function vehicles(){
+ const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));
+ const trusted=bookingSourcesTrusted(state.sourceMeta,{online:navigator.onLine});
+ const current=state.date===todayAtDepot();
+ const occupied=trusted&&current?new Set([
+  ...get('fleetAssignments').filter(a=>a.active===true).map(a=>a.vehicleId),
+  ...deriveAttendanceHandovers({events:get('attendance'),drivers:get('drivers'),
+   vehicles:get('vehicles'),manualBookings:get('bookings')}).openVehicleIds
+ ]):new Set();
+ const availability=x=>{
+  const booking=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);
+  if(booking)return esc(byId('drivers',booking.driverId)?.name||'Foglalt');
+  if(!trusted)return 'Nem ellenőrzött';
+  if(current&&occupied.has(x.id))return 'Fizikailag kiadva';
+  return state.date>todayAtDepot()?'Tervezhető (jövőbeni)':
+   current?'Nincs ismert foglalás vagy kiadás':'Nincs rögzített foglalás';
+ };
+ return '<p class="inline-note">Az autók és a műszaki státuszok a közös Flotta rendszerből származnak. A fizikai használatot csak szerverrel ellenőrzött forrásokból jelezzük, a jövőbeni elérhetőség csak terv.</p>'+
+  section('Autónyilvántartás · '+list.length+' db',table(['Rendszám','Típus','Állapot','Foglalás / fizikai használat'],
+   list.map(x=>td(esc(x.plate),esc(x.model),status(x.status),availability(x)))));
+}
+function planning(){const ds=get('drivers').filter(eligibleDriver).slice().sort((a,b)=>a.name.localeCompare(b.name));const vs=get('vehicles').filter(x=>x.status==='Elérhető').slice().sort((a,b)=>a.plate.localeCompare(b.plate));const today=get('bookings').filter(x=>x.date===state.date).sort((a,b)=>(a.district||'').localeCompare(b.district||''));const taken=new Set(today.map(x=>x.vehicleId));const physicalReady=bookingSourcesTrusted(state.sourceMeta,{online:navigator.onLine});const physical=physicalReady?deriveAttendanceHandovers({events:get('attendance'),drivers:get('drivers'),vehicles:get('vehicles'),manualBookings:get('bookings')}):null;const current=state.date===todayAtDepot();const blocked=physicalReady&&current?new Set([...get('fleetAssignments').filter(a=>a.active===true).map(a=>a.vehicleId),...physical.openVehicleIds]):new Set();const available=physicalReady?vs.filter(x=>!taken.has(x.id)&&!blocked.has(x.id)):[];const form=canWrite()&&physicalReady?section('Futár és autó összerendelése',frm('booking',field('date','Munkanap','date',state.date)+select('driverId','Futár',ds,x=>x.name+' · '+x.daCode)+select('vehicleId','Szabad autó',available,x=>x.plate)+field('district','Kerület','text','','placeholder="pl. IX."')+'<label>Státusz<select name="status"><option value="planned">Tervezett</option><option value="confirmed">Visszaigazolt</option></select></label>','Foglalás mentése')+'<p class="small">Egy autó egy nap csak egy futárhoz foglalható. Ugyanaz a futár sem kaphat két autót ugyanarra a napra. A fizikai autókiadás és Attendance-állapot szerveri ellenőrzése szükséges; a későbbi napok tervezése nem bizonyít jövőbeni fizikai rendelkezésre állást.</p>'):canWrite()?'<p class="notice">Az új foglalás nem engedélyezett: a Flotta-kiadás vagy Attendance forrása nem teljesen friss, illetve nem ellenőrizhető szerverről. Frissítsd az oldalt és ellenőrizd a kapcsolatot.</p>':'';
 return datebar()+nextDayPanel()+centralTaskList(5)+attendanceVehicleSummary()+form+section('Napi foglalások · '+today.length,table(['Futár','Autó','Kerület','Kapacitás','Státusz','Elérhetőség',''],today.map(x=>td(esc(byId('drivers',x.driverId)?.name||'Ismeretlen'),esc(byId('vehicles',x.vehicleId)?.plate||'—'),esc(x.district),fmt(x.capacity),status(x.status),bookingAssessment(x).eligible?label('Rendben','green'):label('Nem elérhető','red'),canWrite()?'<button class="danger" data-cancel="'+esc(x.id)+'">Feloldás</button>':''))));}
 function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
 function results(){const rs=get('results');const dates=['day','week','month'];const summaries=dates.map(mode=>{const data=rs.filter(x=>inRange(x,mode));return {mode,label:{day:'Napi',week:'Heti',month:'Havi'}[mode],picked:data.reduce((s,x)=>s+number(x.picked),0),success:data.reduce((s,x)=>s+number(x.success),0),failed:data.reduce((s,x)=>s+number(x.failed),0)};});
@@ -233,7 +268,47 @@ else if(type==='capacity'){col='driverCapacities';id=values.driverId;if(!byId('d
 else if(type==='demand'){col='demands';const date=iso(values.date),district=values.district.trim().toUpperCase().replaceAll('/','-');id=date+'__'+district;obj={date,district,newCount:number(values.newCount),retryCount:number(values.retryCount)};}
 else if(type==='result'){col='results';const picked=number(values.picked),success=number(values.success),failed=number(values.failed);if(success+failed>picked)throw Error('A sikeres és sikertelen összeg nem lehet több a felvett csomagszámnál.');const date=iso(values.date),district=values.district.trim().toUpperCase().replaceAll('/','-');id=date+'__'+values.driverId+'__'+district;obj={date,driverId:values.driverId,district,picked,success,failed};}
 else if(type==='user'){if(state.role!=='admin')throw Error('Csak adminisztrátor.');col='users';id=values.uid.trim();if(!/^[A-Za-z0-9]{15,128}$/.test(id))throw Error('Érvénytelen Firebase UID.');obj={name:values.name.trim(),role:values.role,active:true};}
-else if(type==='booking'){const date=iso(values.date),driverId=values.driverId,vehicleId=values.vehicleId;const driver=byId('drivers',driverId),vehicle=byId('vehicles',vehicleId);if(!eligibleDriver(driver)||!vehicle||vehicle.status!=='Elérhető')throw Error('A futár inaktív vagy az autó nem elérhető.');const bookingId=date+'__'+vehicleId;const driverKey=date+'__'+driverId;const bRef=doc(db,'bookings',bookingId),dRef=doc(db,'driverClaims',driverKey);await runTransaction(db,async tx=>{const [oldBook,oldDriver,liveDriver,liveVehicle,liveCapacity]=await Promise.all([tx.get(bRef),tx.get(dRef),tx.get(doc(db,'drivers',driverId)),tx.get(doc(db,'vehicles',vehicleId)),tx.get(doc(db,'driverCapacities',driverId))]);if(oldBook.exists()||oldDriver.exists())throw Error('Ezen a napon az autó vagy a futár már foglalt.');if(!liveDriver.exists()||liveDriver.data().active!==true||!liveVehicle.exists()||liveVehicle.data().status!=='Elérhető')throw Error('A futár vagy autó állapota megváltozott. Frissítsd a beosztást.');tx.set(bRef,{date,vehicleId,driverId,district:values.district.trim().toUpperCase(),status:values.status,capacity:number(liveCapacity.exists()?liveCapacity.data().capacity:(liveDriver.data().capacity??0))});tx.set(dRef,{date,driverId,bookingId});});toast('Foglalás mentve.');return;}
+else if(type==='booking'){
+ const date=iso(values.date),driverId=values.driverId,vehicleId=values.vehicleId;
+ const driver=byId('drivers',driverId),vehicle=byId('vehicles',vehicleId);
+ if(!eligibleDriver(driver)||!vehicle||vehicle.status!=='Elérhető')
+  throw Error('A futár inaktív vagy az autó nem elérhető.');
+ if(!bookingSourcesTrusted(state.sourceMeta,{online:navigator.onLine}))
+  throw Error('A Flotta/Attendance források nem ellenőrzöttek, nem lehet autót foglalni.');
+ // Query-based Attendance cannot be an atomic Firestore Rules predicate. Re-read
+ // it from the server immediately before the booking transaction, fail closed.
+ const liveAttendance=await getDocsFromServer(collection(db,'attendance'));
+ if(liveAttendance.metadata.fromCache||liveAttendance.metadata.hasPendingWrites)
+  throw Error('A jelenléti események nem szerverrel ellenőrzöttek.');
+ const handovers=deriveAttendanceHandovers({
+  events:liveAttendance.docs.map(x=>({id:x.id,...x.data()})),
+  drivers:get('drivers'),vehicles:get('vehicles'),manualBookings:get('bookings')
+ }).handovers;
+ const bookingId=date+'__'+vehicleId,driverKey=date+'__'+driverId;
+ const bRef=doc(db,'bookings',bookingId),dRef=doc(db,'driverClaims',driverKey);
+ await runTransaction(db,async tx=>{
+  const [oldBook,oldDriver,liveDriver,liveVehicle,liveCapacity,liveCarClaim,liveDriverClaim]=await Promise.all([
+   tx.get(bRef),tx.get(dRef),tx.get(doc(db,'drivers',driverId)),
+   tx.get(doc(db,'vehicles',vehicleId)),tx.get(doc(db,'driverCapacities',driverId)),
+   tx.get(doc(db,'fleetAssignments',vehicleId)),tx.get(doc(db,'fleetDriverAssignments',driverId))
+  ]);
+  if(oldBook.exists()||oldDriver.exists())throw Error('Ezen a napon az autó vagy a futár már foglalt.');
+  if(!liveDriver.exists()||liveDriver.data().active!==true||
+   !liveVehicle.exists()||liveVehicle.data().status!=='Elérhető')
+   throw Error('A futár vagy autó állapota megváltozott. Frissítsd a beosztást.');
+  const physical=assessDailyPhysicalUse({
+   date,today:todayAtDepot(),driverId,vehicleId,
+   assignments:[...(liveCarClaim.exists()?[liveCarClaim.data()]:[]),
+    ...(liveDriverClaim.exists()?[liveDriverClaim.data()]:[])],
+   handovers
+  });
+  if(!physical.eligible)throw Error('Fizikai Flotta/Attendance ütközés vagy múltbeli foglalás: '+physical.reason);
+  tx.set(bRef,{date,vehicleId,driverId,district:values.district.trim().toUpperCase(),
+   status:values.status,capacity:number(liveCapacity.exists()?liveCapacity.data().capacity:(liveDriver.data().capacity??0))});
+  tx.set(dRef,{date,driverId,bookingId});
+ });
+ toast('Foglalás mentve.');return;
+}
 else throw Error('Ismeretlen művelet.');
 await setDoc(doc(db,col,id),obj,{merge:true});toast('Mentés sikeres.');}
 async function removeRow(col,id){if(!canWrite())throw Error('Nincs jogosultság.');if(!confirm('Biztosan törlöd a kiválasztott rekordot?'))return;if(col==='bookings')return;await deleteDoc(doc(db,col,id));toast('Törölve.');}

@@ -6,6 +6,7 @@
  * the depot must not silently use different expiry windows from Fleet.
  */
 import {expiryWarnings, schemas, validDate} from './fleet/operations-data.mjs';
+import {normalizeAttendanceVehicleEvent} from './attendance-handover.mjs';
 
 const priority={urgent:0,warning:1,upcoming:2,info:3};
 const levelForDays=days=>days<=7?'urgent':days<=30?'warning':'upcoming';
@@ -16,7 +17,7 @@ const recordVehicleId=row=>norm(row?.data?.vehicleId||row?.vehicleId||'');
 const sentence=days=>days<0?'Lejárt '+(-days)+' napja':days===0?'Ma esedékes':days+' nap múlva esedékes';
 const add=(list,x)=>list.push({...x,source:'Flotta',actionUrl:'../staging/imile-management/fleet/operations.html'});
 export function collectFleetAlerts({
-  today,vehicles=[],drivers=[],fleetRecords=[],fleetAssignments=[],bookings=[]
+  today,vehicles=[],drivers=[],fleetRecords=[],fleetAssignments=[],bookings=[],attendance=[]
 }={}){
   if(!validDate(today))throw Error('Érvénytelen ellenőrzési dátum');
   const alerts=[];
@@ -81,6 +82,23 @@ export function collectFleetAlerts({
       add(alerts,{id:'fleet-conflict-assignment:'+booking.id,type:'conflict',level:'urgent',
         title:vid+' – eltérő futárhoz kiadott autó',
         detail:'A tényleges kiadás és a mai tervezett foglalás eltér.',dueDate:today,days:0,vehicleId:vid});
+    }
+  }
+  // Flag a real Attendance login that disagrees with today's manual plan.
+  // Even if the handover reducer rejects it as a planning conflict, dispatch
+  // must see a clear urgent alert instead of silently treating the car as free.
+  const seenAttendance=new Set();
+  for(const raw of safeArray(attendance)){
+    const e=normalizeAttendanceVehicleEvent(raw);
+    if(!e.valid||e.type!=='Log In'||!e.vehicleId||
+      e.eventTime.slice(0,10)!==today||seenAttendance.has(e.id))continue;
+    seenAttendance.add(e.id);
+    const booked=safeArray(bookings).find(b=>b.date===today&&norm(b.vehicleId)===e.vehicleId);
+    if(booked&&norm(booked.driverId)!==norm(e.daCode)){
+      add(alerts,{id:'fleet-conflict-attendance:'+e.id,type:'conflict',level:'urgent',
+        title:e.vehicleId+' – Attendance és napi foglalás eltér',
+        detail:'A mai járműhasználati bejelentkezés eltérő futárt jelöl. A kiosztást tisztázni kell.',
+        dueDate:today,days:0,vehicleId:e.vehicleId});
     }
   }
   return alerts.sort((a,b)=>priority[a.level]-priority[b.level]||
