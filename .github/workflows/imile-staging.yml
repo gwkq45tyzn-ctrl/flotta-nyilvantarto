@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - 'staging/imile-management/**'
+      - 'depokapacitas/**'
 
 permissions:
   contents: read
@@ -25,6 +26,8 @@ jobs:
           node-version: '24'
       - name: Staging Firebase webkonfiguráció ellenőrzése
         run: node depokapacitas/firebase-config.test.mjs
+      - name: Mai fizikai és Attendance járműfoglalási védelem
+        run: node depokapacitas/booking-occupancy.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
         run: node depokapacitas/tests/check.mjs
       - name: Közös futár/autó törzs és duplikációs tesztek
@@ -115,6 +118,8 @@ jobs:
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
+      - name: Napi foglalás és fizikai kiadás – kétirányú Rules-védelem
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-occupancy --config firebase.staging-emulator.json "node staging/imile-management/fleet/booking-occupancy-emulator.mjs"
       - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
       - name: A flotta belépési pontjának érintetlensége

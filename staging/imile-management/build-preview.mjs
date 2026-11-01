@@ -51,6 +51,7 @@ const allowed=[
   'depokapacitas/capacity-eligibility.mjs',
   'depokapacitas/district-capacity.mjs',
   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
+  'depokapacitas/booking-occupancy.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
   'depokapacitas/parcel-preview.mjs',

@@ -17,8 +17,10 @@ function fixture(kind,key='TEST0001'){
 }
 function envelope(kind,data,uid){return {kind,data,revision:1,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),createdBy:uid,updatedBy:uid};}
 const attendance={eventTime:'2099-01-15T08:00:00',eventDate:'2099-01-15',timeKnown:true,daCode:'TEST0001',driverName:'SYNTHETIC TEST',vendor:'QA',type:'Log In',status:'',photoFront:'',photoLeft:'',photoRight:'',photoBack:'',source:'synthetic-emulator',vehicleId:'TEST0001'};
-await test('admin: optional Attendance vehicle allowed',true,()=>setDoc(doc(db.admin,'attendance','SYNATT1'),attendance));
-await test('editor: optional Attendance vehicle allowed',true,()=>setDoc(doc(db.editor,'attendance','SYNATT2'),attendance));
+await test('admin: vehicle Attendance requires trusted publisher',false,()=>setDoc(doc(db.admin,'attendance','SYNATT1'),attendance));
+await test('editor: vehicle Attendance requires trusted publisher',false,()=>setDoc(doc(db.editor,'attendance','SYNATT2'),attendance));
+const {vehicleId:omittedVehicle,...legacyAttendance}=attendance;
+await test('editor: legacy Attendance without vehicle stays compatible',true,()=>setDoc(doc(db.editor,'attendance','SYNLEGACY'),legacyAttendance));
 await test('viewer: Attendance vehicle write denied',false,()=>setDoc(doc(db.viewer,'attendance','SYNATT3'),attendance));
 await test('editor: malformed Attendance vehicle denied',false,()=>setDoc(doc(db.editor,'attendance','SYNATT4'),{...attendance,vehicleId:'../invalid'}));
 await test('editor: extra Attendance field denied',false,()=>setDoc(doc(db.editor,'attendance','SYNATT5'),{...attendance,extra:'unexpected'}));

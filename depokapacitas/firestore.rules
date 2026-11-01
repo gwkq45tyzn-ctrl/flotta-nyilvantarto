@@ -123,11 +123,53 @@ service cloud.firestore {
       allow delete: if editor();
     }
 
+    // QA26: Europe/Budapest calendar day, using EU DST boundaries at 01:00 UTC.
+    function budapestDayAt(now) {
+      let y = now.year();
+      let march = timestamp.date(y,3,31);
+      let october = timestamp.date(y,10,31);
+      let start = march - duration.value(march.dayOfWeek() % 7,'d') + duration.value(1,'h');
+      let end = october - duration.value(october.dayOfWeek() % 7,'d') + duration.value(1,'h');
+      return (now + duration.value(now >= start && now < end ? 2 : 1,'h')).date();
+    }
+    function bookingDay(d) { return timestamp.date(int(d.date[0:4]),int(d.date[5:7]),int(d.date[8:10])); }
+    function depotDayKey(now) {
+      let d = budapestDayAt(now);
+      return string(d.year()) + '-' + (d.month() < 10 ? '0' : '') + string(d.month())
+        + '-' + (d.day() < 10 ? '0' : '') + string(d.day());
+    }
+    function checkoutBookingCompatible(d) {
+      let p = /databases/$(database)/documents/bookings/$(depotDayKey(request.time) + '__' + d.vehicleId);
+      return !exists(p) || get(p).data.driverId == d.driverId;
+    }
+    function sameDayOccupancy(d) {
+      let manual = /databases/$(database)/documents/fleetAssignments/$(d.vehicleId);
+      let guard = /databases/$(database)/documents/attendanceVehicleGuards/$(d.date + '__' + d.vehicleId);
+      return bookingDay(d) != budapestDayAt(request.time) || (
+        (!exists(manual) || get(manual).data.active == false
+          || (get(manual).data.active == true && get(manual).data.driverId == d.driverId))
+        && exists(guard)
+        && get(guard).data.date == d.date && get(guard).data.vehicleId == d.vehicleId
+        && get(guard).data.source == 'trusted-attendance-projection-v1'
+        && get(guard).data.confirmedAt is timestamp
+        && get(guard).data.confirmedAt <= request.time
+        && get(guard).data.confirmedAt >= request.time - duration.value(120,'s')
+        && ((get(guard).data.state == 'clear' && get(guard).data.driverId == '')
+          || (get(guard).data.state == 'assigned' && get(guard).data.driverId == d.driverId))
+      );
+    }
+    match /attendanceVehicleGuards/{id} {
+      // A complete, atomically maintained trusted projection is a RELEASE GATE.
+      // Browser admins/editors cannot forge clearance; no publisher is enabled here.
+      allow read: if member();
+      allow write: if false;
+    }
     match /bookings/{bookingId} {
       allow read: if member();
       allow create: if editor()
         && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity'])
         && validDay(request.resource.data.date)
+        && sameDayOccupancy(request.resource.data)
         && validVehiclePlate(request.resource.data.vehicleId)
         && validDriverCode(request.resource.data.driverId)
         && optionalText(request.resource.data.district,60)
@@ -170,6 +212,10 @@ service cloud.firestore {
       allow read: if member();
       // Apps Script uses IAM; manual browser uploads are authorized for editors only.
       allow create, update: if editor()
+        // Vehicle-bearing events must come through the future atomic trusted publisher.
+        // Otherwise an editor could bypass the occupancy guard by modifying its input.
+        && !('vehicleId' in request.resource.data)
+        && (request.method == 'create' || !('vehicleId' in resource.data))
         // Existing 16-column Attendance events remain valid. The optional
         // vehicleId appears only after the Google source adds car selection.
         && (exactFields(request.resource.data,[
@@ -193,7 +239,7 @@ service cloud.firestore {
         && optionalText(request.resource.data.photoRight,2048)
         && optionalText(request.resource.data.photoBack,2048)
         && textField(request.resource.data.source,256);
-      allow delete: if admin();
+      allow delete: if admin() && !('vehicleId' in resource.data);
     }
 
     match /sourceRows/{id} {
@@ -373,12 +419,14 @@ service cloud.firestore {
       return exactFields(d,['vehicleId','driverId','action','date','mileage','note','createdAt','createdBy'])
         && validVehiclePlate(d.vehicleId) && validDriverCode(d.driverId)
         && d.action in ['checkout','return'] && validDay(d.date)
+        && (d.action != 'checkout' || checkoutBookingCompatible(d))
         && nonNegative(d.mileage,100000000) && optionalText(d.note,2000)
         && d.createdAt == request.time && d.createdBy == request.auth.uid
         && a == reverse && a.operationId == id && a.vehicleId == d.vehicleId
         && a.driverId == d.driverId && a.mileage == d.mileage
         && fleetMileageMatches(d.vehicleId,d.mileage)
         && a.active == (d.action == 'checkout')
+        && (d.action != 'checkout' || checkoutBookingCompatible(d))
         && (d.action != 'return' || validFleetReturnDate(d))
         && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
     }
