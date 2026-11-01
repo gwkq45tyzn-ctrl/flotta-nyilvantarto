@@ -1,12 +1,15 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDocFromServer,onSnapshot,query,where,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDocFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {getStorage,ref as storageRef,uploadBytes,getDownloadURL} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
+import {planCourierDay,planCapacity} from './roster.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
-let user=null,access=null,isStaff=false,unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],courierClaim:null},busy=false;
+let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false;
+const tomorrow=()=>{const today=new Date(day()+'T12:00:00Z');today.setUTCDate(today.getUTCDate()+1);return today.toISOString().slice(0,10);};
+let rosterDate='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(id,value)=>{$(id).hidden=!value};
 const toast=(msg,error=false)=>{const n=$('notice');n.textContent=msg;n.classList.toggle('error',error);n.hidden=false;};
@@ -22,7 +25,7 @@ function subscribe(path,onData){
  },error=>{toast('Nincs hiteles adatkapcsolat: '+error.message,true);setBusy(true);});
  unsubs.push(unsubscribe);
 }
-function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];data={vehicles:[],locks:[],sessions:[],drivers:[],courierClaim:null};}
+function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null};}
 function setBusy(value){busy=value;for(const id of ['checkinButton','checkoutButton','bulkReview'])$(id).disabled=value;}
 function allPhotoFiles(form){
  return PHOTO_KEYS.map(key=>{
@@ -60,6 +63,8 @@ function startStaff(){
  subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})));
  subscribe(collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})));
  subscribe(collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()})));
+ subscribe(collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()})));
+ subscribe(collection(db,'courierDayPlans'),s=>data.plans=s.docs.map(d=>({id:d.id,...d.data()})));
 }
 function renderCourier(){
  $('courierName').textContent='Futár · '+access.driverId;
@@ -79,6 +84,28 @@ function adminSession(s){
  const driver=data.drivers.find(d=>d.id===s.driverId);
  return '<strong>'+esc(s.plate)+'</strong><div class="meta">'+esc(driver?.name||s.driverId)+' · DA: '+esc(s.driverId)+' · átvétel: '+esc(displayTime(s.startedAt))+'</div>';
 }
+
+function renderRoster(){
+ const date=rosterDate||tomorrow();rosterDate=date;
+ $('rosterDate').value=date;
+ const driverSelect=$('rosterDriver'),previous=driverSelect.value;
+ const allowed=new Set(data.accesses.filter(x=>x.active===true).map(x=>x.driverId));
+ const drivers=data.drivers.filter(x=>x.active===true&&allowed.has(x.id));
+ driverSelect.innerHTML='<option value="">Válassz futárt…</option>'+drivers.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.id)+'</option>').join('');
+ if(drivers.some(x=>x.id===previous))driverSelect.value=previous;
+ const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,plans:data.plans,accesses:data.accesses});
+ if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv.';return;}
+ const kpis=[['Üzemképes autók',report.operationalCars],['Fizikailag ellenőrzött szabad',report.physicallyReady],
+  ['Tervezett futárok',report.plannedCouriers],['Megerősített futárok',report.confirmedCouriers],
+  ['Hiányzó megerősített futárok',report.missingConfirmed],['Visszavételre váró autók',report.unverifiedCars]];
+ $('rosterStats').innerHTML=kpis.map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
+ const allowedPlans=data.plans.filter(x=>x.date===date&&allowed.has(x.driverId));
+ $('rosterList').innerHTML=allowedPlans.length?allowedPlans.map(x=>{
+  const d=data.drivers.find(y=>y.id===x.driverId);
+  return '<div class="vehicle"><strong>'+esc(d?.name||x.driverId)+'</strong><div class="meta">'+esc(x.driverId)+' · '+esc(({planned:'Tervezett',confirmed:'Megerősített',cancelled:'Nem jön'})[x.status]||'Ismeretlen')+'</div></div>';
+ }).join(''):'<p class="empty">Még nincs futár-előrejelzés erre a napra.</p>';
+ $('rosterForm').querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='rosterDate')el.disabled=!['admin','editor'].includes(staffRole);});
+}
 function renderStaff(){
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
@@ -91,6 +118,7 @@ function renderStaff(){
  (s.damageNote?'<label class="tick"><input type="checkbox" data-check="damage"> Sérülést külön ellenőriztem</label>':'')+
  '<button class="primary" type="button" data-review="'+esc(s.id)+'">Autó visszavétele</button></article>').join(''):'<p class="empty">Nincs ellenőrzésre váró autó.</p>';
  show('bulkPanel',waiting.length>0);
+ renderRoster();
 }
 function render(){if(!user)return;if(isStaff)renderStaff();else if(access)renderCourier();}
 async function checkin(e){
@@ -157,6 +185,18 @@ async function reviewOne(sessionId,{car,key,clean,damage}){
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();setBusy(true);try{const f=new FormData(e.target);await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(err){toast('Belépés sikertelen. Ellenőrizd a hozzáférésedet.',true);}finally{setBusy(false);}});
 $('logout').addEventListener('click',()=>signOut(auth));
 $('checkinForm').addEventListener('submit',checkin);
+$('rosterForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(busy||!['admin','editor'].includes(staffRole))return;
+ const f=e.target,v=Object.fromEntries(new FormData(f));
+ const p=planCourierDay(v);
+ if(!p.ok)return toast(p.reason,true);
+ if(!data.accesses.some(x=>x.active&&x.driverId===p.driverId))return toast('A futár nem jogosult a cégesautó Attendance használatára.',true);
+ setBusy(true);try{
+  await setDoc(doc(db,'courierDayPlans',p.id),{date:p.date,driverId:p.driverId,status:p.status,changedAt:serverTimestamp(),changedBy:user.uid});
+  toast('Napi futárterv mentve.');rosterDate=p.date;
+ }catch(error){toast('Nem menthető a terv: '+error.message,true);}finally{setBusy(false);}
+});
+$('rosterDate').addEventListener('change',e=>{rosterDate=e.target.value;renderRoster();});
 $('checkoutForm').addEventListener('submit',checkout);
 $('reviewList').addEventListener('click',async e=>{
  const btn=e.target.closest('[data-review]');if(!btn||busy)return;
@@ -182,13 +222,13 @@ $('bulkReview').addEventListener('click',async ()=>{
  finally{setBusy(false);}
 });
 onAuthStateChanged(auth,async u=>{
- clearSubscriptions();user=u;access=null;isStaff=false;
+ clearSubscriptions();user=u;access=null;isStaff=false;staffRole='';
  show('loginPanel',!u);show('loadingPanel',!!u);show('courierPanel',false);show('adminPanel',false);show('deniedPanel',false);show('logout',!!u);
  if(!u)return;
  try{
   const [staff,courier]=await Promise.all([getDocFromServer(doc(db,'users',u.uid)),getDocFromServer(doc(db,'courierAccess',u.uid))]);
   if(staff.exists()&&staff.data().active===true&&['admin','editor','viewer'].includes(staff.data().role)){
-   isStaff=true;show('adminPanel',true);startStaff();
+   isStaff=true;staffRole=staff.data().role;show('adminPanel',true);startStaff();
   }else if(courier.exists()&&courier.data().active===true&&typeof courier.data().driverId==='string'){
    access={uid:u.uid,...courier.data()};show('courierPanel',true);startCourier();
   }else show('deniedPanel',true);
