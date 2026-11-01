@@ -20,7 +20,10 @@ function options(select,rows,key,label){
 function buildForm(){
  const form=$('recordForm');form.replaceChildren();
  $('sectionTitle').textContent=schemas[kind].label;
- $('permission').textContent=recordWritable()?'Mentés engedélyezett. Az azonosító nem módosítható; az időközben megváltozott rekord mentése leáll.':'Olvasási jogosultság. Szervizállapot módosításához admin szükséges.';
+ $('permission').textContent=recordWritable()?
+  (baseline&&kind==='service'?'Korábbi szerviz adatainak javítása: az eredeti autó, dátum és akkori állapot nem módosítható. A mai járműállapothoz új szervizbejegyzést készíts.':
+   'Mentés engedélyezett. Az azonosító nem módosítható; az időközben megváltozott rekord mentése leáll.'):
+  'Olvasási jogosultság. Szervizállapot módosításához admin szükséges.';
  for(const field of schemas[kind].fields){
   const label=el('label',field.label),control=el(['vehicle','driver','boolean','status'].includes(field.type)?'select':'input');
   control.name=field.key;control.required=field.required;control.disabled=!recordWritable();
@@ -31,6 +34,7 @@ function buildForm(){
   else{control.type=field.type==='integer'?'number':field.type==='date'?'date':'text';control.maxLength=field.max;if(field.type==='integer'){control.min='0';control.max='100000000';control.step='1';control.value='0';}}
   if(baseline)control.value=String(baseline.data[field.key]);
   if(baseline&&field.key===schemas[kind].key){if(control.tagName==='SELECT')control.disabled=true;else control.readOnly=true;}
+  if(baseline&&kind==='service'&&['vehicleId','date','status'].includes(field.key))control.disabled=true;
   label.append(control);form.append(label);
  }
  const button=el('button',baseline?'Módosítás mentése':'Új rekord mentése');button.type='submit';button.disabled=!recordWritable()||busy;form.append(button);
@@ -74,7 +78,11 @@ for(const [key,schema]of Object.entries(schemas)){const btn=el('button',schema.l
 $('newRecord').onclick=()=>{baseline=null;buildForm();};$('search').oninput=render;$('print').onclick=()=>window.print();
 $('export').onclick=()=>{if(!uid)return;const blob=new Blob([JSON.stringify({project:'imile-management-staging',exportedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='imile-staging-fleet-'+today()+'.json';a.click();URL.revokeObjectURL(url);};
 $('recordForm').onsubmit=async event=>{
- event.preventDefault();if(!recordWritable()||busy)return;const input=Object.fromEntries(new FormData(event.currentTarget));if(baseline)input[schemas[kind].key]=baseline.data[schemas[kind].key];
+ event.preventDefault();if(!recordWritable()||busy)return;const input=Object.fromEntries(new FormData(event.currentTarget));
+ if(baseline){
+  input[schemas[kind].key]=baseline.data[schemas[kind].key];
+  if(kind==='service')for(const field of ['vehicleId','date','status'])input[field]=baseline.data[field];
+ }
  busy=true;const btn=event.currentTarget.querySelector('button[type=submit]');btn.disabled=true;$('saveMessage').textContent='Mentés…';
  try{const id=await saveFleetRecord({db,kind,input,baseline,uid,doc,runTransaction,serverTimestamp});$('saveMessage').textContent='Mentve: '+id;baseline=null;buildForm();}
  catch(error){$('saveMessage').textContent='Nem sikerült menteni: '+error.message;}finally{busy=false;btn.disabled=!recordWritable();const current=$('recordForm').querySelector('button[type=submit]');if(current)current.disabled=!recordWritable();}
