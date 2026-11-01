@@ -38,7 +38,10 @@ jobs:
           node staging/imile-management/cutover-browser.integration.test.mjs
           node --check staging/imile-management/cutover-app.mjs
       - name: Szervizben lévő autók és inaktív futárok kizárása
-        run: node depokapacitas/capacity-eligibility.test.mjs
+        run: |
+          node depokapacitas/capacity-eligibility.test.mjs
+          node depokapacitas/booking-physical-guard.test.mjs
+          node staging/imile-management/depo-booking-physical.integration.test.mjs
       - name: Kerületi új/újrakézbesítendő csomagok és kapacitás ütközésellenőrzése
         run: |
           node depokapacitas/district-capacity.test.mjs
