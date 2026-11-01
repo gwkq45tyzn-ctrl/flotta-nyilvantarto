@@ -60,7 +60,7 @@ const safeBookingCapacity=b=>bookingAssessment(b).eligible?
  effectiveCapacity(b,get('drivers'),get('vehicles'),todayAtDepot()):0;
 function totals(mode='day'){const ds=get('demands').filter(x=>inRange(x,mode));const bs=get('bookings').filter(x=>inRange(x,mode));const rs=get('results').filter(x=>inRange(x,mode));const sum=(l,f)=>l.reduce((a,x)=>a+number(x[f]),0);return {newCount:sum(ds,'newCount'),retryCount:sum(ds,'retryCount'),capacity:bs.reduce((n,b)=>n+safeBookingCapacity(b),0),blockedBookings:bs.filter(b=>!bookingAssessment(b).eligible).length,picked:sum(rs,'picked'),success:sum(rs,'success'),failed:sum(rs,'failed'),drivers:new Set(bs.filter(b=>bookingAssessment(b).eligible).map(b=>b.driverId)).size,hasDemand:ds.length>0,hasResults:rs.length>0};}
 function centralTaskList(limit=null){
-  const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments'];
+  const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments','attendance'];
   const missing=criticalSources.filter(key=>!state.loaded.has(key));
   const failed=criticalSources.filter(key=>state.errors.has(key));
   const sourceHealth=failed.length?
@@ -69,7 +69,7 @@ function centralTaskList(limit=null){
   const entries=collectFleetAlerts({
     today:todayAtDepot(),vehicles:get('vehicles'),drivers:get('drivers'),
     fleetRecords:get('fleetRecords'),fleetAssignments:get('fleetAssignments'),
-    bookings:get('bookings')
+    bookings:get('bookings'),attendance:get('attendance')
   });
   const visible=limit===null?entries:entries.slice(0,limit);
   const urgent=entries.filter(x=>x.level==='urgent').length;
