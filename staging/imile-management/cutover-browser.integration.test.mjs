@@ -54,6 +54,17 @@ test('shows distinct source quality and real staging conflict labels',()=>{
  assert.match(preflight,/actualMasterConflicts/);
  assert.doesNotMatch(preflight,/reason:'master_data_conflict',count:source\.counts\.blockers/);
 });
+test('renders only one-based JSON positions for local data steward review',()=>{
+ assert.match(html,/id="reviewQueue"/);
+ assert.match(html,/nem Excel-sorszámok/);
+ assert.match(ui,/report\.reviewQueue/);
+ for(const name of ['unknownDriverStatusPositions','unknownVehicleStatusPositions',
+  'vehicleUserMappingPositions','repeatedVehicleUserGroups'])
+  assert.match(ui,new RegExp(name));
+ assert.match(ui,/review\.append\(item\)/);
+ assert.match(preflight,/privateReviewPositions\(vehicles,drivers\)/);
+ assert.doesNotMatch(ui,/\.currentDriver|\.rendszam|\.daCode/);
+});
 test('unauthed access cannot view form',()=>{
  assert.match(html,/id="work" hidden/);
  assert.match(ui,/\$\('work'\)\.hidden=true/);
