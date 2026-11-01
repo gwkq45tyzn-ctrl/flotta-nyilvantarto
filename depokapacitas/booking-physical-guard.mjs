@@ -37,7 +37,7 @@ export function assessDailyPhysicalUse({date,today,driverId,vehicleId,assignment
    return Object.freeze({eligible:false,reason:'invalid_manual_checkout'});
  }
  for(const a of handovers.filter(h=>h?.status==='issued'||h?.status==='return_review')){
-  const assignedDa=canon(a.driverId),assignedCar=canon(a.vehicleId);
+  const assignedDa=canonDa(a.driverId),assignedCar=canonPlate(a.vehicleId);
   if((assignedCar===car&&assignedDa!==da)||(assignedDa===da&&assignedCar!==car))
    return Object.freeze({eligible:false,reason:'attendance_checkout_conflict'});
   if((assignedCar===car||assignedDa===da)&&(!assignedCar||!assignedDa))
