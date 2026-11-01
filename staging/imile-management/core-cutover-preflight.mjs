@@ -6,6 +6,7 @@
  * IDs. This check prevents claiming that a master-only migration is complete.
  */
 import {planSharedMasterMigration} from './shared-import-plan.mjs';
+import {canonicalDa,canonicalPlate,isValidDa,isValidPlate,normalizeDriverStatus,normalizeVehicleStatus} from './shared-records.mjs';
 
 const LEGACY_FIELDS=[
  'alvazszam','km','biztositasSzam','helyszin','biztositasLejarat',
@@ -21,6 +22,34 @@ const countHistory=rows=>rows.reduce((n,row)=>n+
  (Array.isArray(row?.history)?row.history.length:0),0);
 const countsOf=rows=>Array.isArray(rows)?rows.length:0;
 const exactBool=(x,name)=>{if(typeof x!=='boolean')throw Error(name+' must be explicitly true or false');return x;};
+/** Returns 1-based JSON array positions only: no names, DA codes, plate numbers or original labels. */
+function privateReviewPositions(vehicles,drivers){
+ const unknownDriverStatusPositions=drivers.flatMap((row,i)=>
+  row&&typeof row==='object'&&!Array.isArray(row)&&isValidDa(canonicalDa(row.daCode))&&
+  normalizeDriverStatus(row.status)==='Felülvizsgálandó'?[i+1]:[]);
+ const unknownVehicleStatusPositions=vehicles.flatMap((row,i)=>
+  row&&typeof row==='object'&&!Array.isArray(row)&&
+  isValidPlate(canonicalPlate(row.rendszam||row.plate))&&
+  normalizeVehicleStatus(row.status)==='Felülvizsgálandó'?[i+1]:[]);
+ const vehicleUserMappingPositions=[];
+ const labelGroups=new Map();
+ vehicles.forEach((row,i)=>{
+  if(!row||!filled(row.currentDriver))return;
+  const position=i+1;vehicleUserMappingPositions.push(position);
+  if(typeof row.currentDriver!=='string')return;
+  const normalized=row.currentDriver.trim().replace(/\s+/g,' ').toLocaleLowerCase('hu-HU');
+  if(!labelGroups.has(normalized))labelGroups.set(normalized,[]);
+  labelGroups.get(normalized).push(position);
+ });
+ const repeatedVehicleUserGroups=[...labelGroups.values()].filter(group=>group.length>1)
+  .map(group=>Object.freeze(group.slice()));
+ return Object.freeze({
+  unknownDriverStatusPositions:Object.freeze(unknownDriverStatusPositions),
+  unknownVehicleStatusPositions:Object.freeze(unknownVehicleStatusPositions),
+  vehicleUserMappingPositions:Object.freeze(vehicleUserMappingPositions),
+  repeatedVehicleUserGroups:Object.freeze(repeatedVehicleUserGroups)
+ });
+}
 export function assessFleetCutover({legacy,staging,proof}={}){
  if(!legacy||typeof legacy!=='object'||Array.isArray(legacy))
   throw Error('Érvénytelen régi Flotta-mentés.');
@@ -59,6 +88,11 @@ export function assessFleetCutover({legacy,staging,proof}={}){
  const populatedVehicleMetadata=countExtra(vehicles,LEGACY_FIELDS);
  const populatedDriverMetadata=countExtra(drivers,DRIVER_FIELDS);
  const activeLegacyAssignments=vehicles.filter(v=>v&&filled(v.currentDriver)).length;
+ const reviewQueue=privateReviewPositions(vehicles,drivers);
+ if(reviewQueue.unknownDriverStatusPositions.length!==unknownDriverStatuses||
+    reviewQueue.unknownVehicleStatusPositions.length!==unknownVehicleStatuses||
+    reviewQueue.vehicleUserMappingPositions.length!==activeLegacyAssignments)
+  throw Error('Nem egyeznek a felülvizsgálandó forrásrekordok darabszámai.');
  const missingDetails=[
   {type:'fuelCards',count:fuelCards.length},
   {type:'contacts',count:contacts.length},
@@ -97,7 +131,7 @@ export function assessFleetCutover({legacy,staging,proof}={}){
  return Object.freeze({
   version:'core-cutover-preflight-v1',project:'imile-management-staging',
   readOnly:true,writesAllowed:false,personalDataIncluded:false,
-  sourceOriginVerified:false,counts:stats,holds,
+  sourceOriginVerified:false,counts:stats,holds,reviewQueue,
   readiness:holds.length===0?'review-ready-not-approved':'blocked',
   note:'A helyi fájl nem bizonyítja a központi Apps Script verzió vagy a forrásadatok valódiságát. A tényleges átállás csak külön, tranzakciós import és végső mentés után lehetséges.'
  });
