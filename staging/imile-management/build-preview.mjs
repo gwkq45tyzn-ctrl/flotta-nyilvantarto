@@ -49,6 +49,7 @@ const allowed=[
   'depokapacitas/import-validation.mjs',
   'depokapacitas/import-encoding.mjs',
   'depokapacitas/capacity-eligibility.mjs',
+   'depokapacitas/booking-physical-guard.mjs',
   'depokapacitas/district-capacity.mjs',
   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
   'depokapacitas/parcel-preview.html',
