@@ -21,7 +21,12 @@ const labels={
 };
 const descriptions={
  approval_or_backup_missing:h=>labels[h.gate]||'Jóváhagyási feltétel',
- master_data_conflict:h=>'Törzsadat-ütközés: '+h.count+' rekord',
+ legacy_source_quality:h=>'Régi export – adatminőségi akadályok: '+h.count+' ('+
+  'ismeretlen futárstátusz: '+h.unknownDriverStatuses+
+  ', ismeretlen járműstátusz: '+h.unknownVehicleStatuses+')',
+ staging_master_integrity:h=>'Staging törzsadatok érvénytelen/duplikált azonosítói: '+h.count+' eltérés',
+ master_data_conflict:h=>'Valódi törzsadat-ütközés a stagingben: '+h.count+' rekord',
+ other_master_blockers:h=>'További, külön ellenőrzendő törzsadat-akadályok: '+h.count+' eltérés',
  unmigrated_master_records:h=>'Át nem vett törzsadatok: '+h.vehicles+' jármű, '+h.drivers+' futár',
  legacy_detail_not_migrated:h=>'Régi részletes adatok ('+h.category+'): '+h.count
 };
