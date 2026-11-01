@@ -30,6 +30,8 @@ jobs:
         run: |
           node depokapacitas/booking-physical-guard.test.mjs
           node depokapacitas/booking-occupancy.test.mjs
+          node depokapacitas/attendance-atomic-plan.test.mjs
+          node --check depokapacitas/attendance-atomic-plan.mjs
           node staging/imile-management/depo-booking-physical.integration.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
         run: node depokapacitas/tests/check.mjs
