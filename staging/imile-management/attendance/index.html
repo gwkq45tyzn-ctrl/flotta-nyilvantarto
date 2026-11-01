@@ -44,6 +44,18 @@
 <section id="adminPanel" hidden>
  <div class="hero"><span class="eyebrow">BELSŐ ELLENŐRZÉS</span><h1>Járműátadások és reggeli visszavétel</h1><p>A futárok önállóan választanak autót. Itt látod, ki melyikkel ment el és mi vár ellenőrzésre.</p></div>
  <div class="stats" id="stats"></div>
+ <section class="panel">
+  <h2>Másnapi futár- és autókapacitás</h2>
+  <p>Csak a várható létszámot tervezzük, előre nem kötünk rendszámot futárhoz. Az üzemképes és a ténylegesen szabad autókat külön mutatjuk.</p>
+  <form id="rosterForm" class="roster-form">
+    <label>Munkanap<input type="date" name="date" id="rosterDate" required></label>
+    <label>Cégesautós futár<select name="driverId" id="rosterDriver" required><option value="">Válassz futárt…</option></select></label>
+    <label>Várható részvétel<select name="status" required><option value="planned">Tervezett</option><option value="confirmed">Megerősített</option><option value="cancelled">Nem jön</option></select></label>
+    <button class="primary" type="submit">Futárterv mentése</button>
+  </form>
+  <div id="rosterStats" class="stats"></div>
+  <div id="rosterList" class="stack"></div>
+ </section>
  <section class="panel"><h2>Visszaadás ellenőrzésre vár</h2><p>Visszavétel előtt fizikailag ellenőrizd az autót, a kulcsot és a tisztaságot.</p>
   <div id="reviewList" class="stack"></div>
   <div class="bulk" id="bulkPanel" hidden><h3>Összes visszavétele</h3>
