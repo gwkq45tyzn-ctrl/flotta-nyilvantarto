@@ -141,8 +141,22 @@ export function planAttendanceAtomicGuard({
   if(mutation.action==='delete'&&!before)return deny('event_to_delete_missing');
   // Do not accept a vehicle reassignment silently: the original vehicle
   // must also be reprojected as part of the same authoritative transaction.
-  const changedVehicles=[...new Set([plate(before?.vehicleId),plate(after?.vehicleId)].filter(Boolean))];
-  if(changedVehicles.some(k=>k!==key))return deny('multi_vehicle_reprojection_required');
+  const changedVehicles=new Set();
+  for(const [event,stream] of [[before,old.events],[after,parsed.events]]){
+   if(!event)continue;
+   const explicit=plate(event.vehicleId);
+   if(explicit){changedVehicles.add(explicit);continue;}
+   // The historical Google Log Out may omit the plate. Resolve it only
+   // through the uniquely matching sourceCheckOutId, never by text guessing.
+   if(event.type!=='Log Out')return deny('unscoped_source_event');
+   const matches=deriveAttendanceHandovers({events:stream,drivers,vehicles})
+    .handovers.filter(h=>h.sourceCheckOutId===event.id);
+   if(matches.length!==1)return deny('unresolved_checkout_vehicle');
+   changedVehicles.add(plate(matches[0].vehicleId));
+  }
+  if(!changedVehicles.size)return deny('unscoped_source_event');
+  if([...changedVehicles].some(k=>k!==key))
+   return deny('multi_vehicle_reprojection_required');
   writeIntent=Object.freeze({
    eventPath:'attendance/'+mutation.eventId,
    eventAction:mutation.action,
