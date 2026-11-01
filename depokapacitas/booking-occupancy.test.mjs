@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {assessOccupancy,depotDay} from './booking-occupancy.mjs';
+const now=Date.parse('2026-11-01T12:00:00Z'),today='2026-11-01';
+const vehicleId='QATEST01',driverId='QADRIVER1';
+const drivers=[{id:driverId,daCode:driverId,active:true},{id:'QADRIVER2',daCode:'QADRIVER2',active:true}];
+const vehicles=[{id:vehicleId,plate:vehicleId,status:'Elérhető'}];
+const guard={date:today,vehicleId,source:'trusted-attendance-projection-v1',state:'clear',driverId:'',confirmedAt:now};
+const fixture=()=>({date:today,today,vehicleId,driverId,now,sourcesReady:true,guard,drivers,vehicles});
+let n=0;function check(name,input,reason){const r=assessOccupancy({...fixture(),...input});assert.equal(r.reason,reason,name);n++;}
+check('clear',{},'clear');
+check('cache', {sourcesReady:false},'unconfirmed_sources');
+check('no guard',{guard:null},'attendance_guard_missing_or_stale');
+check('stale',{guard:{...guard,confirmedAt:now-120001}},'attendance_guard_missing_or_stale');
+check('future stamp',{guard:{...guard,confirmedAt:now+1}},'attendance_guard_missing_or_stale');
+check('string stamp',{guard:{...guard,confirmedAt:String(now)}},'attendance_guard_missing_or_stale');
+check('wrong day',{guard:{...guard,date:'2026-10-31'}},'attendance_guard_missing_or_stale');
+check('wrong plate',{guard:{...guard,vehicleId:'QAOTHER1'}},'attendance_guard_missing_or_stale');
+check('untrusted',{guard:{...guard,source:'browser'}},'attendance_guard_missing_or_stale');
+check('blocked',{guard:{...guard,state:'blocked'}},'attendance_guard_occupied');
+check('occupied',{guard:{...guard,state:'assigned',driverId:'QADRIVER2'}},'attendance_guard_occupied');
+check('same occupant',{guard:{...guard,state:'assigned',driverId}},'same_driver');
+check('clear with occupant',{guard:{...guard,driverId}},'attendance_guard_occupied');
+check('physical other',{assignments:[{vehicleId,active:true,driverId:'QADRIVER2'}]},'physical_other_driver');
+check('physical same',{assignments:[{vehicleId,active:true,driverId}]},'clear');
+check('physical inactive',{assignments:[{vehicleId,active:false,driverId:'QADRIVER2'}]},'clear');
+check('malformed physical',{assignments:[{id:vehicleId,active:'true'}]},'invalid_assignment');
+check('tomorrow allows present occupancy',{date:'2026-11-02',guard:null,assignments:[{vehicleId,active:true,driverId:'QADRIVER2'}]},'other_day');
+const login={id:'SYN_LOGIN',eventTime:today+'T08:00:00',eventDate:today,timeKnown:true,type:'Log In',vehicleId,daCode:'QADRIVER2'};
+check('open attendance',{events:[login]},'attendance_other_driver');
+check('same attendance',{driverId:'QADRIVER2',events:[login]},'clear');
+const logout={...login,id:'SYN_OUT',type:'Log Out',eventTime:today+'T10:00:00',photoFront:'qa',photoLeft:'qa',photoRight:'qa',photoBack:'qa'};
+check('complete return',{events:[login,logout]},'clear');
+check('incomplete return',{events:[login,{...logout,photoBack:''}]},'attendance_other_driver');
+check('unknown time',{events:[{...login,timeKnown:false}]},'attendance_review');
+for(const [utc,expected]of [['2026-01-01T23:30:00Z','2026-01-02'],['2026-06-01T22:30:00Z','2026-06-02'],['2026-03-29T00:59:59Z','2026-03-29'],['2026-03-29T01:00:00Z','2026-03-29'],['2026-10-25T00:59:59Z','2026-10-25'],['2026-10-25T01:00:00Z','2026-10-25']]){assert.equal(depotDay(Date.parse(utc)),expected);n++;}
+console.log(`PASS: ${n} same-day occupancy, source trust, Attendance and Budapest date checks`);

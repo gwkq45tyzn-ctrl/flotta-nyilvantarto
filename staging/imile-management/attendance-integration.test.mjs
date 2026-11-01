@@ -14,7 +14,7 @@ assert.match(rules,/match \/attendance\/\{id\}/);
 assert.match(rules,/validVehiclePlate\(request\.resource\.data\.vehicleId\)/);
 assert.match(rules,/exactFields\(request\.resource\.data,\[/);
 assert.match(rules,/photoBack','source','vehicleId'/);
-assert.match(depot,/attendanceVehicleSummary\(\)\+form/);
+assert.match(depot,/attendanceVehicleSummary\(\)/);
 assert.match(depot,/const knownDa=new Set\(day\.map/);
 assert.match(fleet,/deriveAttendanceHandovers\(\{/);
 assert.match(fleet,/state\.attendance/);

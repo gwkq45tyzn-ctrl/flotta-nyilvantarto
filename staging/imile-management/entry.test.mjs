@@ -64,7 +64,7 @@ assert.ok(entry.includes('onAuthStateChanged'));
 assert.ok(entry.includes('signInWithEmailAndPassword'));
 assert.ok(entry.includes("getAuth(firebase)"));
 assert.ok(depotJs.includes("window.location.replace('../staging/imile-management/index.html')"));
-assert.ok(depotJs.includes("getDoc(doc(db,'users',user.uid))"));
+assert.ok(depotJs.includes("getDocFromServer(doc(db,'users',user.uid))"));
 assert.ok(depotHtml.includes('← Rendszerválasztó'));
 const allowed=read('staging/imile-management/build-preview.mjs');
 assert.doesNotMatch(allowed,/^\s*'index\.html',/m);
