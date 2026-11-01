@@ -20,7 +20,14 @@ export async function saveFleetRecord({db,kind,input,baseline,uid,doc,runTransac
   }
   let vehicle=null,details=null;
   if(kind==='service'){
-   vehicle=await tx.get(doc(db,'vehicles',record.data.vehicleId));
+   if(current.exists()){
+    const previous=current.data().data;
+    check(record.data.vehicleId===previous.vehicleId&&
+      record.data.date===previous.date&&record.data.status===previous.status,
+     'Korábbi szerviznél a jármű, a dátum és a rögzített állapot nem módosítható. Új állapothoz készíts új szervizeseményt.');
+   }else{
+    vehicle=await tx.get(doc(db,'vehicles',record.data.vehicleId));
+   }
    details=await tx.get(doc(db,'fleetRecords','vehicle__'+record.data.vehicleId));
   }
   tx.set(ref,{kind,data:record.data,revision:(baseline?.revision||0)+1,
