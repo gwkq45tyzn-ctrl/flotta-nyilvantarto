@@ -74,7 +74,7 @@ scenario('old pickup open now remains assigned',{
 },'provisional_only',true);
 scenario('future event not trusted',{
  events:[input('QA_FUT','QA-DA001','Log In',vehicleId,'2026-11-03T08:00:00')]
-},'provisional_only',true); // recorded event is historical stream; publisher must reject future time
+},'future_attendance_event');
 scenario('source completeness missing',{proof:{...proof,fullVehicleEventHistory:false}},
  'unverified_authoritative_history');
 scenario('IAM writers not fenced',{proof:{...proof,allIamAndBrowserWritersFenced:false}},
