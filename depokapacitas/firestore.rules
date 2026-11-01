@@ -80,9 +80,28 @@ service cloud.firestore {
         && paths.cargo == 'attendance/' + uid + '/' + sid + '/' + stage + '/cargo.jpg';
     }
 
+    // Company-car headcount planning; no driver/vehicle plate preassignment.
+    match /courierDayPlans/{key} {
+      allow read: if member();
+      allow create, update: if editor()
+        && exactFields(request.resource.data,['date','driverId','status','changedAt','changedBy'])
+        && validDay(request.resource.data.date)
+        && validDriverCode(request.resource.data.driverId)
+        && key == request.resource.data.date + '__' + request.resource.data.driverId
+        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        && request.resource.data.status in ['planned','confirmed','cancelled']
+        && request.resource.data.changedAt == request.time
+        && request.resource.data.changedBy == request.auth.uid
+        && (resource == null
+          || (resource.data.date == request.resource.data.date
+            && resource.data.driverId == request.resource.data.driverId));
+      allow delete: if false;
+    }
+
     match /courierAccess/{uid} {
-      allow get: if signedIn() && (request.auth.uid == uid || admin());
-      allow list: if admin();
+      allow get: if signedIn() && (request.auth.uid == uid || member());
+      allow list: if member();
       allow create, update: if admin()
         && exactFields(request.resource.data,['uid','driverId','active'])
         && request.resource.data.uid == uid
