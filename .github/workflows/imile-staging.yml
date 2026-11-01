@@ -30,6 +30,7 @@ jobs:
         run: |
           node depokapacitas/booking-physical-guard.test.mjs
           node depokapacitas/booking-occupancy.test.mjs
+          node --test depokapacitas/vehicle-display-status.test.mjs
           node depokapacitas/attendance-atomic-plan.test.mjs
           node --test staging/imile-management/qa/attendance-publisher/synthetic-transaction.test.mjs
           node --test staging/imile-management/qa/attendance-publisher/source-header-gate.test.mjs
