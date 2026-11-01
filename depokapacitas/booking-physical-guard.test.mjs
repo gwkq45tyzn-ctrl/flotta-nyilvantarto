@@ -10,6 +10,12 @@ assert.equal(test(null,{assignments:[{active:true,driverId:'DA0002',vehicleId:'T
 assert.equal(test(null,{assignments:[{active:true,driverId:'DA0001',vehicleId:'TESTCAR02'}]}).reason,'manual_checkout_conflict');
 status(test(null,{assignments:[{active:true,driverId:'DA0001',vehicleId:'TESTCAR01'}]}));
 status(test(null,{assignments:[{active:false,driverId:'DA0002',vehicleId:'TESTCAR01'}]}));
+// DA hyphen has identity meaning; only plates lose separators.
+assert.equal(test(null,{driverId:'DA-0001',
+ assignments:[{active:true,driverId:'DA0001',vehicleId:'TESTCAR01'}]}).reason,'manual_checkout_conflict');
+status(test(null,{driverId:'DA-0001',
+ assignments:[{active:true,driverId:'DA-0001',vehicleId:'TEST-CAR01'}]}));
+
 assert.equal(test(null,{handovers:[{status:'issued',driverId:'DA0002',vehicleId:'TESTCAR01'}]}).reason,'attendance_checkout_conflict');
 assert.equal(test(null,{handovers:[{status:'return_review',driverId:'DA0002',vehicleId:'TESTCAR01'}]}).reason,'attendance_checkout_conflict');
 assert.equal(test(null,{handovers:[{status:'issued',driverId:'DA0001',vehicleId:'TESTCAR02'}]}).reason,'attendance_checkout_conflict');
