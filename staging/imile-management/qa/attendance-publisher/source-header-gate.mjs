@@ -13,6 +13,11 @@ export const MOBILE_ATTENDANCE_LEGACY_HEADERS=Object.freeze([
  'Car Photo - Front','Car Photo - Left Side','Car Photo - Right Side',
  'Car Photo - Back'
 ]);
+export const ATTENDANCE_LOG_FORM_HEADERS=Object.freeze([
+ 'Timestamp','Date','Employee / Driver Name','DA / Employee Code',
+ 'Vendor','Attendance Type','Location / Site','Remarks','Matched Time',
+ 'Working Hours'
+]);
 export const REQUIRED_NEW_HEADERS=Object.freeze(['Source Event ID','Vehicle Plate']);
 const canonical=x=>typeof x==='string'?x.trim().normalize('NFKC').replace(/\s+/g,' ').toLowerCase():null;
 const result=(reason,details={})=>Object.freeze({
@@ -24,7 +29,7 @@ const result=(reason,details={})=>Object.freeze({
   ...details
 });
 export function assessAttendanceHeader(header){
- if(!Array.isArray(header)||header.length<16||header.length>100||
+ if(!Array.isArray(header)||header.length<10||header.length>100||
    header.some(v=>v!==null&&v!==undefined&&typeof v!=='string'))
   return result('invalid_header_input');
  // Sheets can report a wider grid than the 16-column form. Ignore trailing
@@ -34,6 +39,18 @@ export function assessAttendanceHeader(header){
  const cells=raw.slice(0,stop);
  if(cells.some(x=>x===''))return result('header_gap_or_empty_cell');
  if(new Set(cells).size!==cells.length)return result('duplicate_header_names');
+ // The separate Attendance Log has a 10-column Google Form response shape.
+ // "Form Setup" says to link form responses there, but this does NOT prove
+ // the live Google Form actually writes to it. Never silently treat it as
+ // Mobile Attendance or try to infer vehicles from Location / Site.
+ if(cells.length===ATTENDANCE_LOG_FORM_HEADERS.length&&
+   ATTENDANCE_LOG_FORM_HEADERS.every((name,i)=>cells[i]===canonical(name)))
+  return result('attendance_log_form_response_without_identity',{
+   missingHeaders:[...REQUIRED_NEW_HEADERS],
+   sourceTab:'Attendance Log',
+   sourceOwnershipUnverified:true
+  });
+ if(cells.length<16)return result('unrecognized_short_attendance_header');
  if(MOBILE_ATTENDANCE_LEGACY_HEADERS.some((name,i)=>cells[i]!==canonical(name)))
   return result('legacy_column_order_or_name_changed');
  const extras=cells.slice(16);
