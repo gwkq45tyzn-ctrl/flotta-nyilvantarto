@@ -8,6 +8,18 @@ GPS Accuracy (m), Distance from Warehouse (m), Warehouse, Remarks, Status,
 Car Photo - Front, Car Photo - Left Side, Car Photo - Right Side,
 Car Photo - Back.
 
+**Külön ellenőrzött forrásbizonytalanság:** ugyanezen Google-munkafüzet
+`Attendance Log` lapja **másik, 10 oszlopos sémát** használ:
+Timestamp, Date, Employee / Driver Name, DA / Employee Code, Vendor,
+Attendance Type, Location / Site, Remarks, Matched Time, Working Hours.
+A `Form Setup` lap a Form válaszait ehhez az `Attendance Log` laphoz
+javasolja kötni. Ez **útmutató, nem igazolt élő Google Form kapcsolat**.
+A két lap egyike sem tartalmaz stabil `Source Event ID` vagy explicit
+`Vehicle Plate` mezőt; a `Location / Site` nem rendszám.
+A #31-beli felderítés nem igazolta, melyik Google Form/Apps Script ténylegesen
+ír, ezért forrás- és tulajdonosi jóváhagyás előtt **egyiket sem** szabad
+hiteles járműadatforrásként használni.
+
 A valódi sorokat nem olvastuk. Ebben a PR-ben nincs Sheets- vagy Firebase-írás,
 ID-gyártás, beimportálás, staging/main-merge vagy deploy.
 
