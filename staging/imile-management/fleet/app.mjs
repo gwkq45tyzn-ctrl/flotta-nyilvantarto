@@ -4,17 +4,16 @@ import {getFirestore,doc,getDoc,collection,onSnapshot,runTransaction} from 'http
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
-import {deriveAttendanceHandovers} from '../attendance-handover.mjs';
 import {fleetAvailability} from './availability.mjs';
 
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
 let unsubs=[],generation=0;
-const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[],fleetAssignments:[]};
+const state={admin:false,uid:null,drivers:[],vehicles:[],vehicleSessions:[],vehicleLocks:[],bookings:[],fleetAssignments:[]};
 function clear() {
   for(const un of unsubs)un();
   unsubs=[];
-  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];state.fleetAssignments=[];
+  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.vehicleSessions=[];state.vehicleLocks=[];state.bookings=[];state.fleetAssignments=[];
   $('fleetContent').hidden=true;
   $('adminVehiclePanel').hidden=true;
   $('adminDriverPanel').hidden=true;
@@ -76,10 +75,16 @@ function renderRows(target,rows,columns,kind){
   }
 }
 function render(){
-  const handovers=deriveAttendanceHandovers({
-    events:state.attendance,drivers:state.drivers,vehicles:state.vehicles,
-    manualBookings:state.bookings
-  });
+  const handovers={
+   handovers:state.vehicleSessions.map(x=>({
+     driverId:x.driverId,vehicleId:x.plate,
+     pickedUpAt:x.startedAt?.toDate?.().toLocaleString('hu-HU')||'—',
+     returnedAt:x.endedAt?.toDate?.().toLocaleString('hu-HU')||'',
+     status:x.status==='reviewed'?'returned':x.status==='awaiting_review'?'return_review':'issued'
+   })),
+   openVehicleIds:state.vehicleLocks.map(x=>x.plate),
+   alerts:[]
+  };
   const handoverBody=$('handoverBody');
   handoverBody.replaceChildren();
   const displayed=handovers.handovers.slice(-100).reverse();
@@ -95,12 +100,11 @@ function render(){
   }
   if(!displayed.length){
     const tr=document.createElement('tr'),td=document.createElement('td');
-    td.colSpan=5;td.textContent='Még nincs rendszámmal ellátott Attendance-esemény.';
+    td.colSpan=5;td.textContent='Még nincs saját Attendance-autóhasználat.';
     tr.append(td);handoverBody.append(tr);
   }
   $('attendanceHandoverStatus').textContent=handovers.openVehicleIds.length+
-    ' kiadott / ellenőrzésre váró autó · '+handovers.alerts.length+
-    ' feldolgozási figyelmeztetés. A foglalásokat a kapacitástervező külön kezeli.';
+    ' aktív / ellenőrzésre váró céges autó · saját Attendance adatforrás. Nincs Google-szinkron.';
   $('driversCount').textContent=state.drivers.length;
   $('activeCount').textContent=state.drivers.filter(x=>x.active===true).length;
   $('vehiclesCount').textContent=state.vehicles.length;
@@ -176,17 +180,17 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       $('driversActions').hidden=!state.admin;
       $('vehiclesActions').hidden=!state.admin;
       const loaded=new Set();
-      for(const name of ['drivers','vehicles','attendance','bookings','fleetAssignments']){
+      for(const name of ['drivers','vehicles','vehicleSessions','vehicleLocks','bookings','fleetAssignments']){
         const unsubscribe=onSnapshot(collection(db,name),snap=>{
           if(rev!==generation)return;
           state[name]=snap.docs.map(d=>({id:d.id,...d.data()}));
           loaded.add(name);
-          if(loaded.size===5){
+          if(loaded.size===6){
             try{render();$('fleetContent').hidden=false;
               status('● Élő staging Firestore kapcsolat · minden alapforrás betöltve · '+
                (state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság'));
             }catch(error){$('fleetContent').hidden=true;status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);}
-          }else{$('fleetContent').hidden=true;status('Flotta-adatok betöltése: '+loaded.size+'/5 forrás…');}
+          }else{$('fleetContent').hidden=true;status('Flotta-adatok betöltése: '+loaded.size+'/6 forrás…');}
         },error=>{
           if(rev!==generation)return;
           console.error('Staging fleet read failed:',name,error);

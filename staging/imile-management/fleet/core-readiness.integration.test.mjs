@@ -10,7 +10,7 @@ assert.match(entry, /\$\('fleetMasterLink'\)\.hidden/);
 assert.match(master,/import \{fleetAvailability\} from '\.\/availability\.mjs'/);
 assert.match(master,/['"]fleetAssignments['"]/);
 assert.match(master,/fleetAvailability\(\{vehicles:state\.vehicles/);
-assert.match(master,/loaded\.size===5/);
+assert.match(master,/loaded\.size===6/);
 assert.match(master, /\$\('fleetContent'\)\.hidden=true/);
 assert.match(operations,/Visszavétel előkészítése/);
 assert.match(operations,/form\.elements\.action\.value='return'/);
