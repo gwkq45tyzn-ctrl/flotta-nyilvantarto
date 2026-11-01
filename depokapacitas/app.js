@@ -3,7 +3,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocFromServer,getDocsFromServer,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
-import {parseDay,parseTime} from './import-dates.mjs';
+import {parseDay} from './import-dates.mjs';
 import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
 import {summarizeDistrictCapacity} from './district-capacity.mjs';
@@ -278,7 +278,7 @@ async function removeRow(col,id){if(!canWrite())throw Error('Nincs jogosultság.
 async function cancelBooking(id){const ref=doc(db,'bookings',id);await runTransaction(db,async tx=>{const booking=await tx.get(ref);if(!booking.exists())throw Error('A foglalás már nem található.');const x=booking.data();tx.delete(ref);tx.delete(doc(db,'driverClaims',x.date+'__'+x.driverId));});toast('Foglalás feloldva.');}
 const lookup=(obj,...names)=>{const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();const entries=Object.entries(obj);for(const n of names){const f=entries.find(([k])=>normalize(k)===normalize(n));if(f)return f[1];}return '';};
 function keyed(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return 'r'+(h>>>0).toString(36)+'_'+s.length;}
-async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const buffer=await file.arrayBuffer();const csv=/\.csv$/i.test(file.name);const wb=csv?XLSX.read(decodeCsv(buffer),{type:'string',raw:true,cellDates:false}):XLSX.read(buffer,{type:'array',cellDates:false});const target=type==='attendance'&&(wb.SheetNames.find(x=>x.toLowerCase().includes('mobile attendance')))||wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
+async function parseFile(file,type){if(!window.XLSX)throw Error('Az Excel-feldolgozó nem töltődött be. Ellenőrizd az internetkapcsolatot.');const buffer=await file.arrayBuffer();const csv=/\.csv$/i.test(file.name);const wb=csv?XLSX.read(decodeCsv(buffer),{type:'string',raw:true,cellDates:false}):XLSX.read(buffer,{type:'array',cellDates:false});const target=wb.SheetNames[0];const json=XLSX.utils.sheet_to_json(wb.Sheets[target],{defval:'',raw:false});if(json.length>5000)throw Error('Legfeljebb 5000 sor tölthető fel egyszerre.');return {rows:json,sheet:target};}
 function requireValue(value,label){
  const v=String(value??'').trim();
  if(!v)throw Error('Hiányzik: '+label);
@@ -306,27 +306,6 @@ function rowToRecord(row,type,file){
   if(success+failed>picked)throw Error('A sikeres és sikertelen összeg nagyobb a felvett csomagszámnál.');
   return {col:'results',id:date+'__'+code+'__'+district,data:{date,driverId:code,district,picked,success,failed}};
  }
- if(type==='attendance'){
-  const time=parseTime(lookup(row,'Timestamp','dátum','időpont'));
-  const daCode=requireValue(lookup(row,'DA Code','daCode'),'DA-kód').toUpperCase();
-  const event=requireValue(lookup(row,'Attendance Type','type','event'),'Jelenlét típusa');
-  if(!time.date||!time.timeKnown)throw Error('Érvénytelen vagy hiányzó jelenléti időpont.');
-  if(daCode.includes('/'))throw Error('Érvénytelen DA-kód.');
-  if(!['Log In','Log Out'].includes(event))throw Error('Ismeretlen jelenlét típus.');
-  const vehicleValue=String(lookup(row,'Vehicle Plate','Vehicle ID','License Plate','Rendszám','Autó rendszáma')||'');
-  const vehicleId=vehicleValue.trim().toUpperCase().replace(/[\s-]+/g,'');
-  if(vehicleId && !/^[A-Z0-9]{4,12}$/.test(vehicleId))throw Error('Érvénytelen Attendance rendszám.');
-  const record={
-   eventTime:time.eventTime,eventDate:time.date,timeKnown:time.timeKnown,daCode,
-   driverName:String(lookup(row,'Driver Name','Futár')),
-   vendor:String(lookup(row,'Vendor','Vállalkozó')),type:event,status:String(lookup(row,'Status')),
-   photoFront:String(lookup(row,'Car Photo - Front')),photoLeft:String(lookup(row,'Car Photo - Left Side')),
-   photoRight:String(lookup(row,'Car Photo - Right Side')),photoBack:String(lookup(row,'Car Photo - Back')),
-   source:'xlsx:'+file
-  };
-  if(vehicleId)record.vehicleId=vehicleId;
-  return {col:'attendance',id:keyed(time.eventTime+'|'+daCode+'|'+event+'|'+record.photoFront),data:record};
- }
  if(type==='generic'){
   const data=JSON.stringify(row);
   if(!data||data.length>18000)throw Error('Az operatív adatsor meghaladja a 18 000 karakteres határt.');
@@ -337,6 +316,7 @@ function rowToRecord(row,type,file){
 async function importFile(form){
  if(!canWrite())throw Error('Nincs jogosultság az adatimporthoz.');
  const file=form.elements.file.files[0],type=form.elements.type.value;
+ if(!['demand','result','generic'].includes(type))throw Error('Csak saját kerületi és futáreredmény adatimport engedélyezett.');
  if(!file)throw Error('Válassz fájlt.');
  const feedback=document.getElementById('importFeedback');
  if(feedback)feedback.textContent='Adatok ellenőrzése…';
