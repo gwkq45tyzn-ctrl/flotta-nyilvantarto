@@ -31,6 +31,7 @@ jobs:
           node depokapacitas/booking-physical-guard.test.mjs
           node depokapacitas/booking-occupancy.test.mjs
           node depokapacitas/attendance-atomic-plan.test.mjs
+          node --test staging/imile-management/qa/attendance-publisher/synthetic-transaction.test.mjs
           node --check depokapacitas/attendance-atomic-plan.mjs
           node staging/imile-management/depo-booking-physical.integration.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
@@ -127,6 +128,8 @@ jobs:
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-occupancy --config firebase.staging-emulator.json "node staging/imile-management/fleet/physical-booking-rules-emulator.mjs"
       - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
+      - name: Attendance atomi publikáló – kizárólag szintetikus loopback tranzakciók
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-attendance-atomic --config firebase.attendance-qa.json "node --test staging/imile-management/qa/attendance-publisher/emulator.test.mjs"
       - name: A flotta belépési pontjának érintetlensége
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main

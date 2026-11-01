@@ -1,0 +1,4 @@
+{
+ "firestore":{"rules":"staging/imile-management/qa/attendance-publisher/emulator-deny.rules"},
+ "emulators":{"firestore":{"host":"127.0.0.1","port":8788},"ui":{"enabled":false},"singleProjectMode":true}
+}
