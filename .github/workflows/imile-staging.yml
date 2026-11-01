@@ -36,7 +36,7 @@ jobs:
           node --test staging/imile-management/qa/attendance-publisher/source-header-gate.test.mjs
           node --check depokapacitas/attendance-atomic-plan.mjs
           node staging/imile-management/depo-booking-physical.integration.test.mjs
-      - name: Saját Attendance PWA: hét-hét fotó, jogosultság és reggeli visszavétel
+      - name: 'Saját Attendance PWA: hét-hét fotó, jogosultság és reggeli visszavétel'
         run: |
           node --test staging/imile-management/attendance/core.test.mjs
           node --check staging/imile-management/attendance/app.mjs
