@@ -288,7 +288,7 @@ service cloud.firestore {
       && d.status in ['Elérhető','Szerviz','Leállított']
       && optionalText(d.note,2000)
       && (d.vehicleId == '' || exists(/databases/$(database)/documents/vehicles/$(d.vehicleId)))
-      && admin() && getAfter(/databases/$(database)/documents/vehicles/$(d.vehicleId)).data.status == d.status
+      && admin()
       && fleetServiceMileage(d); }
 
     function validFleetRecord(id,d) {
@@ -307,13 +307,20 @@ service cloud.firestore {
       allow read: if member();
       allow create: if editor() && validFleetRecord(id,request.resource.data)
         && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time
-        && request.resource.data.createdBy == request.auth.uid;
+        && request.resource.data.createdBy == request.auth.uid
+         && (request.resource.data.kind != 'service' ||
+           getAfter(/databases/$(database)/documents/vehicles/$(request.resource.data.data.vehicleId)).data.status ==
+             request.resource.data.data.status);
       allow update: if editor() && validFleetRecord(id,request.resource.data)
         && request.resource.data.kind == resource.data.kind
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.revision == resource.data.revision + 1
-        && (resource.data.kind != 'vehicle' || request.resource.data.data.mileage >= resource.data.data.mileage);
+        && (resource.data.kind != 'vehicle' || request.resource.data.data.mileage >= resource.data.data.mileage)
+         && (resource.data.kind != 'service' ||
+           (request.resource.data.data.vehicleId == resource.data.data.vehicleId &&
+            request.resource.data.data.date == resource.data.data.date &&
+            request.resource.data.data.status == resource.data.data.status));
       // Vehicle odometer corrections require an explicit administrative process.
       allow delete: if false;
     }
