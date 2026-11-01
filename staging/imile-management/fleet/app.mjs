@@ -1,6 +1,6 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDocFromServer,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
@@ -10,11 +10,12 @@ import {fleetAvailability} from './availability.mjs';
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
 let unsubs=[],generation=0;
+let liveVerified=false;
 const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[],fleetAssignments:[]};
 function clear() {
   for(const un of unsubs)un();
   unsubs=[];
-  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];state.fleetAssignments=[];
+  liveVerified=false;state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.attendance=[];state.bookings=[];state.fleetAssignments=[];
   $('fleetContent').hidden=true;
   $('adminVehiclePanel').hidden=true;
   $('adminDriverPanel').hidden=true;
@@ -131,7 +132,7 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
     $(kind==='driver'?'cancelDriverEdit':'cancelVehicleEdit').addEventListener('click',()=>resetEdit(kind));
     $(kind+'Form').addEventListener('submit',async event=>{
       event.preventDefault();
-      if(!state.admin||!state.uid){
+      if(!state.admin||!state.uid||!liveVerified){
         status('A törzsszerkesztéshez aktív adminjogosultság szükséges.',true);
         return;
       }
@@ -162,7 +163,7 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
     clear();
     if(!user){toMenu();return;}
     try{
-      const record=await getDoc(doc(db,'users',user.uid));
+      const record=await getDocFromServer(doc(db,'users',user.uid));
       if(rev!==generation)return;
       const profile=record.exists()?record.data():null;
       if(!allowedProfile(profile)){
@@ -175,21 +176,26 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       $('adminVehiclePanel').hidden=!state.admin;
       $('driversActions').hidden=!state.admin;
       $('vehiclesActions').hidden=!state.admin;
-      const loaded=new Set();
+      const loaded=new Map();
       for(const name of ['drivers','vehicles','attendance','bookings','fleetAssignments']){
-        const unsubscribe=onSnapshot(collection(db,name),snap=>{
+        const unsubscribe=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
           if(rev!==generation)return;
           state[name]=snap.docs.map(d=>({id:d.id,...d.data()}));
-          loaded.add(name);
-          if(loaded.size===5){
+          loaded.set(name,!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites);
+          liveVerified=loaded.size===5&&[...loaded.values()].every(Boolean);
+          if(liveVerified){
             try{render();$('fleetContent').hidden=false;
-              status('● Élő staging Firestore kapcsolat · minden alapforrás betöltve · '+
+              status('● Szerverről ellenőrzött staging Firestore · minden alapforrás naprakész · '+
                (state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság'));
-            }catch(error){$('fleetContent').hidden=true;status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);}
-          }else{$('fleetContent').hidden=true;status('Flotta-adatok betöltése: '+loaded.size+'/5 forrás…');}
+            }catch(error){liveVerified=false;$('fleetContent').hidden=true;status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);}
+          }else{
+            $('fleetContent').hidden=true;
+            status(loaded.size<5?'Flotta-adatok betöltése: '+loaded.size+'/5 forrás…':
+              'Csak gyorsítótárazott vagy függő adat érhető el. Friss járműállapot nem igazolható.',loaded.size===5);
+          }
         },error=>{
           if(rev!==generation)return;
-          console.error('Staging fleet read failed:',name,error);
+          liveVerified=false;console.error('Staging fleet read failed:',name,error);
           $('fleetContent').hidden=true;
           status('Az egyik kötelező Flotta-forrás ('+name+') nem érhető el. Az elérhetőség nem tekinthető ellenőrzöttnek.',true);
         });
