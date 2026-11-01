@@ -53,6 +53,7 @@ assert.ok(entry.includes("loginEmailForUsername(data.get('username'))"));
 assert.ok(entry.includes("signInWithEmailAndPassword(auth,loginEmail,"));
 assert.ok(menu.includes('id="menu"'));
 assert.ok(menu.includes('id="depoLink"'));
+assert.ok(menu.includes('id="attendanceLink"'), 'Own Attendance PWA must be linked from menu');
 assert.ok(menu.includes('id="fleetLink"'));
 assert.ok(menu.includes('id="qaLink" hidden'));
 assert.ok(entry.includes("$('qaLink').hidden=profile.role!=='admin'"));
@@ -79,6 +80,12 @@ try{
    'index.html','firebase.json',
    'staging/imile-management/index.html',
    'staging/imile-management/app.mjs',
+   'staging/imile-management/attendance/index.html',
+   'staging/imile-management/attendance/app.mjs',
+   'staging/imile-management/attendance/core.mjs',
+   'staging/imile-management/attendance/style.css',
+   'staging/imile-management/attendance/manifest.webmanifest',
+   'staging/imile-management/attendance/icon.svg',
    'staging/imile-management/session-policy.mjs',
    'staging/imile-management/attendance-handover.mjs',
    'staging/imile-management/central-alerts.mjs',
