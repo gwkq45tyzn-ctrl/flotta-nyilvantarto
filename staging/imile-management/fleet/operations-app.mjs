@@ -8,7 +8,7 @@ import {saveFleetRecord,moveFleetVehicle} from './operations-store.mjs';
 const $=id=>document.getElementById(id),el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
 const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
 let db,auth,uid,role,kind='vehicle',baseline=null,busy=false,unsubs=[],generation=0;
-const data={drivers:[],vehicles:[],fleetRecords:[],fleetAssignments:[],fleetMovements:[]};
+const data={drivers:[],vehicles:[],fleetRecords:[],fleetAssignments:[],fleetMovements:[],vehicleLocks:[]};
 const writable=()=>['admin','editor'].includes(role),recordWritable=()=>writable()&&(kind!=='service'||role==='admin');
 function setStatus(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
 function clear(){for(const unsub of unsubs)unsub();unsubs=[];uid=null;role=null;baseline=null;for(const key of Object.keys(data))data[key]=[];$('recordForm').replaceChildren();$('recordRows').replaceChildren();$('movementRows').replaceChildren();$('assignments').replaceChildren();$('warnings').replaceChildren();$('workspace').hidden=true;}
@@ -64,12 +64,17 @@ function render(){
   }
   $('assignments').append(line);
 }
- if(!data.fleetAssignments.some(x=>x.active))$('assignments').append(el('p','Nincs aktív járműkiadás.'));
+ for(const a of data.vehicleLocks){
+  const line=el('div');line.className='actions';
+  line.append(el('span',a.plate+' → '+a.driverId+' · '+(a.state==='awaiting_review'?'Futár kijelentkezett, reggeli visszavételre vár': 'Attendance becsekkolva, használatban')));
+  $('assignments').append(line);
+ }
+ if(!data.fleetAssignments.some(x=>x.active)&&!data.vehicleLocks.length)$('assignments').append(el('p','Nincs aktív járműkiadás.'));
  $('movementRows').replaceChildren();for(const m of data.fleetMovements.slice().sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))){const tr=el('tr');for(const v of [m.date,m.vehicleId,m.driverId,m.action==='checkout'?'Kiadás':'Visszavétel',m.mileage,m.note])tr.append(el('td',v));$('movementRows').append(tr);}
  $('warnings').replaceChildren();for(const item of expiryWarnings(data.fleetRecords,today())){const f=schemas[data.fleetRecords.find(x=>x.id===item.id).kind].fields.find(x=>x.key===item.field);const p=el('p',item.id+' · '+f.label+': '+item.date+' · '+(item.days<0?'Lejárt '+(-item.days)+' napja':item.days+' nap múlva'));p.className='warning';$('warnings').append(p);}
- $('summary').textContent=data.vehicles.length+' autó · '+data.drivers.length+' futár · '+data.fleetMovements.length+' kiadási/visszavételi esemény · '+data.fleetRecords.filter(x=>x.kind==='service').length+' szervizrekord';
+ $('summary').textContent=data.vehicles.length+' autó · '+data.drivers.length+' futár · '+data.vehicleLocks.length+' saját Attendance-ben zárolt autó · '+data.fleetMovements.length+' kézi kiadási/visszavételi esemény · '+data.fleetRecords.filter(x=>x.kind==='service').length+' szervizrekord';
 }
-function refreshChoices(){for(const form of [$('movementForm'),$('recordForm')])for(const [field,col]of [['vehicleId','vehicles'],['driverId','drivers']]){const select=form.elements[field];if(select?.tagName==='SELECT'){options(select,data[col],'id',x=>field==='vehicleId'?x.plate:x.daCode+' · '+x.name);if(form.id==='recordForm'&&baseline)select.value=baseline.data[field];}}}
+function refreshChoices(){for(const form of [$('movementForm'),$('recordForm')])for(const [field,col]of [['vehicleId','vehicles'],['driverId','drivers']]){const select=form.elements[field];if(select?.tagName==='SELECT'){options(select,data[col],'id',x=>field==='vehicleId'?x.plate+(data.vehicleLocks.some(lock=>lock.plate===x.id)?' · ATTENDANCE FOGLALT':''):x.daCode+' · '+x.name);if(form.id==='recordForm'&&baseline)select.value=baseline.data[field];}}}
 for(const [key,schema]of Object.entries(schemas)){const btn=el('button',schema.label);btn.dataset.kind=key;btn.onclick=()=>{kind=key;baseline=null;buildForm();render();};$('tabs').append(btn);}
 $('newRecord').onclick=()=>{baseline=null;buildForm();};$('search').oninput=render;$('print').onclick=()=>window.print();
 $('export').onclick=()=>{if(!uid)return;const blob=new Blob([JSON.stringify({project:'imile-management-staging',exportedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='imile-staging-fleet-'+today()+'.json';a.click();URL.revokeObjectURL(url);};
