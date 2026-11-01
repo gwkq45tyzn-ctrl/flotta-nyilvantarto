@@ -32,6 +32,7 @@ if (!ready) {
       if(!allowedProfile(profile)){ show('denied'); return; }
       const entries=menuEntries(profile);
       $('qaLink').hidden=profile.role!=='admin';
+      $('cutoverLink').hidden=profile.role!=='admin';
       $('depoLink').hidden=!entries.some(x=>x.id==='depo'&&x.enabled);
       $('fleetLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled);
       $('fleetMasterLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled);
