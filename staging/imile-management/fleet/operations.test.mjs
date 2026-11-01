@@ -33,4 +33,34 @@ await test('unmatched return denied',async()=>{const ctx=backend();await assert.
 await test('handover updates shared odometer',async()=>{const ctx=backend();await saveFleetRecord({...ctx,kind:'vehicle',input:{...fixture('vehicle'),mileage:100}});await moveFleetVehicle({...ctx,input:move});await moveFleetVehicle({...ctx,input:{...move,action:'return',mileage:'120'}});assert.equal(ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage,120);});
 await test('metadata odometer cannot decrease',async()=>{const ctx=backend();const id=await saveFleetRecord({...ctx,kind:'vehicle',input:{...fixture('vehicle'),mileage:100}});await assert.rejects(saveFleetRecord({...ctx,kind:'vehicle',baseline:{id,...ctx.records.get('fleetRecords/'+id)},input:{...fixture('vehicle'),mileage:99}}),/csökkenhet/);});
 await test('service raises shared odometer',async()=>{const ctx=backend();await saveFleetRecord({...ctx,kind:'vehicle',input:fixture('vehicle')});await saveFleetRecord({...ctx,kind:'service',input:{...fixture('service'),mileage:200,status:'Szerviz'}});assert.equal(ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage,200);});
+await test('historical service note edit does not change the live vehicle status',async()=>{
+ const ctx=backend(),original={...fixture('service'),status:'Szerviz',date:'2099-01-15'};
+ const id=await saveFleetRecord({...ctx,kind:'service',input:original});
+ assert.equal(ctx.records.get('vehicles/TESTCAR01').status,'Szerviz');
+ ctx.records.get('vehicles/TESTCAR01').status='Elérhető';
+ const baseline={id,...structuredClone(ctx.records.get('fleetRecords/'+id))};
+ await saveFleetRecord({...ctx,kind:'service',input:{...original,note:'SYNTHETIC UPDATED NOTE'},baseline});
+ assert.equal(ctx.records.get('vehicles/TESTCAR01').status,'Elérhető');
+ assert.equal(ctx.records.get('fleetRecords/'+id).data.note,'SYNTHETIC UPDATED NOTE');
+ assert.equal(ctx.records.get('fleetRecords/'+id).revision,2);
+});
+await test('historical service status, date and vehicle cannot be reassigned',async()=>{
+ const ctx=backend(),initial={...fixture('service'),status:'Szerviz',date:'2099-01-15'};
+ const id=await saveFleetRecord({...ctx,kind:'service',input:initial});
+ ctx.records.set('vehicles/TESTCAR02',{plate:'TESTCAR02',model:'SYNTHETIC',status:'Elérhető'});
+ const baseline={id,...structuredClone(ctx.records.get('fleetRecords/'+id))};
+ const before=JSON.stringify([...ctx.records]);
+ for(const patch of [
+  {status:'Elérhető'},{date:'2099-01-16'},{vehicleId:'TESTCAR02'}
+ ]){
+  await assert.rejects(saveFleetRecord({...ctx,kind:'service',baseline,
+   input:{...initial,...patch}}),/Korábbi szerviznél/);
+  assert.equal(JSON.stringify([...ctx.records]),before);
+ }
+});
+await test('new service can still set current vehicle status',async()=>{
+ const ctx=backend();
+ await saveFleetRecord({...ctx,kind:'service',input:{...fixture('service'),status:'Szerviz'}});
+ assert.equal(ctx.records.get('vehicles/TESTCAR01').status,'Szerviz');
+});
 console.log('PASS: '+count+' Fleet schema, expiry, optimistic write, service and handover cases');
