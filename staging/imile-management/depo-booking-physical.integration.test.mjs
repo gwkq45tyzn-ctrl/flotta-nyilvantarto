@@ -29,11 +29,13 @@ assert.doesNotMatch(preflight,/\b(?:setDoc|runTransaction|fetch|writeBatch|addDo
 // The server now checks manual Fleet assignment claims for current/earlier
 // Budapest calendar days and blocks a reverse same-day Fleet checkout.
 const bookingRule=rules.split('match /bookings/{bookingId}')[1].split('match /driverClaims/{key}')[0];
-assert.match(bookingRule,/bookingManualFleetCompatible\(request\.resource\.data\)/);
+assert.match(bookingRule,/bookingVehicleFleetCompatible\(request\.resource\.data\)/);
 assert.match(rules,/function bookingNotFutureInBudapest\(date\)/);
-assert.match(rules,/function bookingManualFleetCompatible\(d\)/);
+assert.match(rules,/function bookingVehicleFleetCompatible\(d\)/);
+assert.match(rules,/function bookingDriverFleetCompatible\(d\)/);
+assert.match(rules,/bookingDriverFleetCompatible\(request\.resource\.data\)/);
 assert.match(rules,/function fleetCheckoutRespectsBooking\(d\)/);
 assert.match(rules,/fleetCheckoutRespectsBooking\(d\)/);
 // Remaining limitation: no atomic Attendance claim, so this PR stays draft.
 assert.doesNotMatch(bookingRule,/attendance/);
-console.log('PASS: staging booking UI preflight and transaction guard; backend rule still pending');
+console.log('PASS: staging booking UI preflight and transaction guard; atomic Attendance claims still pending');
