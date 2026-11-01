@@ -176,7 +176,7 @@ function overview(){
    plan.issues.length?plan.issues.length+' adatütközés vagy kizárt foglalás. Ellenőrizd a kerületi igényeket és a beosztásokat.':'',
    'Az új és újrakézbesítendő csomagok mennyiségi adatok; egyedi csomagazonosító nélkül a két kategória átfedése még nem ellenőrizhető.'
  ].filter(Boolean);
- return datebar()+ownCompanyCarPanel()+nextDayPanel()+centralTaskList(8)+
+ return datebar()+ownCompanyCarPanel()+centralTaskList(8)+
    '<div class="notice" id="sourceHealth" role="status" data-source-status="'+health.status+'">'+esc(health.message)+
    '<br>Szerveri visszaigazolás: '+(health.confirmedAt?esc(new Date(health.confirmedAt).toLocaleString('hu-HU',{timeZone:'Europe/Budapest'})):'még nincs')+
    '. A forrásfájl kelte nincs megadva. <button type="button" id="refreshSources" class="secondary">Adatok újraellenőrzése</button></div>'+
@@ -220,7 +220,7 @@ function vehicles(){
    })));
 }
 function planning(){
- return datebar()+ownCompanyCarPanel()+attendanceVehicleSummary()+nextDayPanel()+centralTaskList(5)+
+ return datebar()+ownCompanyCarPanel()+attendanceVehicleSummary()+centralTaskList(5)+
   '<p class="inline-note">Nincs előzetes név szerinti rendszámfoglalás. A futárok az új Attendance-ben választanak szabad céges autót.</p>';
 }
 function demands(){const rows=get('demands').filter(x=>x.date===state.date).sort((a,b)=>a.district.localeCompare(b.district));return datebar()+(canWrite()?section('Új csomagigény kerületenként',frm('demand',field('date','Nap','date',state.date)+field('district','Kerület','text','','placeholder="pl. XIII."')+field('newCount','Új csomagok','number',0,'min="0"')+field('retryCount','Újrakézbesítendő','number',0,'min="0"'))+'<p class="small">A sikertelen csomag csak újrakézbesítésre tervezett napon kerülhet az igénybe. Az új és az újrakézbesítendő aggregált mennyiségek átfedése egyedi csomagazonosító nélkül nem ellenőrizhető; ezeket külön kell felülvizsgálni.</p>'):'')+section('Napi csomagigény',table(['Kerület','Új','Újrakézbesítendő','Összesen',''],rows.map(x=>td(esc(x.district),fmt(x.newCount),fmt(x.retryCount),fmt(number(x.newCount)+number(x.retryCount)),cmd('demands',x.id)))));}
