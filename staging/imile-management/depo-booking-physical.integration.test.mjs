@@ -21,8 +21,14 @@ assert.match(build,/'depokapacitas\/booking-physical-guard\.mjs'/);
 assert.match(workflow,/booking-physical-guard\.test\.mjs/);
 assert.match(workflow,/depo-booking-physical\.integration\.test\.mjs/);
 assert.doesNotMatch(preflight,/\b(?:setDoc|runTransaction|fetch|writeBatch|addDoc|deleteDoc)\s*\(/);
-// Contract limitation: Firestore's booking rule still has no cross-check with
-// Fleet assignment or Attendance. The PR must remain draft for server design.
+// The server now checks manual Fleet assignment claims for current/earlier
+// Budapest calendar days and blocks a reverse same-day Fleet checkout.
 const bookingRule=rules.split('match /bookings/{bookingId}')[1].split('match /driverClaims/{key}')[0];
-assert.doesNotMatch(bookingRule,/fleetAssignments|attendance/);
+assert.match(bookingRule,/bookingManualFleetCompatible\(request\.resource\.data\)/);
+assert.match(rules,/function bookingNotFutureInBudapest\(date\)/);
+assert.match(rules,/function bookingManualFleetCompatible\(d\)/);
+assert.match(rules,/function fleetCheckoutRespectsBooking\(d\)/);
+assert.match(rules,/fleetCheckoutRespectsBooking\(d\)/);
+// Remaining limitation: no atomic Attendance claim, so this PR stays draft.
+assert.doesNotMatch(bookingRule,/attendance/);
 console.log('PASS: staging booking UI preflight and transaction guard; backend rule still pending');
