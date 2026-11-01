@@ -203,18 +203,20 @@ function overview(){
 function drivers(){const list=get('drivers').filter(x=>(x.name+' '+x.daCode+' '+x.vendor).toLowerCase().includes(state.search));const edit=canWrite()?section('Depókapacitás megadása (külön az alapadatoktól)',frm('capacity',select('driverId','Futár',get('drivers'),x=>x.name+' · '+x.daCode)+field('capacity','Napi csomagkapacitás','number',0,'min="0" max="10000"'))):'';return '<p class="inline-note">A futártörzs közös adat: a Flotta kezeli. Itt csak a depóhoz szükséges kapacitás állítható.</p>'+edit+section('Futártörzs · '+list.length+' fő',table(['Futár','DA-kód','Vállalkozó','Napi kapacitás'],list.map(x=>td(esc(x.name),esc(x.daCode),esc(x.vendor),fmt(byId('driverCapacities',x.id)?.capacity??x.capacity??0)))));}
 function vehicles(){
  const list=get('vehicles').filter(x=>(x.plate+' '+(x.model||'')).toLowerCase().includes(state.search));
- return '<p class="inline-note">Az autó törzsállapota a Flotta rendszerből érkezik. A foglalhatóságot külön, a fizikai kiadást és az Attendance-állapotot is ellenőrző adatok alapján mutatjuk. A későbbi napok csak tervezhetők, nem igazoltan szabadok.</p>'+
+ const trust=assessSources(state.sourceMeta,{online:navigator.onLine,required:['vehicles','fleetAssignments','vehicleLocks']}).trusted;
+ return '<p class="inline-note">A valós járműhasználatot a saját Attendance-zár és a Flotta kézi kiadása mutatja. Kicsekkolás után az autó a reggeli ellenőrzésig zárolva marad.</p>'+
   section('Autónyilvántartás · '+list.length+' db',
-   table(['Rendszám','Típus','Műszaki állapot','Foglalás / fizikai használat'],list.map(x=>{
-    const b=get('bookings').find(a=>a.date===state.date&&a.vehicleId===x.id);
-    const checked=b?bookingAssessment(b):null;
-    const display=vehicleDisplayStatus({
-     date:state.date,today:todayAtDepot(),vehicleStatus:x.status,
-     booking:b,bookingEligible:checked?.eligible,
-     occupancy:b?null:bookingOccupancy(state.date,x.id)
-    });
-    const existing=b?(byId('drivers',b.driverId)?.name||'Ismeretlen futár')+' · ':'';
-    return td(esc(x.plate),esc(x.model),status(x.status),esc(existing+display.text));
+   table(['Rendszám','Típus','Műszaki állapot','Tényleges használat'],list.map(x=>{
+    const own=get('vehicleLocks').find(lock=>lock.plate===x.id);
+    const manual=get('fleetAssignments').find(a=>a.vehicleId===x.id&&a.active===true);
+    let text='';
+    if(!trust)text='Nem ellenőrzött: legalább egy kötelező állapotforrás hiányzik.';
+    else if(own)text=own.state==='awaiting_review'?'Visszaadás ellenőrzésre vár · '+(byId('drivers',own.driverId)?.name||own.driverId):
+      'Kiadva · '+(byId('drivers',own.driverId)?.name||own.driverId);
+    else if(manual)text='Flotta kézi kiadás · '+(byId('drivers',manual.driverId)?.name||manual.driverId);
+    else if(x.status!=='Elérhető')text='Nem kiadható ('+x.status+')';
+    else text=state.date===todayAtDepot()?'Nincs ismert aktív kiadás':'Tervezhető (nem garantáltan szabad)';
+    return td(esc(x.plate),esc(x.model),status(x.status),esc(text));
    })));
 }
 function planning(){
