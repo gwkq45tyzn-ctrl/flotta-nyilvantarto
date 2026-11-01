@@ -70,6 +70,17 @@ export function planAttendanceAtomicGuard({
  if(!Array.isArray(events))return deny('missing_event_snapshot');
  const parsed=normalizedEvents(events);
  if(parsed.errors.length)return deny(parsed.errors[0]);
+ // A local 02:00-02:59 occurs twice on the last Sunday of October. The
+ // historical Google source contains wall clock only, not the offset.
+ // Never infer ordering or issue a clear intent from this ambiguous hour.
+ const ambiguousLocalTime=time=>{
+  const year=Number(time.slice(0,4));
+  const lastSunday=31-new Date(Date.UTC(year,9,31)).getUTCDay();
+  return time.slice(5,7)==='10'&&Number(time.slice(8,10))===lastSunday&&
+   time.slice(11,13)==='02';
+ };
+ if(parsed.events.some(e=>ambiguousLocalTime(e.eventTime)))
+  return deny('ambiguous_dst_attendance_time');
  if(parsed.events.some(e=>e.eventDate!==e.eventTime.slice(0,10)))
   return deny('inconsistent_event_day');
  // Event timestamps are local Europe/Budapest wall time in this source.
