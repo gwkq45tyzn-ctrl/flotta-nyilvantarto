@@ -61,11 +61,10 @@ const safeBookingCapacity=b=>bookingAssessment(b).eligible?effectiveCapacity(b,g
 function totals(mode='day'){const ds=get('demands').filter(x=>inRange(x,mode));const bs=get('bookings').filter(x=>inRange(x,mode));const rs=get('results').filter(x=>inRange(x,mode));const sum=(l,f)=>l.reduce((a,x)=>a+number(x[f]),0);return {newCount:sum(ds,'newCount'),retryCount:sum(ds,'retryCount'),capacity:bs.reduce((n,b)=>n+safeBookingCapacity(b),0),blockedBookings:bs.filter(b=>!bookingAssessment(b).eligible).length,picked:sum(rs,'picked'),success:sum(rs,'success'),failed:sum(rs,'failed'),drivers:new Set(bs.filter(b=>bookingAssessment(b).eligible).map(b=>b.driverId)).size,hasDemand:ds.length>0,hasResults:rs.length>0};}
 function centralTaskList(limit=null){
   const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments','attendance'];
-  const missing=criticalSources.filter(key=>!state.loaded.has(key));
-  const failed=criticalSources.filter(key=>state.errors.has(key));
-  const sourceHealth=failed.length?
-    '<p class="notice">Figyelem: a közös Flotta egyes adatforrásai nem érhetők el ('+esc(failed.join(', '))+'). A teendőlista hiányos lehet; nem tekinthető minden rendben állapotnak.</p>':
-    missing.length?'<p class="inline-note">A közös Flotta adatai még töltődnek: '+esc(missing.join(', '))+'.</p>':'';
+  const alertHealth=assessSources(state.sourceMeta,{
+    online:navigator.onLine,required:criticalSources
+  });
+  const sourceHealth=alertHealth.trusted?'':'<p class="notice">A közös Flotta/Attendance teendőlista nem ellenőrzött: '+esc(alertHealth.message)+'</p>';
   const entries=collectFleetAlerts({
     today:todayAtDepot(),vehicles:get('vehicles'),drivers:get('drivers'),
     fleetRecords:get('fleetRecords'),fleetAssignments:get('fleetAssignments'),
@@ -86,7 +85,7 @@ function centralTaskList(limit=null){
   return section('Közös napi teendők és Flotta-figyelmeztetések · '+fmt(entries.length)+' db'
     +(urgent?' · '+fmt(urgent)+' sürgős':''),sourceHealth+message+
     (entries.length?table(['Érintett eszköz / feladat','Mi a teendő?','Esedékes','Prioritás','Forrás'],rows):
-    (missing.length?'<p class="empty">A teendőlista ellenőrzése még nem teljes.</p>':'<p class="empty">A közös staging adatok között nincs aktuális Flotta-figyelmeztetés.</p>'))+
+    (!alertHealth.trusted?'<p class="empty">A teendőlista ellenőrzése még nem teljes; gyorsítótárazott, hibás vagy régi adatból nem következtetünk arra, hogy nincs teendő.</p>':'<p class="empty">A közös staging adatok között nincs aktuális Flotta-figyelmeztetés.</p>'))+
     more+jump+detail);
 }
 function nextDayPanel(){
