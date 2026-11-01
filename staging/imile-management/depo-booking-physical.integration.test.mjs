@@ -18,6 +18,13 @@ assert.match(app,/tx\.get\(doc\(db,'fleetAssignments',vehicleId\)\)/);
 assert.match(app,/tx\.get\(doc\(db,'fleetDriverAssignments',driverId\)\)/);
 assert.match(app,/assessDailyPhysicalUse\(\{/);
 assert.match(app,/if\(!physical\.eligible\)throw Error/);
+assert.match(app,/const bookingAssessment=b=>\{/);
+assert.match(app,/reason:'unverified_physical_sources'/);
+assert.match(app,/safeBookingCapacity=b=>bookingAssessment\(b\)\.eligible/);
+assert.match(app,/Fizikailag kiadva/);
+assert.match(app,/Tervezhető \(jövőbeni\)/);
+assert.match(app,/Foglalás \/ fizikai használat/);
+
 assert.match(build,/'depokapacitas\/booking-physical-guard\.mjs'/);
 assert.match(workflow,/booking-physical-guard\.test\.mjs/);
 assert.match(workflow,/depo-booking-physical\.integration\.test\.mjs/);
