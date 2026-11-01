@@ -32,6 +32,7 @@ jobs:
           node depokapacitas/booking-occupancy.test.mjs
           node depokapacitas/attendance-atomic-plan.test.mjs
           node --test staging/imile-management/qa/attendance-publisher/synthetic-transaction.test.mjs
+          node --test staging/imile-management/qa/attendance-publisher/source-header-gate.test.mjs
           node --check depokapacitas/attendance-atomic-plan.mjs
           node staging/imile-management/depo-booking-physical.integration.test.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
