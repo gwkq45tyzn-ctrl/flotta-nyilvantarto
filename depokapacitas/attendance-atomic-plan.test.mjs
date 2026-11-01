@@ -120,6 +120,20 @@ const deleted=scenario('authoritative deletion needs projection update',{
  events:[],originalEvents:[login],mutation:{action:'delete',eventId:'QA_EVT1'}
 },'provisional_only',true);
 assert.equal(deleted.writeIntent.eventAction,'delete');
+const returnedWithoutPlate={...logout,vehicleId:''};
+const inferred=scenario('plate-less logout resolved from sourceCheckOutId',{
+ events:[login,returnedWithoutPlate],originalEvents:[login],
+ mutation:{action:'upsert',eventId:'QA_EVT2'}
+},'provisional_only',true);
+assert.equal(inferred.writeIntent.projectionPath,'attendanceVehicleGuards/'+date+'__'+vehicleId);
+scenario('orphan logout without plate cannot claim arbitrary car',{
+ events:[returnedWithoutPlate],originalEvents:[],
+ mutation:{action:'upsert',eventId:'QA_EVT2'}
+},'unresolved_checkout_vehicle');
+scenario('legacy login without plate cannot update arbitrary car',{
+ events:[{...login,vehicleId:''}],originalEvents:[],
+ mutation:{action:'upsert',eventId:'QA_EVT1'}
+},'unscoped_source_event');
 scenario('wrong vehicle in original needs multi-car projection',{
  events:[input('QA_EVT1','QA-DA001','Log In',otherCar)],
  originalEvents:[login],mutation:{action:'upsert',eventId:'QA_EVT1'}
