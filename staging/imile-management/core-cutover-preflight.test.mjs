@@ -49,6 +49,49 @@ check('source conflict blocks cutover',()=>{
  assert.equal(p.counts.conflictingDrivers,1);
  assert.ok(p.holds.some(x=>x.reason==='master_data_conflict'));
 });
+check('six unknown synthetic courier statuses are source quality, not staging conflicts',()=>{
+ const x={vehicles:[],fuelCards:[],contacts:[],drivers:Array.from({length:12},(_,i)=>({
+  id:'SYNTHETIC_OLD_'+i,daCode:'SYNDA'+String(i).padStart(4,'0'),
+  name:'Synthetic Courier '+i,agency:'QA',status:i<6?'ismeretlen':'aktiv'
+ }))};
+ const p=assessFleetCutover({legacy:x,staging:{drivers:[],vehicles:[]},proof:proof()});
+ assert.equal(p.counts.sourceQualityBlockers,6);
+ assert.equal(p.counts.unknownDriverStatuses,6);
+ assert.equal(p.counts.conflictingDrivers+p.counts.conflictingVehicles,0);
+ assert.equal(p.holds.find(h=>h.reason==='legacy_source_quality')?.count,6);
+ assert.equal(p.holds.find(h=>h.reason==='legacy_source_quality')?.unknownDriverStatuses,6);
+ assert.equal(p.holds.some(h=>h.reason==='master_data_conflict'),false);
+ assert.equal(p.readiness,'blocked');assert.equal(p.writesAllowed,false);
+ assert.equal(JSON.stringify(p).includes('SYNTHETIC_OLD_'),false);
+});
+check('unknown legacy driver status and a true destination conflict are separate',()=>{
+ const x=legacy();x.drivers[0].status='ismeretlen';
+ const s=staging();s.drivers[0].active=false;s.vehicles[0].model='Different test model';
+ const p=assessFleetCutover({legacy:x,staging:s,proof:proof()});
+ assert.equal(p.counts.unknownDriverStatuses,1);
+ assert.equal(p.counts.conflictingDrivers,0);
+ assert.equal(p.counts.conflictingVehicles,1);
+ assert.equal(p.holds.find(h=>h.reason==='legacy_source_quality')?.count,1);
+ assert.equal(p.holds.find(h=>h.reason==='master_data_conflict')?.count,1);
+ assert.equal(p.readiness,'blocked');
+});
+check('duplicate staging IDs are not counted as same-key data conflicts',()=>{
+ const s=staging();s.vehicles.push({id:'AAA-123',plate:'AAA-123',model:'Ford Transit',status:'Elérhető'});
+ const p=assessFleetCutover({legacy:legacy(),staging:s,proof:proof()});
+ assert.equal(p.counts.stagingIntegrityBlockers,1);
+ assert.equal(p.counts.conflictingVehicles,0);
+ assert.equal(p.holds.find(h=>h.reason==='staging_master_integrity')?.count,1);
+ assert.equal(p.holds.some(h=>h.reason==='master_data_conflict'),false);
+ assert.equal(p.readiness,'blocked');
+});
+check('unknown legacy vehicle status remains blocked without inventing collision',()=>{
+ const x=legacy();x.vehicles[0].status='ismeretlen';
+ const p=assessFleetCutover({legacy:x,staging:{drivers:[],vehicles:[]},proof:proof()});
+ assert.equal(p.counts.unknownVehicleStatuses,1);
+ assert.equal(p.holds.find(h=>h.reason==='legacy_source_quality')?.count,1);
+ assert.equal(p.holds.some(h=>h.reason==='master_data_conflict'),false);
+ assert.equal(p.readiness,'blocked');
+});
 check('pending local writes always block',()=>{
  const x=proof();x.legacyPendingLocalChangesResolved=false;
  const p=assessFleetCutover({legacy:legacy(),staging:staging(),proof:x});
