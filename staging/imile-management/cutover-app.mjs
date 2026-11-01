@@ -21,7 +21,12 @@ const labels={
 };
 const descriptions={
  approval_or_backup_missing:h=>labels[h.gate]||'Jóváhagyási feltétel',
- master_data_conflict:h=>'Törzsadat-ütközés: '+h.count+' rekord',
+ legacy_source_quality:h=>'Régi export – adatminőségi akadályok: '+h.count+' ('+
+  'ismeretlen futárstátusz: '+h.unknownDriverStatuses+
+  ', ismeretlen járműstátusz: '+h.unknownVehicleStatuses+')',
+ staging_master_integrity:h=>'Staging törzsadatok érvénytelen/duplikált azonosítói: '+h.count+' eltérés',
+ master_data_conflict:h=>'Valódi törzsadat-ütközés a stagingben: '+h.count+' rekord',
+ other_master_blockers:h=>'További, külön ellenőrzendő törzsadat-akadályok: '+h.count+' eltérés',
  unmigrated_master_records:h=>'Át nem vett törzsadatok: '+h.vehicles+' jármű, '+h.drivers+' futár',
  legacy_detail_not_migrated:h=>'Régi részletes adatok ('+h.category+'): '+h.count
 };
@@ -74,6 +79,28 @@ function present(report){
  if(!report.holds.length){const item=document.createElement('li');
   item.textContent='A leltárban nincs nyitott eltérés. Az üzemi átállást ettől még külön engedélyezni kell.';
   $('holds').append(item);
+ }
+ const review=$('reviewQueue');review.replaceChildren();
+ const queue=report.reviewQueue||{};
+ const rows=[
+  ['Ismeretlen státuszú futárok','drivers',queue.unknownDriverStatusPositions],
+  ['Ismeretlen státuszú járművek','vehicles',queue.unknownVehicleStatusPositions],
+  ['Külön igazolandó járműhasználók','vehicles',queue.vehicleUserMappingPositions]
+ ];
+ for(const [description,collection,positions] of rows){
+  if(!Array.isArray(positions)||positions.length===0)continue;
+  const item=document.createElement('li');
+  item.textContent=description+' – '+collection+' lista pozíciói (1-től): '+positions.join(', ');
+  review.append(item);
+ }
+ for(const group of queue.repeatedVehicleUserGroups||[]){
+  const item=document.createElement('li');
+  item.textContent='Ugyanazzal a használófelirattal jelölt járművek – vehicles lista pozíciói: '+group.join(', ')+'. Külön ellenőrizendő, nem automatikus személyazonosság.';
+  review.append(item);
+ }
+ if(!review.children.length){const item=document.createElement('li');
+  item.textContent='Nincs indexszel azonosított nyitott státusz vagy használókapcsolat. A többi átállási kaput ettől még ellenőrizni kell.';
+  review.append(item);
  }
  $('download').disabled=false;
 }

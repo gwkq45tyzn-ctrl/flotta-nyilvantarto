@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
 const html=read('./cutover.html'),ui=read('./cutover-app.mjs'),
- menu=read('./index.html'),entry=read('./app.mjs'),build=read('./build-preview.mjs');
+ menu=read('./index.html'),entry=read('./app.mjs'),build=read('./build-preview.mjs'),
+ preflight=read('./core-cutover-preflight.mjs');
 const fields=[
  'legacyServerVersionConfirmed','legacyPendingLocalChangesResolved','legacyFullBackupVerified',
  'stagingRestoreTestPassed','dedicatedUsersApproved','durableHostingReady',
@@ -42,6 +43,27 @@ test('result is only aggregated and link never shows raw IDs',()=>{
  assert.match(ui,/report\.counts\.legacyFuelCards/);
  assert.match(ui,/report\.holds/);
  assert.doesNotMatch(ui,/\.daCode|\.plate|\.phone|\.rendszam|\.name\}/);
+});
+test('shows distinct source quality and real staging conflict labels',()=>{
+ assert.match(ui,/legacy_source_quality:h=>/);
+ assert.match(ui,/ismeretlen futárstátusz:/);
+ assert.match(ui,/staging_master_integrity:h=>/);
+ assert.match(ui,/master_data_conflict:h=>'Valódi törzsadat-ütközés/);
+ assert.match(ui,/other_master_blockers:h=>/);
+ assert.match(preflight,/sourceQualityBlockers/);
+ assert.match(preflight,/actualMasterConflicts/);
+ assert.doesNotMatch(preflight,/reason:'master_data_conflict',count:source\.counts\.blockers/);
+});
+test('renders only one-based JSON positions for local data steward review',()=>{
+ assert.match(html,/id="reviewQueue"/);
+ assert.match(html,/nem Excel-sorszámok/);
+ assert.match(ui,/report\.reviewQueue/);
+ for(const name of ['unknownDriverStatusPositions','unknownVehicleStatusPositions',
+  'vehicleUserMappingPositions','repeatedVehicleUserGroups'])
+  assert.match(ui,new RegExp(name));
+ assert.match(ui,/review\.append\(item\)/);
+ assert.match(preflight,/privateReviewPositions\(vehicles,drivers\)/);
+ assert.doesNotMatch(ui,/\.currentDriver|\.rendszam|\.daCode/);
 });
 test('unauthed access cannot view form',()=>{
  assert.match(html,/id="work" hidden/);
