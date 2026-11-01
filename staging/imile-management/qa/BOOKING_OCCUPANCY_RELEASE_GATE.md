@@ -53,3 +53,7 @@ concurrent reverse-direction cases. Historical DST boundaries invoke the exact
 production date helper via a test-only rule path, never included in a release.
 
 Reference: https://firebase.google.com/docs/reference/rules/rules.Timestamp
+
+## Consolidation and tested base
+
+This candidate reuses PR #27 at f2606e3036ddc45166aeecbcd13f5f24c0a20675. The physical checker is shared, not reimplemented. Later changes on the other draft branch are not automatically included. This consolidated PR targets the unchanged staging base, not the moving QA branch. Current unverified/conflicting bookings contribute zero capacity; the driver-side claim is checked on the paired driverClaim write to stay within Rules access limits. The historical clock tests cover both EU DST switches and winter/summer midnight.
