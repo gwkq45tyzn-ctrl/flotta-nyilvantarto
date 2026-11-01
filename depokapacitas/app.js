@@ -42,8 +42,22 @@ function section(h,body){return '<section class="panel"><h3>'+h+'</h3>'+body+'</
 function datebar(){return '<div class="filterbar"><label>Nap <input type="date" id="datePick" value="'+state.date+'"></label></div>';}
 function inRange(x,mode){const day=(x.date||x.eventDate||x.eventTime||'').slice(0,10);if(mode==='day')return day===state.date;if(mode==='month')return day.slice(0,7)===state.date.slice(0,7);const d=new Date(state.date+'T12:00:00');const monday=new Date(d);monday.setDate(d.getDate()-((d.getDay()+6)%7));const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);return day>=monday.toISOString().slice(0,10)&&day<=sunday.toISOString().slice(0,10);}
 const todayAtDepot=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const bookingAssessment=b=>assessBooking(b,get('drivers'),get('vehicles'),todayAtDepot());
-const safeBookingCapacity=b=>effectiveCapacity(b,get('drivers'),get('vehicles'),todayAtDepot());
+const bookingAssessment=b=>{
+ const base=assessBooking(b,get('drivers'),get('vehicles'),todayAtDepot());
+ if(!base.eligible||b.date<todayAtDepot())return base;
+ if(!bookingSourcesTrusted(state.sourceMeta,{online:navigator.onLine}))
+  return {eligible:false,reason:'unverified_physical_sources'};
+ const physical=assessDailyPhysicalUse({
+  date:b.date,today:todayAtDepot(),driverId:b.driverId,vehicleId:b.vehicleId,
+  assignments:get('fleetAssignments'),
+  handovers:deriveAttendanceHandovers({events:get('attendance'),
+   drivers:get('drivers'),vehicles:get('vehicles'),
+   manualBookings:get('bookings')}).handovers
+ });
+ return physical.eligible?base:physical;
+};
+const safeBookingCapacity=b=>bookingAssessment(b).eligible?
+ effectiveCapacity(b,get('drivers'),get('vehicles'),todayAtDepot()):0;
 function totals(mode='day'){const ds=get('demands').filter(x=>inRange(x,mode));const bs=get('bookings').filter(x=>inRange(x,mode));const rs=get('results').filter(x=>inRange(x,mode));const sum=(l,f)=>l.reduce((a,x)=>a+number(x[f]),0);return {newCount:sum(ds,'newCount'),retryCount:sum(ds,'retryCount'),capacity:bs.reduce((n,b)=>n+safeBookingCapacity(b),0),blockedBookings:bs.filter(b=>!bookingAssessment(b).eligible).length,picked:sum(rs,'picked'),success:sum(rs,'success'),failed:sum(rs,'failed'),drivers:new Set(bs.filter(b=>bookingAssessment(b).eligible).map(b=>b.driverId)).size,hasDemand:ds.length>0,hasResults:rs.length>0};}
 function centralTaskList(limit=null){
   const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments'];
