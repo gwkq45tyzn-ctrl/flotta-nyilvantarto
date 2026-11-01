@@ -9,6 +9,7 @@ import {fleetAvailability} from './availability.mjs';
 
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
+const depotToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let unsubs=[],generation=0;
 const state={admin:false,uid:null,drivers:[],vehicles:[],attendance:[],bookings:[],fleetAssignments:[]};
 function clear() {
@@ -105,7 +106,8 @@ function render(){
   $('activeCount').textContent=state.drivers.filter(x=>x.active===true).length;
   $('vehiclesCount').textContent=state.vehicles.length;
   const availability=fleetAvailability({vehicles:state.vehicles,
-    assignments:state.fleetAssignments,attendanceOpenVehicleIds:handovers.openVehicleIds});
+    assignments:state.fleetAssignments,attendanceOpenVehicleIds:handovers.openVehicleIds,
+    bookings:state.bookings,day:depotToday()});
   $('availableCount').textContent=availability.free;
   renderRows('driversBody',state.drivers.slice().sort((a,b)=>
     String(a.daCode||'').localeCompare(String(b.daCode||''))),[
