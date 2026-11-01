@@ -1,7 +1,7 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDocFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
-import {getStorage,ref as storageRef,uploadBytes,getDownloadURL} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
+import {getStorage,ref as storageRef,uploadBytes,getBlob} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
@@ -82,7 +82,7 @@ function renderCourier(){
 function displayTime(v){try{return v?.toDate?.().toLocaleString('hu-HU')||'—';}catch{return '—';}}
 function adminSession(s){
  const driver=data.drivers.find(d=>d.id===s.driverId);
- return '<strong>'+esc(s.plate)+'</strong><div class="meta">'+esc(driver?.name||s.driverId)+' · DA: '+esc(s.driverId)+' · átvétel: '+esc(displayTime(s.startedAt))+'</div>';
+ return '<strong>'+esc(s.plate)+'</strong><div class="meta">'+esc(driver?.name||s.driverId)+' · DA: '+esc(s.driverId)+' · átvétel: '+esc(displayTime(s.startedAt))+'</div><button type="button" data-photo-session="'+esc(s.id)+'">Átvételi / visszaadási fotók</button>';
 }
 
 function renderRoster(){
@@ -198,6 +198,41 @@ $('rosterForm').addEventListener('submit',async e=>{
 });
 $('rosterDate').addEventListener('change',e=>{rosterDate=e.target.value;renderRoster();});
 $('checkoutForm').addEventListener('submit',checkout);
+let shownPhotoUrls=[];
+async function openPhotos(sessionId){
+ const s=data.sessions.find(x=>x.id===sessionId);
+ if(!isStaff||!s)return toast('Nincs jogosultság a fotók megtekintéséhez.',true);
+ const dialog=$('photosDialog'),root=$('photosContent');
+ shownPhotoUrls.forEach(url=>URL.revokeObjectURL(url));shownPhotoUrls=[];
+ $('photosTitle').textContent=s.plate+' · '+(s.driverId||'')+' · autófotók';
+ root.replaceChildren();
+ dialog.showModal();
+ for(const stage of ['in','out']){
+  const paths=stage==='in'?s.inPhotos:s.outPhotos;
+  if(!paths||!PHOTO_KEYS.every(k=>typeof paths[k]==='string'))continue;
+  for(const key of PHOTO_KEYS){
+   const cell=document.createElement('div');cell.className='photo';
+   const name=document.createElement('strong');name.textContent=(stage==='in'?'Átvétel: ':'Visszaadás: ')+PHOTO_LABELS[key];
+   const p=document.createElement('p');p.textContent='Betöltés…';
+   cell.append(name,p);root.append(cell);
+   try{
+    const blob=await getBlob(storageRef(storage,paths[key]));
+    if(!dialog.open)break;
+    const img=document.createElement('img'),url=URL.createObjectURL(blob);shownPhotoUrls.push(url);
+    img.src=url;img.alt=name.textContent;
+    cell.replaceChild(img,p);
+   }catch(err){p.textContent='A kép nem érhető el. '+err.message;}
+  }
+ }
+}
+function closePhotos(){
+ $('photosDialog').close();
+ shownPhotoUrls.forEach(url=>URL.revokeObjectURL(url));shownPhotoUrls=[];
+ $('photosContent').replaceChildren();
+}
+$('closePhotos').addEventListener('click',closePhotos);
+$('photosDialog').addEventListener('close',()=>{shownPhotoUrls.forEach(url=>URL.revokeObjectURL(url));shownPhotoUrls=[];});
+document.addEventListener('click',e=>{const btn=e.target.closest('[data-photo-session]');if(btn&&isStaff)openPhotos(btn.dataset.photoSession);});
 $('reviewList').addEventListener('click',async e=>{
  const btn=e.target.closest('[data-review]');if(!btn||busy)return;
  const card=btn.closest('[data-session]'),id=btn.dataset.review;
