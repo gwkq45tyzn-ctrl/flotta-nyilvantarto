@@ -19,6 +19,7 @@ const allowed=[
   'staging/imile-management/attendance/index.html',
   'staging/imile-management/attendance/app.mjs',
   'staging/imile-management/attendance/core.mjs',
+  'staging/imile-management/attendance/roster.mjs',
   'staging/imile-management/attendance/style.css',
   'staging/imile-management/attendance/manifest.webmanifest',
   'staging/imile-management/attendance/icon.svg',
