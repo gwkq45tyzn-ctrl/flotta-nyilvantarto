@@ -70,8 +70,15 @@ export function planAttendanceAtomicGuard({
  if(!Array.isArray(events))return deny('missing_event_snapshot');
  const parsed=normalizedEvents(events);
  if(parsed.errors.length)return deny(parsed.errors[0]);
- // A future-dated event can never serve as proof of *today's* occupancy.
- if(parsed.events.some(e=>e.eventTime.slice(0,10)>date))
+ if(parsed.events.some(e=>e.eventDate!==e.eventTime.slice(0,10)))
+  return deny('inconsistent_event_day');
+ // Event timestamps are local Europe/Budapest wall time in this source.
+ // A future-dated/clock-future event cannot certify the current projection.
+ const localNow=new Intl.DateTimeFormat('sv-SE',{
+  timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit',
+  hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+ }).format(new Date(now)).replace(' ','T');
+ if(parsed.events.some(e=>e.eventTime>localNow))
   return deny('future_attendance_event');
  if(!vehicles.some(v=>plate(v.plate||v.id)===key&&v.status==='Elérhető'))
   return deny('vehicle_unavailable');
