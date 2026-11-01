@@ -20,14 +20,25 @@ export async function saveFleetRecord({db,kind,input,baseline,uid,doc,runTransac
   }
   let vehicle=null,details=null;
   if(kind==='service'){
-   vehicle=await tx.get(doc(db,'vehicles',record.data.vehicleId));
+   if(current.exists()){
+    const previous=current.data().data;
+    check(record.data.vehicleId===previous.vehicleId&&
+      record.data.date===previous.date&&record.data.status===previous.status,
+     'Korábbi szerviznél a jármű, a dátum és a rögzített állapot nem módosítható. Új állapothoz készíts új szervizeseményt.');
+   }else{
+    vehicle=await tx.get(doc(db,'vehicles',record.data.vehicleId));
+   }
    details=await tx.get(doc(db,'fleetRecords','vehicle__'+record.data.vehicleId));
+   if(current.exists())check(details.exists()&&
+     record.data.mileage<=details.data().data.mileage,
+    'Korábbi szerviz km-órája nem emelheti a jármű aktuális óraállását. A km-eltérést külön kell ellenőrizni.');
   }
   tx.set(ref,{kind,data:record.data,revision:(baseline?.revision||0)+1,
    createdAt:current.exists()?current.data().createdAt:serverTimestamp(),
    createdBy:current.exists()?current.data().createdBy:uid,updatedAt:serverTimestamp(),updatedBy:uid});
   if(vehicle)tx.update(doc(db,'vehicles',record.data.vehicleId),{status:record.data.status});
-  if(details)syncMileage(tx,doc(db,'fleetRecords','vehicle__'+record.data.vehicleId),details,record.data.vehicleId,record.data.mileage,uid,serverTimestamp);
+  // Historical service edits are metadata corrections, never an odometer update.
+  if(details&&!current.exists())syncMileage(tx,doc(db,'fleetRecords','vehicle__'+record.data.vehicleId),details,record.data.vehicleId,record.data.mileage,uid,serverTimestamp);
  });
  return record.id;
 }

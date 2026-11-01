@@ -81,8 +81,12 @@ jobs:
           node staging/imile-management/fleet/master-editor.test.mjs
           node staging/imile-management/fleet/shared-capacity.integration.test.mjs
           node staging/imile-management/fleet/operations.test.mjs
+          node staging/imile-management/fleet/service-history-safety.integration.test.mjs
           node staging/imile-management/fleet/availability.test.mjs
           node staging/imile-management/fleet/core-readiness.integration.test.mjs
+          node staging/imile-management/fleet/live-source-guard.integration.test.mjs
+          node --check staging/imile-management/fleet/app.mjs
+          node --check staging/imile-management/fleet/operations-app.mjs
       - name: Attendance-alapú automatikus autókiadás és visszavétel ellenőrzése
         run: |
           node staging/imile-management/attendance-handover.test.mjs

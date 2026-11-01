@@ -13,8 +13,11 @@ Apps Script-hívás nélkül. A DepóKapacitás ugyanezeket a törzsdokumentumok
 - Szervizrekord mentése és a közös járműállapot frissítése egy tranzakcióban.
 - Kiadás/visszavétel páros autó–futár zárolással, csökkenő km-óra és dupla kiadás
   tiltásával. Az események nem szerkeszthetők és nem törölhetők kliensből.
-- A kiadás/visszavétel és szerviz kilométeradata tranzakciósan frissíti a jármű
-  részadatát; hiányzó részadatnál üres opcionális mezőkkel hozza létre azt.
+- A kiadás/visszavétel és az **új** szervizesemény kilométeradata tranzakciósan
+  frissíti a jármű részadatát; hiányzó részadatnál üres opcionális mezőkkel hozza létre azt.
+  Korábbi szervizbejegyzés javítása sem a jármű aktuális státuszát, sem az aktuális
+  kilométeróra-állását nem módosíthatja. Ha a javított történeti km meghaladná a
+  közös óraállást, a mentés megáll és külön ellenőrzést kér.
 - Keresés, 60 napos lejárati figyelmeztetés, JSON export és nyomtatható riport.
 
 A fizikai kiadás és a Depó napi foglalása külön folyamat. A fizikai kiadás nem

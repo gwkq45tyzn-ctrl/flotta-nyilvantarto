@@ -1,17 +1,17 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDocFromServer,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {schemas,expiryWarnings} from './operations-data.mjs';
 import {saveFleetRecord,moveFleetVehicle} from './operations-store.mjs';
 const $=id=>document.getElementById(id),el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
 const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
-let db,auth,uid,role,kind='vehicle',baseline=null,busy=false,unsubs=[],generation=0;
+let db,auth,uid,role,kind='vehicle',baseline=null,busy=false,unsubs=[],generation=0,liveVerified=false;
 const data={drivers:[],vehicles:[],fleetRecords:[],fleetAssignments:[],fleetMovements:[]};
-const writable=()=>['admin','editor'].includes(role),recordWritable=()=>writable()&&(kind!=='service'||role==='admin');
+const writable=()=>liveVerified&&['admin','editor'].includes(role),recordWritable=()=>writable()&&(kind!=='service'||role==='admin');
 function setStatus(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
-function clear(){for(const unsub of unsubs)unsub();unsubs=[];uid=null;role=null;baseline=null;for(const key of Object.keys(data))data[key]=[];$('recordForm').replaceChildren();$('recordRows').replaceChildren();$('movementRows').replaceChildren();$('assignments').replaceChildren();$('warnings').replaceChildren();$('workspace').hidden=true;}
+function clear(){for(const unsub of unsubs)unsub();unsubs=[];liveVerified=false;uid=null;role=null;baseline=null;for(const key of Object.keys(data))data[key]=[];$('recordForm').replaceChildren();$('recordRows').replaceChildren();$('movementRows').replaceChildren();$('assignments').replaceChildren();$('warnings').replaceChildren();$('workspace').hidden=true;}
 function options(select,rows,key,label){
  const previous=select.value;select.replaceChildren(new Option('Válassz…',''));
  for(const row of rows)select.add(new Option(label(row),row[key]));
@@ -20,7 +20,10 @@ function options(select,rows,key,label){
 function buildForm(){
  const form=$('recordForm');form.replaceChildren();
  $('sectionTitle').textContent=schemas[kind].label;
- $('permission').textContent=recordWritable()?'Mentés engedélyezett. Az azonosító nem módosítható; az időközben megváltozott rekord mentése leáll.':'Olvasási jogosultság. Szervizállapot módosításához admin szükséges.';
+ $('permission').textContent=recordWritable()?
+  (baseline&&kind==='service'?'Korábbi szerviz adatainak javítása: az eredeti autó, dátum és akkori állapot nem módosítható. A mai járműállapothoz új szervizbejegyzést készíts.':
+   'Mentés engedélyezett. Az azonosító nem módosítható; az időközben megváltozott rekord mentése leáll.'):
+  'Olvasási jogosultság. Szervizállapot módosításához admin szükséges.';
  for(const field of schemas[kind].fields){
   const label=el('label',field.label),control=el(['vehicle','driver','boolean','status'].includes(field.type)?'select':'input');
   control.name=field.key;control.required=field.required;control.disabled=!recordWritable();
@@ -31,6 +34,7 @@ function buildForm(){
   else{control.type=field.type==='integer'?'number':field.type==='date'?'date':'text';control.maxLength=field.max;if(field.type==='integer'){control.min='0';control.max='100000000';control.step='1';control.value='0';}}
   if(baseline)control.value=String(baseline.data[field.key]);
   if(baseline&&field.key===schemas[kind].key){if(control.tagName==='SELECT')control.disabled=true;else control.readOnly=true;}
+  if(baseline&&kind==='service'&&['vehicleId','date','status'].includes(field.key))control.disabled=true;
   label.append(control);form.append(label);
  }
  const button=el('button',baseline?'Módosítás mentése':'Új rekord mentése');button.type='submit';button.disabled=!recordWritable()||busy;form.append(button);
@@ -74,7 +78,11 @@ for(const [key,schema]of Object.entries(schemas)){const btn=el('button',schema.l
 $('newRecord').onclick=()=>{baseline=null;buildForm();};$('search').oninput=render;$('print').onclick=()=>window.print();
 $('export').onclick=()=>{if(!uid)return;const blob=new Blob([JSON.stringify({project:'imile-management-staging',exportedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='imile-staging-fleet-'+today()+'.json';a.click();URL.revokeObjectURL(url);};
 $('recordForm').onsubmit=async event=>{
- event.preventDefault();if(!recordWritable()||busy)return;const input=Object.fromEntries(new FormData(event.currentTarget));if(baseline)input[schemas[kind].key]=baseline.data[schemas[kind].key];
+ event.preventDefault();if(!recordWritable()||busy)return;const input=Object.fromEntries(new FormData(event.currentTarget));
+ if(baseline){
+  input[schemas[kind].key]=baseline.data[schemas[kind].key];
+  if(kind==='service')for(const field of ['vehicleId','date','status'])input[field]=baseline.data[field];
+ }
  busy=true;const btn=event.currentTarget.querySelector('button[type=submit]');btn.disabled=true;$('saveMessage').textContent='Mentés…';
  try{const id=await saveFleetRecord({db,kind,input,baseline,uid,doc,runTransaction,serverTimestamp});$('saveMessage').textContent='Mentve: '+id;baseline=null;buildForm();}
  catch(error){$('saveMessage').textContent='Nem sikerült menteni: '+error.message;}finally{busy=false;btn.disabled=!recordWritable();const current=$('recordForm').querySelector('button[type=submit]');if(current)current.disabled=!recordWritable();}
@@ -91,18 +99,39 @@ else{
  $('logout').onclick=async()=>{await signOut(auth);window.location.replace('../index.html');};
  onAuthStateChanged(auth,async user=>{
   const rev=++generation;clear();if(!user){window.location.replace('../index.html');return;}
-  try{const snap=await getDoc(doc(db,'users',user.uid)),profile=snap.data();if(rev!==generation)return;
+  try{const snap=await getDocFromServer(doc(db,'users',user.uid)),profile=snap.data();if(rev!==generation)return;
    if(!allowedProfile(profile)){setStatus('Nincs aktív hozzáférés.',true);return;}
    uid=user.uid;role=profile.role;$('identity').textContent=(profile.name||'Felhasználó')+' · '+role;
    for(const control of $('movementForm').elements)control.disabled=!writable();
-   buildForm();const loaded=new Set();
-   for(const name of Object.keys(data))unsubs.push(onSnapshot(collection(db,name),snapshot=>{if(rev!==generation)return;data[name]=snapshot.docs.map(d=>({...d.data(),id:d.id}));loaded.add(name);
- if(loaded.size===Object.keys(data).length){
-  try{refreshChoices();render();$('workspace').hidden=false;setStatus('● Élő staging Firestore kapcsolat · minden alapforrás betöltve');}
-  catch(error){$('workspace').hidden=true;setStatus('A Flotta-adatok nem jeleníthetők meg megbízhatóan: '+error.message,true);}
- }else{
-  $('workspace').hidden=true;setStatus('Flotta-adatok betöltése: '+loaded.size+'/'+Object.keys(data).length+' forrás…');
- }},error=>{if(rev!==generation)return;$('workspace').hidden=true;setStatus('Flotta-adatkapcsolati hiba ('+name+'): '+error.message,true);}));
+   buildForm();const loaded=new Map();
+   for(const name of Object.keys(data))unsubs.push(onSnapshot(collection(db,name),{includeMetadataChanges:true},snapshot=>{
+    if(rev!==generation)return;
+    data[name]=snapshot.docs.map(d=>({...d.data(),id:d.id}));
+    loaded.set(name,!snapshot.metadata.fromCache&&!snapshot.metadata.hasPendingWrites);
+    const wasLive=liveVerified;
+    liveVerified=loaded.size===Object.keys(data).length&&[...loaded.values()].every(Boolean);
+    if(liveVerified){
+      try{
+        refreshChoices();
+        if(!wasLive)buildForm();
+        for(const control of $('movementForm').elements)control.disabled=!writable();
+        render();$('workspace').hidden=false;
+        setStatus('● Szerverről ellenőrzött staging Firestore · minden alapforrás naprakész');
+      }catch(error){liveVerified=false;$('workspace').hidden=true;setStatus('A Flotta-adatok nem jeleníthetők meg megbízhatóan: '+error.message,true);}
+    }else{
+      $('workspace').hidden=true;
+      for(const control of $('movementForm').elements)control.disabled=true;
+      setStatus(loaded.size<Object.keys(data).length?
+       'Flotta-adatok betöltése: '+loaded.size+'/'+Object.keys(data).length+' forrás…':
+       'Az adatok gyorsítótárazottak vagy függő módosítást tartalmaznak; szerverkapcsolat kell a műveletekhez.',
+       loaded.size===Object.keys(data).length);
+    }
+   },error=>{
+    if(rev!==generation)return;
+    liveVerified=false;$('workspace').hidden=true;
+    for(const control of $('movementForm').elements)control.disabled=true;
+    setStatus('Flotta-adatkapcsolati hiba ('+name+'): '+error.message,true);
+   }));
   }catch(error){if(rev===generation)setStatus('Jogosultságellenőrzési hiba: '+error.message,true);}
  });
 }
