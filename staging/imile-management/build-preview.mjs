@@ -13,6 +13,9 @@ const target=join(root,'preview-imile-staging');
 const allowed=[
   'staging/imile-management/index.html',
   'staging/imile-management/app.mjs',
+  'staging/imile-management/cutover.html',
+  'staging/imile-management/cutover-app.mjs',
+  'staging/imile-management/core-cutover-preflight.mjs',
   'staging/imile-management/reports/index.html',
   'staging/imile-management/reports/report-app.mjs',
   'staging/imile-management/reports/report-core.mjs',
