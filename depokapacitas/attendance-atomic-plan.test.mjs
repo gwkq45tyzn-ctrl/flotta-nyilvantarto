@@ -75,6 +75,12 @@ scenario('old pickup open now remains assigned',{
 scenario('future event not trusted',{
  events:[input('QA_FUT','QA-DA001','Log In',vehicleId,'2026-11-03T08:00:00')]
 },'future_attendance_event');
+scenario('same-day event after current clock not trusted',{
+ events:[input('QA_FUTTODAY','QA-DA001','Log In',vehicleId,date+'T23:00:00')]
+},'future_attendance_event');
+scenario('eventDate disagrees with eventTime',{
+ events:[{...login,eventDate:'2026-11-01'}]
+},'inconsistent_event_day');
 scenario('source completeness missing',{proof:{...proof,fullVehicleEventHistory:false}},
  'unverified_authoritative_history');
 scenario('IAM writers not fenced',{proof:{...proof,allIamAndBrowserWritersFenced:false}},
