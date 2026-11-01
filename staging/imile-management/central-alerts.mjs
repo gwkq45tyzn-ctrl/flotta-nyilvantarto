@@ -101,6 +101,6 @@ export function collectFleetAlerts({
         dueDate:today,days:0,vehicleId:e.vehicleId});
     }
   }
-  return alerts.sort((a,b)=>priority[a.level]-priority[b.level||
+  return alerts.sort((a,b)=>priority[a.level]-priority[b.level]||
     a.dueDate.localeCompare(b.dueDate)||a.title.localeCompare(b.title,'hu'));
 }
