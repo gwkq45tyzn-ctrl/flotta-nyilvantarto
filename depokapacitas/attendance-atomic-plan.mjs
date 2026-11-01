@@ -58,7 +58,10 @@ export function planAttendanceAtomicGuard({
  mutation,originalEvents
 }={}){
  const key=plate(vehicleId);
- const deny=reason=>Object.freeze({eligible:false,reason,guardIntent:null,writeIntent:null});
+ const deny=reason=>Object.freeze({
+  eligible:false,authorizedForBooking:false,reason,
+  guardIntent:null,writeIntent:null
+ });
  if(!dayValid(date)||!matchPlate(key)||!Number.isFinite(now))
   return deny('invalid_parameters');
  if(depotDay(now)!==date)return deny('not_current_budapest_day');
