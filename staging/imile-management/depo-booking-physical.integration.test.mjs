@@ -6,7 +6,7 @@ const preflight=read('../../depokapacitas/booking-physical-guard.mjs');
 const build=read('./build-preview.mjs');
 const workflow=read('../../.github/workflows/imile-staging.yml');
 const rules=read('../../depokapacitas/firestore.rules');
-const emulator=read('./qa/physical-booking-rules-emulator.mjs');
+const emulator=read('./fleet/physical-booking-rules-emulator.mjs');
 assert.match(app,/import \{assessDailyPhysicalUse,bookingSourcesTrusted\} from '\.\/booking-physical-guard\.mjs'/);
 assert.match(app,/getDocsFromServer\(collection\(db,'attendance'\)\)/);
 assert.match(app,/!bookingSourcesTrusted\(state\.sourceMeta,\{online:navigator\.onLine\}\)/);
