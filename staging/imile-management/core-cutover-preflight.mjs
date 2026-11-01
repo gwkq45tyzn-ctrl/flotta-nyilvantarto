@@ -35,6 +35,23 @@ export function assessFleetCutover({legacy,staging,proof}={}){
   exactBool(proof[name],name);
  }
  const source=planSharedMasterMigration(legacy,{drivers:staging.drivers,vehicles:staging.vehicles});
+ // The planner's blocker total includes legacy quality errors as well as
+ // true same-key destination conflicts. Never label their sum "conflicts".
+ const sourceIssueTypes=new Set([
+  'duplicate','missing_or_invalid_plate','missing_or_invalid_da',
+  'invalid_row','missing_name','unknown_status'
+ ]);
+ const destinationIssueTypes=new Set(['invalid_existing_row','invalid_existing_id','duplicate_existing']);
+ const sourceQualityBlockers=source.problems.filter(p=>sourceIssueTypes.has(p.type)).length;
+ const stagingIntegrityBlockers=source.problems.filter(p=>destinationIssueTypes.has(p.type)).length;
+ const actualMasterConflicts=source.counts.conflictingDrivers+source.counts.conflictingVehicles;
+ const unknownDriverStatuses=source.problems.filter(p=>p.type==='unknown_status'&&p.target==='driver').length;
+ const unknownVehicleStatuses=source.problems.filter(p=>p.type==='unknown_status'&&p.target==='vehicle').length;
+ const classified=sourceQualityBlockers+stagingIntegrityBlockers+actualMasterConflicts;
+ if(classified>source.counts.blockers)
+  throw Error('Az átállási akadályok összesítése ellentmondásos.');
+ // Future planner blocker types must remain blocking, even if not yet classified.
+ const otherMasterBlockers=source.counts.blockers-classified;
  for(const name of ['fuelCards','contacts'])if(!Array.isArray(legacy[name]))
   throw Error('Hiányos régi Flotta export: '+name);
  const {vehicles,drivers,fuelCards,contacts}=legacy;
@@ -53,7 +70,11 @@ export function assessFleetCutover({legacy,staging,proof}={}){
  ].filter(x=>x.count>0);
  const holds=[
   ...Object.entries(proof).filter(([k,v])=>v===false).map(([key])=>({reason:'approval_or_backup_missing',gate:key})),
-  ...(source.counts.blockers? [{reason:'master_data_conflict',count:source.counts.blockers}]:[]),
+  ...(sourceQualityBlockers?[{reason:'legacy_source_quality',count:sourceQualityBlockers,
+   unknownDriverStatuses,unknownVehicleStatuses}]:[]),
+  ...(stagingIntegrityBlockers?[{reason:'staging_master_integrity',count:stagingIntegrityBlockers}]:[]),
+  ...(actualMasterConflicts?[{reason:'master_data_conflict',count:actualMasterConflicts}]:[]),
+  ...(otherMasterBlockers?[{reason:'other_master_blockers',count:otherMasterBlockers}]:[]),
   ...(source.counts.newDrivers+source.counts.newVehicles? [{
    reason:'unmigrated_master_records',
    drivers:source.counts.newDrivers,vehicles:source.counts.newVehicles
@@ -69,6 +90,8 @@ export function assessFleetCutover({legacy,staging,proof}={}){
   matchedDrivers:source.counts.matchedDrivers,matchedVehicles:source.counts.matchedVehicles,
   conflictingDrivers:source.counts.conflictingDrivers,
   conflictingVehicles:source.counts.conflictingVehicles,
+  sourceQualityBlockers,unknownDriverStatuses,unknownVehicleStatuses,
+  stagingIntegrityBlockers,otherMasterBlockers,
   legacyMetadataFields:populatedVehicleMetadata+populatedDriverMetadata
  };
  return Object.freeze({
