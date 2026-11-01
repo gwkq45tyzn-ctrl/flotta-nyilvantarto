@@ -81,6 +81,9 @@ scenario('same-day event after current clock not trusted',{
 scenario('eventDate disagrees with eventTime',{
  events:[{...login,eventDate:'2026-11-01'}]
 },'inconsistent_event_day');
+scenario('DST fallback repeats the 02:00 wall-clock hour',{
+ events:[input('QA_DST1','QA-DA001','Log In',vehicleId,'2026-10-25T02:30:00')]
+},'ambiguous_dst_attendance_time');
 scenario('source completeness missing',{proof:{...proof,fullVehicleEventHistory:false}},
  'unverified_authoritative_history');
 scenario('IAM writers not fenced',{proof:{...proof,allIamAndBrowserWritersFenced:false}},
