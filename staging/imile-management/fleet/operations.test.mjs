@@ -58,6 +58,32 @@ await test('historical service status, date and vehicle cannot be reassigned',as
   assert.equal(JSON.stringify([...ctx.records]),before);
  }
 });
+await test('historical service mileage cannot advance the current vehicle odometer',async()=>{
+ const ctx=backend(),original={...fixture('service'),mileage:100,status:'Szerviz'};
+ const id=await saveFleetRecord({...ctx,kind:'service',input:original});
+ const baseline={id,...structuredClone(ctx.records.get('fleetRecords/'+id))};
+ const before=JSON.stringify([...ctx.records]);
+ await assert.rejects(saveFleetRecord({...ctx,kind:'service',input:{...original,mileage:200},baseline}),/nem emelheti/);
+ assert.equal(JSON.stringify([...ctx.records]),before);
+});
+await test('historical service mileage correction below live odometer does not rewrite it',async()=>{
+ const ctx=backend(),original={...fixture('service'),mileage:100,status:'Szerviz'};
+ const id=await saveFleetRecord({...ctx,kind:'service',input:original});
+ ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage=150;
+ const baseline={id,...structuredClone(ctx.records.get('fleetRecords/'+id))};
+ await saveFleetRecord({...ctx,kind:'service',input:{...original,mileage:140},baseline});
+ assert.equal(ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage,150);
+ assert.equal(ctx.records.get('fleetRecords/'+id).data.mileage,140);
+});
+await test('historical service correction cannot recreate missing shared odometer record',async()=>{
+ const ctx=backend(),original={...fixture('service'),mileage:100,status:'Szerviz'};
+ const id=await saveFleetRecord({...ctx,kind:'service',input:original});
+ const baseline={id,...structuredClone(ctx.records.get('fleetRecords/'+id))};
+ ctx.records.delete('fleetRecords/vehicle__TESTCAR01');
+ const before=JSON.stringify([...ctx.records]);
+ await assert.rejects(saveFleetRecord({...ctx,kind:'service',input:{...original,note:'SYNTHETIC CORRECTION'},baseline}),/nem emelheti/);
+ assert.equal(JSON.stringify([...ctx.records]),before);
+});
 await test('new service can still set current vehicle status',async()=>{
  const ctx=backend();
  await saveFleetRecord({...ctx,kind:'service',input:{...fixture('service'),status:'Szerviz'}});
