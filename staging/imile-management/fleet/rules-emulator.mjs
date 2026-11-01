@@ -58,6 +58,20 @@ const service=normalizeFleetRecord('service',{...fixture('service','NEWSERVICE')
 await test('admin: service without matching canonical status denied',false,()=>setDoc(doc(db.admin,'fleetRecords',service.id),envelope('service',service.data,'admin')));
 await test('admin: service plus canonical status atomic',true,()=>{const b=writeBatch(db.admin);b.set(doc(db.admin,'fleetRecords',service.id),envelope('service',service.data,'admin'));b.update(doc(db.admin,'vehicles','TEST0001'),{status:'Szerviz'});return b.commit();});
 await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'vehicles','TEST0001'),{status:'Elérhető'}));
+const historicalService=doc(db.admin,'fleetRecords',service.id);
+await test('admin: correction of historic service note does not revert live car state',true,
+ ()=>updateDoc(historicalService,{'data.note':'SYNTHETIC CORRECTION',revision:2,
+  updatedAt:serverTimestamp(),updatedBy:'admin'}));
+await test('admin: historic service status mutation denied',false,
+ ()=>updateDoc(historicalService,{'data.status':'Elérhető',revision:3,
+  updatedAt:serverTimestamp(),updatedBy:'admin'}));
+await test('admin: historic service date mutation denied',false,
+ ()=>updateDoc(historicalService,{'data.date':'2099-01-16',revision:3,
+  updatedAt:serverTimestamp(),updatedBy:'admin'}));
+await test('admin: historic service transferred to another vehicle denied',false,
+ ()=>updateDoc(historicalService,{'data.vehicleId':'TEST0002',revision:3,
+  updatedAt:serverTimestamp(),updatedBy:'admin'}));
+
 const mileageService=normalizeFleetRecord('service',{...fixture('service','SERVICEMILE'),vehicleId:'TEST0001',mileage:60});
 await test('admin: service without odometer synchronization denied',false,()=>setDoc(doc(db.admin,'fleetRecords',mileageService.id),envelope('service',mileageService.data,'admin')));
 await test('admin: service with odometer synchronization allowed',true,async()=>{const current=await getDoc(profile);const batch=writeBatch(db.admin);batch.set(doc(db.admin,'fleetRecords',mileageService.id),envelope('service',mileageService.data,'admin'));batch.update(profile,{'data.mileage':60,revision:current.data().revision+1,updatedAt:serverTimestamp(),updatedBy:'admin'});return batch.commit();});
