@@ -39,6 +39,8 @@ jobs:
       - name: 'Saját Attendance PWA: hét-hét fotó, jogosultság és reggeli visszavétel'
         run: |
           node --test staging/imile-management/attendance/core.test.mjs
+          node --test staging/imile-management/attendance/roster.test.mjs
+          node --check staging/imile-management/attendance/roster.mjs
           node --check staging/imile-management/attendance/app.mjs
           node --check staging/imile-management/attendance/core.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
