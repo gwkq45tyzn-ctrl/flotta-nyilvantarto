@@ -128,6 +128,8 @@ jobs:
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+      - name: 'Saját Attendance PWA – Firestore tranzakciók és szerepkörök emulátorban'
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-attendance-own --config firebase.staging-emulator.json "node staging/imile-management/attendance/rules-emulator.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
