@@ -21,7 +21,7 @@ const proof={
 };
 const base={now,date,vehicleId,drivers,vehicles,proof,events:[]};
 const plan=updates=>planAttendanceAtomicGuard({...base,...updates});
-const input=(id,daCode,type,car,eventTime=date+'T08:00:00',overrides={})=>({
+const input=(id,daCode,type,car=vehicleId,eventTime=date+'T08:00:00',overrides={})=>({
  id,daCode,type,vehicleId:car,eventTime,eventDate:eventTime.slice(0,10),
  timeKnown:true,source:'synthetic-test',status:'',
  photoFront:'',photoLeft:'',photoRight:'',photoBack:'',...overrides
@@ -44,7 +44,7 @@ assert.deepEqual(clear.guardIntent,{
 });
 assert.equal('confirmedAt' in clear.guardIntent,false);
 assert.equal(clear.writeIntent,null);
-const assigned=scenario('today pickup',[].length?{}:{events:[login]},'provisional_only',true);
+const assigned=scenario('today pickup',{events:[login]},'provisional_only',true);
 assert.equal(assigned.guardIntent.state,'assigned');
 assert.equal(assigned.guardIntent.driverId,'QA-DA001');
 scenario('same event retry is deduplicated',{events:[login,{...login}]},'provisional_only',true);
