@@ -90,7 +90,7 @@ function centralTaskList(limit=null){
     more+jump+detail);
 }
 function ownCompanyCarPanel(){
- const required=['vehicles','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess'];
+ const required=['vehicles','drivers','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess'];
  const trusted=assessSources(state.sourceMeta,{online:navigator.onLine,required});
  if(!trusted.trusted)return section('Saját cégesautós kapacitás','<p class="notice">Az új Attendance és futárterv forrásai még nem ellenőrzöttek: '+esc(trusted.message)+'</p>');
  const report=planCapacity({date:state.date,vehicles:get('vehicles'),locks:get('vehicleLocks'),
