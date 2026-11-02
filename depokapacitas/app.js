@@ -94,7 +94,7 @@ function ownCompanyCarPanel(){
  const trusted=assessSources(state.sourceMeta,{online:navigator.onLine,required});
  if(!trusted.trusted)return section('Saját cégesautós kapacitás','<p class="notice">Az új Attendance és futárterv forrásai még nem ellenőrzöttek: '+esc(trusted.message)+'</p>');
  const report=planCapacity({date:state.date,vehicles:get('vehicles'),locks:get('vehicleLocks'),
-  driverLocks:get('driverLocks'),plans:get('courierDayPlans'),accesses:get('courierAccess')});
+  driverLocks:get('driverLocks'),plans:get('courierDayPlans'),accesses:get('courierAccess'),drivers:get('drivers')});
  if(!report.ready)return section('Saját cégesautós kapacitás','<p class="notice">Nem számítható: '+esc(report.reason)+'</p>');
  const content='<div class="grid kpis">'+
   kpi('Üzemképes autók',report.operationalCars,'Szervizes és leállított kizárva')+
