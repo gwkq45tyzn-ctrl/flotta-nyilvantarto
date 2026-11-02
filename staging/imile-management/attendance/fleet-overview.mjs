@@ -52,6 +52,8 @@ export function buildFleetOverview({vehicles,locks,sessions,driverLocks}={}){
     rows.push({...base,state:'review_required',text:'Ismeretlen autózár – ellenőrizendő',
      driverId:String(lock.driverId||''),sessionId:String(lock.sessionId||'')});
    }
+  }else if(driverLocks.some(x=>PLATE(x.plate)===plate)){
+   rows.push({...base,state:'review_required',text:'DA-kód foglalja az autót, de autózár hiányzik – ellenőrizendő'});
   }else if(v.status==='Elérhető'){
    rows.push({...base,state:'no_active_session',text:'Nincs aktív Attendance-kiadás; fizikai jelenlét nem igazolt'});
   }else{
