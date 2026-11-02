@@ -65,7 +65,7 @@ try {
   await check('oversized image blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'image/jpeg'},new Uint8Array(8*1024*1024+1)));
   await check('valid checkout image accepted',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
   await check('storage paths outside attendance denied',false,()=>store(ownerStore,'private/tracking.jpg'));
-  assert.equal(successes,20);
+  assert.equal(successes,21);
   console.log('PASS: '+successes+' Storage/Firestore security checks; synthetic image bytes only');
 }finally{
   await env.cleanup();
