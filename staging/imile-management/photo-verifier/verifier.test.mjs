@@ -22,6 +22,34 @@ test('incomplete upload remains pending then safely resumes',async()=>{const h=h
 test('duplicate finalize does not renew or decode already verified images',async()=>{const h=harness();await verifyEvent(event,h.d);assert.equal((await verifyEvent(event,h.d)).status,'already-verified');assert.equal(h.commits,1);assert.equal(h.reads,7);});
 test('original generation replacement revokes without changing manifest',async()=>{const h=harness();await verifyEvent(event,h.d);const old=structuredClone(h.proof.objects);h.files.set(paths.front,{...h.files.get(paths.front),generation:'2'});assert.equal((await verifyEvent(event,h.d)).code,'ORIGINAL_CHANGED');assert.equal(h.invalid,'ORIGINAL_CHANGED');assert.deepEqual(h.proof.objects,old);assert.equal(h.proof.verified,false);});
 test('deleted original revokes existing receipt',async()=>{const h=harness();await verifyEvent(event,h.d);h.files.delete(paths.left);assert.equal((await verifyEvent(event,h.d)).code,'OBJECT_MISSING');assert.equal(h.proof.verified,false);});
+
+test('disabled courier account cannot stop an existing proof from being revoked on delete',async()=>{
+ const h=harness();
+ assert.equal((await verifyEvent(event,h.d)).status,'verified');
+ h.d.authorize=async()=>{throw new Rejected('ACCOUNT_DISABLED');};
+ h.files.delete(paths.front);
+ assert.equal((await verifyEvent(event,h.d)).code,'OBJECT_MISSING');
+ assert.equal(h.proof.verified,false,'Previously issued receipt must be invalidated regardless of Auth status');
+});
+test('removed courier account cannot stop metadata tamper revocation',async()=>{
+ const h=harness();await verifyEvent(event,h.d);
+ h.d.authorize=async()=>{throw new Rejected('ACCOUNT_MISSING');};
+ h.files.set(paths.back,{...h.files.get(paths.back),metageneration:'2'});
+ assert.equal((await verifyEvent(event,h.d)).code,'ORIGINAL_CHANGED');
+ assert.equal(h.proof.verified,false);
+});
+test('a disabled courier account cannot get a new photo receipt',async()=>{
+ const h=harness();h.d.authorize=async()=>{throw new Rejected('ACCOUNT_DISABLED');};
+ assert.equal((await verifyEvent(event,h.d)).code,'ACCOUNT_DISABLED');
+ assert.equal(h.commits,0);
+});
+test('existing unchanged proof needs no new Auth access and keeps original manifest',async()=>{
+ const h=harness();await verifyEvent(event,h.d);const originals=structuredClone(h.proof.objects);
+ h.d.authorize=async()=>{throw new Rejected('ACCOUNT_DISABLED');};
+ assert.equal((await verifyEvent(event,h.d)).status,'already-verified');
+ assert.equal(h.commits,1);assert.deepEqual(h.proof.objects,originals);
+});
+
 for(const [label,change]of [['MIME',{contentType:'image/png'}],['encoding',{contentEncoding:'gzip'}],['zero generation',{generation:'0'}],['unsafe size',{size:'99999999999999999999'}],['missing metageneration',{metageneration:null}]])
  test('untrusted '+label+' denied',async()=>{const h=harness();h.files.set(paths.front,{...h.files.get(paths.front),...change});assert.equal((await verifyEvent(event,h.d)).code,'INVALID_OBJECT_METADATA');assert.equal(h.commits,0);});
 test('content length mismatch denied',async()=>{const h=harness();h.d.objects.download=async()=>Buffer.from('x');assert.equal((await verifyEvent(event,h.d)).code,'SIZE_MISMATCH');});

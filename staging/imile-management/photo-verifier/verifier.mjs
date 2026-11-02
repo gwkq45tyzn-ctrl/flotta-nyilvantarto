@@ -44,7 +44,11 @@ export async function verifyEvent(event,{objects,receipts,authorize}){
  catch(e){if(e instanceof Rejected)return {status:'ignored',code:e.code};throw e;}
  const paths=pathsFor(id),old=await receipts.get(id),manifest={};
  try{
-  await authorize(id);
+  // A proof is not an ongoing authorization grant. Once issued, storage
+  // deletion/replacement MUST revoke it even if its original courier account
+  // was subsequently disabled or removed. Revalidate identity/locks only when
+  // issuing a NEW receipt (the commit adapter independently rechecks them).
+  if(!old)await authorize(id);
   for(const key of KEYS){
    const raw=await objects.metadata(paths[key]);
    if(!raw){
