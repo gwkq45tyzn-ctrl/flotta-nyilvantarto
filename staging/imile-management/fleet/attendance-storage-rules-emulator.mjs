@@ -63,9 +63,19 @@ try {
   await check('invalid session id blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg','invalid')));
   await check('empty image blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'image/jpeg'},new Uint8Array()));
   await check('oversized image blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'image/jpeg'},new Uint8Array(8*1024*1024+1)));
-  await check('valid checkout image accepted',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
+  await check('checkout upload requires a real active vehicle session',false,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,status:'active'});
+    await setDoc(doc(admin.firestore(),'courierLocks',owner),{plate:'ABC123',sessionId:sid,state:'active'});
+  });
+  await check('valid checkout image accepted for active vehicle',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
+  await check('new check-in photo denied during an outstanding vehicle lock',false,()=>store(ownerStore,file(owner,'in','back.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,status:'awaiting_review'});
+  });
+  await check('new checkout image denied after checked-out status',false,()=>store(ownerStore,file(owner,'out','left.jpg')));
   await check('storage paths outside attendance denied',false,()=>store(ownerStore,'private/tracking.jpg'));
-  assert.equal(successes,21);
+  assert.equal(successes,24);
   console.log('PASS: '+successes+' Storage/Firestore security checks; synthetic image bytes only');
 }finally{
   await env.cleanup();
