@@ -44,26 +44,36 @@ export function attendanceDailyReport({date,sessions}={}){
   if(!['awaiting_review','reviewed'].includes(session.status)){
    issues.push({id:session.id,reason:'Lezárási időpont nem megfelelő státusszal'});continue;
   }
-  if(!km(session.startKm)||!km(session.endKm)||session.endKm<session.startKm){
-   issues.push({id:session.id,reason:'Érvénytelen kezdő vagy záró kilométeróra'});continue;
-  }
-  const distance=session.endKm-session.startKm;
+  // A reported vehicle defect is independent of odometer accuracy. A broken
+  // mileage reading MUST NOT hide damage or a dirty returned car from staff.
   const driverId=String(session.driverId||'').trim();
-  if(!/^[A-Za-z0-9_-]{4,40}$/.test(driverId)){
+  const validDriver=/^[A-Za-z0-9_-]{4,40}$/.test(driverId);
+  const damage=typeof session.damageNote==='string'&&session.damageNote.trim().length>0;
+  const cleanliness=typeof session.cleanlinessNote==='string'&&session.cleanlinessNote.trim().length>0;
+  if(damage)damageReports++;
+  if(cleanliness)cleanlinessReports++;
+  if(damage||cleanliness)conditionFlags.push({
+   id:session.id,driverId:validDriver?driverId:'(hibás DA-kód)',
+   plate:String(session.plate||''),damage,cleanliness,status:session.status
+  });
+  if(!validDriver){
    issues.push({id:session.id,reason:'Hiányzó vagy hibás DA-kód'});continue;
   }
+  const row=byDriver.get(driverId)||{driverId,checkouts:0,reviewed:0,reportedKm:0,reviewedKm:0,damageReports:0,cleanlinessReports:0,plates:new Set()};
+  if(damage)row.damageReports++;
+  if(cleanliness)row.cleanlinessReports++;
+  if(session.plate)row.plates.add(String(session.plate));
+  if(!km(session.startKm)||!km(session.endKm)||session.endKm<session.startKm){
+   issues.push({id:session.id,reason:'Érvénytelen kezdő vagy záró kilométeróra'});
+   if(damage||cleanliness)byDriver.set(driverId,row);
+   continue;
+  }
+  const distance=session.endKm-session.startKm;
   checkouts++;
   reportedKm+=distance;
   if(session.status==='reviewed'){reviewedToday++;reviewedKm+=distance;}
-  const row=byDriver.get(driverId)||{driverId,checkouts:0,reviewed:0,reportedKm:0,reviewedKm:0,damageReports:0,cleanlinessReports:0,plates:new Set()};
-  const damage=typeof session.damageNote==='string'&&session.damageNote.trim().length>0;
-  const cleanliness=typeof session.cleanlinessNote==='string'&&session.cleanlinessNote.trim().length>0;
-  if(damage) {damageReports++;row.damageReports++;}
-  if(cleanliness) {cleanlinessReports++;row.cleanlinessReports++;}
-  if(damage||cleanliness)conditionFlags.push({id:session.id,driverId,plate:String(session.plate||''),damage,cleanliness,status:session.status});
   row.checkouts++;row.reportedKm+=distance;
   if(session.status==='reviewed'){row.reviewed++;row.reviewedKm+=distance;}
-  if(session.plate)row.plates.add(String(session.plate));
   byDriver.set(driverId,row);
  }
  const couriers=[...byDriver.values()].map(row=>({
