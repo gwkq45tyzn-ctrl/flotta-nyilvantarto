@@ -98,7 +98,7 @@ function ownCompanyCarPanel(){
  if(!report.ready)return section('Saját cégesautós kapacitás','<p class="notice">Nem számítható: '+esc(report.reason)+'</p>');
  const content='<div class="grid kpis">'+
   kpi('Üzemképes autók',report.operationalCars,'Szervizes és leállított kizárva')+
-  kpi('Fizikailag szabad',report.physicallyReady,'Kiadott / ellenőrzésre váró autó kizárva')+
+  kpi('Attendance alapján nem zárolt',report.physicallyReady,'Fizikai jelenlét külön ellenőrizendő')+
   kpi('Megerősített futárok',report.confirmedCouriers,'Kizárólag cégesautós futárterv')+
   kpi('Hiányzó futárok',report.missingConfirmed,'Megerősített létszám alapján')+
   '</div><p class="inline-note">Tervezett futárok: '+fmt(report.plannedCouriers)+

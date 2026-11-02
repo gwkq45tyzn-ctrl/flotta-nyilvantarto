@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {buildFleetOverview} from './fleet-overview.mjs';
+const v=[{plate:'ABC-123',status:'Elérhető'},{plate:'DEF-456',status:'Elérhető'},
+ {plate:'GHI-789',status:'Szerviz'},{plate:'JKL-000',status:'Elérhető'}];
+const locks=[{plate:'ABC123',driverId:'DA0001',uid:'uid_one',state:'active',sessionId:'session_one'},
+ {plate:'DEF456',driverId:'DA0002',uid:'uid_two',state:'awaiting_review',sessionId:'session_two'}];
+const sessions=[{id:'session_one',plate:'ABC123',driverId:'DA0001',uid:'uid_one',status:'active'},
+ {id:'session_two',plate:'DEF456',driverId:'DA0002',uid:'uid_two',status:'awaiting_review'}];
+let out=buildFleetOverview({vehicles:v,locks,sessions});
+assert.equal(out.ready,true);
+assert.deepEqual(out.rows.map(x=>x.state),['active','awaiting_review','unavailable','no_active_session']);
+assert.equal(out.rows[0].driverId,'DA0001');
+assert.equal(out.rows[1].driverId,'DA0002');
+assert.match(out.rows[3].text,/fizikai jelenlét nem igazolt/);
+assert.equal(out.unmatchedLocks.length,0);
+out=buildFleetOverview({vehicles:v,locks:[locks[0]],sessions:[]});
+assert.equal(out.rows[0].state,'review_required','Missing session cannot be called confirmed issue');
+out=buildFleetOverview({vehicles:v,locks:[{...locks[0],state:'awaiting_review'}],sessions});
+assert.equal(out.rows[0].state,'review_required','Conflicting lock status needs review');
+out=buildFleetOverview({vehicles:v,locks:[locks[0],{...locks[0]}],sessions});
+assert.equal(out.rows[0].state,'review_required','Duplicate claim must not become free');
+out=buildFleetOverview({vehicles:v,locks:[{plate:'UNKNOWN',sessionId:'session_x',driverId:'DA0003'}],sessions});
+assert.equal(out.unmatchedLocks.length,1,'Unknown claimed car must be surfaced');
+out=buildFleetOverview({vehicles:[v[0],{plate:'ABC123',status:'Elérhető'}],locks:[],sessions:[]});
+assert.ok(out.rows.some(x=>x.state==='review_required'),'Duplicate plate after normalization is unsafe');
+assert.deepEqual(buildFleetOverview({vehicles:null,locks:[],sessions:[]}),{ready:false,rows:[],unmatchedLocks:[]});
+console.log('PASS: full fleet list never infers physical presence from missing Attendance locks');
