@@ -5,9 +5,9 @@ import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/ru
 import {doc,setDoc,getDoc,getDocs,collection,writeBatch,serverTimestamp,updateDoc,deleteDoc} from 'firebase/firestore';
 const rules=await fs.readFile(new URL('../../../depokapacitas/firestore.rules',import.meta.url),'utf8');
 const env=await initializeTestEnvironment({projectId:'demo-attendance-own',firestore:{host:'127.0.0.1',port:8787,rules}});
-const uid='courier_123',otherUid='courier_456',driver='DAX001',otherDriver='DAX002',plate='CAR00001',plate2='CAR00002';
-const sid='s_'+'a'.repeat(32),sid2='s_'+'b'.repeat(32),sid3='s_'+'c'.repeat(32);
-const db={courier:env.authenticatedContext(uid).firestore(),other:env.authenticatedContext(otherUid).firestore(),
+const uid='courier_123',otherUid='courier_456',sameCodeUid='courier_789',driver='DAX001',otherDriver='DAX002',plate='CAR00001',plate2='CAR00002';
+const sid='s_'+'a'.repeat(32),sid2='s_'+'b'.repeat(32),sid3='s_'+'c'.repeat(32),sid4='s_'+'d'.repeat(32);
+const db={courier:env.authenticatedContext(uid).firestore(),other:env.authenticatedContext(otherUid).firestore(),sameCode:env.authenticatedContext(sameCodeUid).firestore(),
  editor:env.authenticatedContext('editor').firestore(),viewer:env.authenticatedContext('viewer').firestore(),
  admin:env.authenticatedContext('admin').firestore(),anonymous:env.unauthenticatedContext().firestore()};
 const photos=(user,id,stage)=>Object.fromEntries(['front','left','right','back','cabinFront','cabinRear','cargo'].map(k=>[k,'attendance/'+user+'/'+id+'/'+stage+'/'+k+'.jpg']));
@@ -16,15 +16,18 @@ const create=(database,user,id,driverId,car,s={})=>{const batch=writeBatch(datab
 batch.set(doc(database,'vehicleSessions',id),{...session(user,id,driverId,car),...s});
 batch.set(doc(database,'vehicleLocks',car),{plate:car,uid:user,driverId,sessionId:id,state:'active'});
 batch.set(doc(database,'courierLocks',user),{plate:car,sessionId:id,state:'active'});
+batch.set(doc(database,'driverLocks',driverId),{driverId,plate:car,uid:user,sessionId:id,state:'active'});
 return batch.commit();};
 const checkout=(database,user,id,car)=>{const batch=writeBatch(database);
 batch.update(doc(database,'vehicleSessions',id),{status:'awaiting_review',endKm:150,outPhotos:photos(user,id,'out'),damageNote:'',endedAt:serverTimestamp()});
 batch.update(doc(database,'vehicleLocks',car),{state:'awaiting_review'});
 batch.update(doc(database,'courierLocks',user),{state:'awaiting_review'});
+batch.update(doc(database,'driverLocks',user===sameCodeUid?driver: user===otherUid?otherDriver:driver),{state:'awaiting_review'});
 return batch.commit();};
 const review=(database,user,id,car)=>{const batch=writeBatch(database);
 batch.update(doc(database,'vehicleSessions',id),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'editor'});
 batch.delete(doc(database,'vehicleLocks',car));batch.delete(doc(database,'courierLocks',user));
+batch.delete(doc(database,'driverLocks',user===sameCodeUid?driver:user===otherUid?otherDriver:driver));
 return batch.commit();};
 let passed=0;
 const test=async(name,yes,fn)=>{console.log('RUN '+name);if(yes)await assertSucceeds(fn());else await assertFails(fn());passed++;};
@@ -33,7 +36,7 @@ try{
  await env.withSecurityRulesDisabled(async ctx=>{
   const d=ctx.firestore();
   for(const role of ['admin','editor','viewer'])await setDoc(doc(d,'users',role),{name:'Synthetic',role,active:true});
-  for(const [id,code] of [[uid,driver],[otherUid,otherDriver]]){
+  for(const [id,code] of [[uid,driver],[otherUid,otherDriver],[sameCodeUid,driver]]){
    await setDoc(doc(d,'courierAccess',id),{uid:id,driverId:code,active:true});
    await setDoc(doc(d,'drivers',code),{name:'Synthetic',daCode:code,vendor:'QA',capacity:50,active:true});
   }
@@ -59,6 +62,7 @@ try{
  });
  await test('authenticated courier can atomically check in',true,()=>create(db.courier,uid,sid,driver,plate));
  await test('another courier cannot take occupied car',false,()=>create(db.other,otherUid,sid2,otherDriver,plate));
+ await test('different Auth account sharing DA code cannot take second car',false,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2));
  await test('same courier cannot take second vehicle',false,()=>create(db.courier,uid,sid2,driver,plate2));
  await test('courier cannot directly release lock',false,()=>deleteDoc(doc(db.courier,'vehicleLocks',plate)));
  await test('other courier cannot view private session',false,()=>getDoc(doc(db.other,'vehicleSessions',sid)));
@@ -75,6 +79,7 @@ try{
  await test('courier cannot fake review',false,()=>review(db.courier,uid,sid,plate));
  await test('courier can atomically check out',true,()=>checkout(db.courier,uid,sid,plate));
  await test('checkout does not release car',false,()=>create(db.other,otherUid,sid2,otherDriver,plate));
+ await test('checkout does not release DA code',false,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2));
  await test('courier cannot check out twice',false,()=>checkout(db.courier,uid,sid,plate));
  await test('editor cannot return without releasing locks',false,()=>updateDoc(doc(db.editor,'vehicleSessions',sid),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'editor'}));
  await test('viewer cannot approve return',false,()=>{const batch=writeBatch(db.viewer);batch.update(doc(db.viewer,'vehicleSessions',sid),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'viewer'});batch.delete(doc(db.viewer,'vehicleLocks',plate));batch.delete(doc(db.viewer,'courierLocks',uid));return batch.commit();});
@@ -83,6 +88,10 @@ try{
  await test('reviewed session history cannot be deleted',false,()=>deleteDoc(doc(db.admin,'vehicleSessions',sid)));
  await test('courier cannot overwrite last history',false,()=>updateDoc(doc(db.courier,'vehicleSessions',sid),{startKm:0}));
  await test('another car can be checked out only after previous review',true,()=>create(db.courier,uid,sid3,driver,plate2));
+ await test('DA code remains occupied by current live owner',false,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate));
+ await test('original DA can check out new session',true,()=>checkout(db.courier,uid,sid3,plate2));
+ await test('original DA can complete morning return',true,()=>review(db.editor,uid,sid3,plate2));
+ await test('same DA code account can acquire car only after actual release',true,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2));
  assert.equal((await getDoc(doc(db.editor,'vehicleSessions',sid))).data().status,'reviewed');
  console.log('PASS: '+passed+' self-service courier and manager check-out security scenarios');
 }finally{await env.cleanup();}

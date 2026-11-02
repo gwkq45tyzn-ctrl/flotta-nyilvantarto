@@ -238,14 +238,21 @@ async function checkin(e){
   const paths=await uploadPhotos(files,sessionId,'in');
   const vRef=doc(db,'vehicles',plate),lRef=doc(db,'vehicleLocks',plate),cRef=doc(db,'courierLocks',user.uid),aRef=doc(db,'courierAccess',user.uid),sRef=doc(db,'vehicleSessions',sessionId);
   await runTransaction(db,async tx=>{
-   const [vehicle,lock,claim,driver,oldSession]=await Promise.all([tx.get(vRef),tx.get(lRef),tx.get(cRef),tx.get(aRef),tx.get(sRef)]);
-   const plan=planCheckIn({uid:user.uid,access:driver.exists()?{uid:user.uid,...driver.data()}:null,vehicle:vehicle.exists()?{id:plate,...vehicle.data()}:null,lock:lock.exists()?lock.data():null,claim:claim.exists()?claim.data():null,sessionId,mileage:km,photos:paths});
+   const driver=await tx.get(aRef);
+   if(!driver.exists()||!driver.data().active||!driver.data().driverId)
+    throw Error('Nincs érvényes futárjogosultság.');
+   const dRef=doc(db,'driverLocks',driver.data().driverId);
+   const [vehicle,lock,claim,driverLock,oldSession]=await Promise.all([
+    tx.get(vRef),tx.get(lRef),tx.get(cRef),tx.get(dRef),tx.get(sRef)
+   ]);
+   const plan=planCheckIn({uid:user.uid,access:driver.exists()?{uid:user.uid,...driver.data()}:null,vehicle:vehicle.exists()?{id:plate,...vehicle.data()}:null,lock:lock.exists()?lock.data():null,claim:claim.exists()?claim.data():null,driverLock:driverLock.exists()?driverLock.data():null,sessionId,mileage:km,photos:paths});
    if(!plan.ok)throw Error(plan.reason);
    if(oldSession.exists())throw Error('Az esemény már létezik.');
    tx.set(sRef,{uid:user.uid,driverId:plan.driverId,plate,status:'active',startKm:km,endKm:null,
     inPhotos:paths,outPhotos:{},damageNote:'',startedAt:serverTimestamp(),endedAt:null,reviewedAt:null,reviewedBy:''});
    tx.set(lRef,{plate,uid:user.uid,driverId:plan.driverId,sessionId,state:'active'});
    tx.set(cRef,{plate,sessionId,state:'active'});
+   tx.set(dRef,{driverId:plan.driverId,plate,uid:user.uid,sessionId,state:'active'});
   });
   toast('Becsekkolás sikeres. A jármű használatba került.');form.reset();
  }catch(error){toast('Becsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
@@ -261,15 +268,17 @@ async function checkout(e){
   const km=Number(form.elements.km.value),damageNote=String(form.elements.damageNote.value||'');
   const files=allPhotoFiles(form);
   const paths=await uploadPhotos(files,session.id,'out');
-  const sRef=doc(db,'vehicleSessions',session.id),lRef=doc(db,'vehicleLocks',session.plate),cRef=doc(db,'courierLocks',user.uid);
+  const sRef=doc(db,'vehicleSessions',session.id),lRef=doc(db,'vehicleLocks',session.plate),cRef=doc(db,'courierLocks',user.uid),dRef=doc(db,'driverLocks',session.driverId);
   await runTransaction(db,async tx=>{
-   const [live,lock,current]=await Promise.all([tx.get(sRef),tx.get(lRef),tx.get(cRef)]);
-   if(!live.exists()||!lock.exists()||!current.exists()||lock.data().sessionId!==session.id||current.data().sessionId!==session.id)
+   const [live,lock,current,driverLock]=await Promise.all([tx.get(sRef),tx.get(lRef),tx.get(cRef),tx.get(dRef)]);
+   if(!live.exists()||!lock.exists()||!current.exists()||!driverLock.exists()
+    ||lock.data().sessionId!==session.id||current.data().sessionId!==session.id
+    ||driverLock.data().sessionId!==session.id||driverLock.data().uid!==user.uid)
     throw Error('A kiadás időközben megváltozott.');
    const result=planCheckOut({uid:user.uid,session:{id:live.id,...live.data()},mileage:km,photos:paths,damageNote});
    if(!result.ok)throw Error(result.reason);
    tx.update(sRef,{status:'awaiting_review',endKm:km,outPhotos:paths,damageNote,endedAt:serverTimestamp()});
-   tx.update(lRef,{state:'awaiting_review'});tx.update(cRef,{state:'awaiting_review'});
+   tx.update(lRef,{state:'awaiting_review'});tx.update(cRef,{state:'awaiting_review'});tx.update(dRef,{state:'awaiting_review'});
   });
   toast('Kicsekkolás sikeres. Az autó a reggeli ellenőrzésig zárolva marad.');form.reset();
  }catch(error){toast('Kicsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
@@ -281,14 +290,16 @@ async function reviewOne(sessionId,{car,key,clean,damage}){
  await runTransaction(db,async tx=>{
   const s=await tx.get(sRef);
   if(!s.exists())throw Error('A járműátadás már nem található.');
-  const item={id:s.id,...s.data()},lRef=doc(db,'vehicleLocks',item.plate),cRef=doc(db,'courierLocks',item.uid);
-  const [l,c]=await Promise.all([tx.get(lRef),tx.get(cRef)]);
-  if(!l.exists()||!c.exists()||l.data().sessionId!==sessionId||c.data().sessionId!==sessionId)
+  const item={id:s.id,...s.data()},lRef=doc(db,'vehicleLocks',item.plate),cRef=doc(db,'courierLocks',item.uid),dRef=doc(db,'driverLocks',item.driverId);
+  const [l,c,d]=await Promise.all([tx.get(lRef),tx.get(cRef),tx.get(dRef)]);
+  if(!l.exists()||!c.exists()||!d.exists()
+   ||l.data().sessionId!==sessionId||c.data().sessionId!==sessionId||d.data().sessionId!==sessionId
+   ||d.data().uid!==item.uid)
    throw Error('Az autó foglalási állapota megváltozott.');
   const decision=planReview({session:item,carPresent:car,keyPresent:key,clean,damageReviewed:damage});
   if(!decision.ok)throw Error(decision.reason);
   tx.update(sRef,{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:user.uid});
-  tx.delete(lRef);tx.delete(cRef);
+  tx.delete(lRef);tx.delete(cRef);tx.delete(dRef);
  });
 }
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();setBusy(true);try{const f=new FormData(e.target);await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(err){toast('Belépés sikertelen. Ellenőrizd a hozzáférésedet.',true);}finally{setBusy(false);}});
