@@ -7,8 +7,8 @@ const s=(id,driverId,status,startKm,endKm,startedAt,endedAt,plate='ABC123')=>({
 });
 const today='2026-11-02';
 const sessions=[
- s('a','DA001','reviewed',1200,1275,'2026-11-01T19:30:00Z','2026-11-02T07:15:00Z'),
- s('b','DA001','awaiting_review',1275,1310,'2026-11-02T07:30:00Z','2026-11-02T16:30:00Z'),
+ {...s('a','DA001','reviewed',1200,1275,'2026-11-01T19:30:00Z','2026-11-02T07:15:00Z'),damageNote:'Apró sérülés a bal oldalon'},
+ {...s('b','DA001','awaiting_review',1275,1310,'2026-11-02T07:30:00Z','2026-11-02T16:30:00Z'),cleanlinessNote:'Szemetes csomagtér'},
  s('c','DA002','active',1400,null,'2026-11-02T05:30:00Z',null,'XYZ789'),
  s('d','DA002','reviewed',100,140,'2026-11-01T18:00:00Z','2026-11-01T23:30:00Z','XYZ789'),
  s('e','DA003','reviewed',400,300,'2026-11-02T04:00:00Z','2026-11-02T13:00:00Z'),
@@ -23,6 +23,13 @@ assert.equal(r.awaitingReviewNow,1);
 assert.equal(r.reviewedToday,2);
 assert.equal(r.reportedKm,150);
 assert.equal(r.reviewedKm,115);
+assert.equal(r.damageReports,1);
+assert.equal(r.cleanlinessReports,1);
+assert.equal(r.conditionFlags.length,2);
+assert.deepEqual(r.couriers[0].damageReports,1);
+assert.deepEqual(r.couriers[0].cleanlinessReports,1);
+assert.equal(r.conditionFlags[0].status,'reviewed');
+assert.equal(r.conditionFlags[1].status,'awaiting_review');
 assert.deepEqual(r.couriers.map(x=>({id:x.driverId,km:x.reportedKm,verified:x.reviewedKm})),[
  {id:'DA001',km:110,verified:75},{id:'DA002',km:40,verified:40}]);
 assert.equal(r.issues.length,2,'Invalid mileage and duplicate events must be flagged');
@@ -40,6 +47,9 @@ assert.equal(invalid.issues.length,2,'Do not count active checkout or unknown dr
 assert.equal(invalid.reportedKm,0);
 
 const csv=attendanceReportCsv(r);
+assert.ok(csv.includes('"Sérülésjelzések"')&&csv.includes('"Tisztasági jelzések"'),'CSV must report flagged interior/exterior vehicle conditions');
+assert.ok(csv.includes('"110";"75";"1";"1"'),'Courier report flags must follow verified mileage');
+
 assert.ok(csv.startsWith('\uFEFF'),'Excel export must be UTF-8 BOM');
 assert.ok(csv.includes('"Nap";"Futár DA"'),'Expected semicolon-separated quoted header fields');
 assert.match(csv,/'?"DA001"/,'Actual daily courier report must be exportable');
