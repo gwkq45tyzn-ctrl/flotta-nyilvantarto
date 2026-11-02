@@ -226,7 +226,18 @@ function renderStaff(){
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
  // confirmation; the manager must physically check the UPDATED list.
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote,x.cleanlinessNote].join(':')).sort().join('|');
- if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
+ // Snapshot user ticks before a harmless metadata/realtime re-render. A changed
+ // checkout list invalidates all prior physical inspection acknowledgements.
+ const sameWaitingList=lastWaitingSignature===signature;
+ const checkedCards=new Map();
+ if(sameWaitingList&&canReview){
+  for(const card of $('reviewList').querySelectorAll('[data-session]')){
+   const checked=[...card.querySelectorAll('input[data-check]:checked')]
+    .map(input=>input.dataset.check);
+   checkedCards.set(card.dataset.session,new Set(checked));
+  }
+ }
+ if(!sameWaitingList){resetBulkApproval();lastWaitingSignature=signature;}
  const daily=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
  $('dailyDate').max=day();
  if(!dailyReportDate) $('dailyDate').value=day();
@@ -281,6 +292,17 @@ function renderStaff(){
  '<button class="primary" type="button" data-review="'+esc(s.id)+'">Autó visszavétele</button>':
  '<p class="hint">Csak jogosult depóvezető vagy szerkesztő rögzítheti a visszavételt.</p>')+
  '</article>').join(''):'<p class="empty">Nincs ellenőrzésre váró autó.</p>';
+ // Preserve only ticks for precisely the same trusted list and same session.
+ // Never carry approvals through a changed status, damage/cleanliness report,
+ // identity switch, loss of source trust or a physical-return completion.
+ if(sameWaitingList&&canReview){
+  for(const card of $('reviewList').querySelectorAll('[data-session]')){
+   const checked=checkedCards.get(card.dataset.session);
+   if(!checked)continue;
+   for(const input of card.querySelectorAll('input[data-check]'))
+    input.checked=checked.has(input.dataset.check);
+  }
+ }
  show('bulkPanel',canReview&&waiting.length>0);
  $('reviewList').querySelectorAll('input,button[data-review]').forEach(el=>el.disabled=busy);
  $('bulkPanel').querySelectorAll('input,button').forEach(el=>el.disabled=busy);
