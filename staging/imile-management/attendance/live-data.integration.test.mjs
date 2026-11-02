@@ -5,9 +5,9 @@ import {readFileSync} from 'node:fs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const app=readFileSync(new URL('./app.mjs',import.meta.url),'utf8');
 const specs=[
- ['checkin','async function checkin(e){','async function checkout(e){',/sourcesTrusted\(COURIER_SOURCES\)/,/uploadPhotos\(files,sessionId,'in'\)/],
- ['checkout','async function checkout(e){','async function reviewOne(',/sourcesTrusted\(COURIER_SOURCES\)/,/uploadPhotos\(files,session.id,'out'\)/],
- ['morning return','async function reviewOne(', "$('loginForm').addEventListener",/sourcesTrusted\(STAFF_SOURCES\)/,/runTransaction\(db/]
+ ['checkin','async function checkin(e){','async function checkout(e){',/(?:sourcesTrusted|ensureAttendanceSources)\(COURIER_SOURCES\)/,/uploadPhotos\(files,sessionId,'in'\)/],
+ ['checkout','async function checkout(e){','async function reviewOne(',/(?:sourcesTrusted|ensureAttendanceSources)\(COURIER_SOURCES\)/,/uploadPhotos\(files,session.id,'out'\)/],
+ ['morning return','async function reviewOne(', "$('loginForm').addEventListener",/(?:sourcesTrusted|ensureAttendanceSources)\(STAFF_SOURCES\)/,/runTransaction\(db/]
 ];
 for(const [label,start,end,gate,action] of specs){
  const from=app.indexOf(start),to=app.indexOf(end,from+start.length);
@@ -21,7 +21,7 @@ assert.match(app,/onSnapshot\(path,\{includeMetadataChanges:true\}/);
 assert.match(app,/fromCache:meta\.fromCache,pending:meta\.hasPendingWrites/);
 assert.match(app,/show\('checkinSection',false\);show\('checkoutSection',false\)/);
 assert.match(app,/show\('bulkPanel',false\)/);
-assert.match(app,/if\(!sourcesTrusted\(STAFF_SOURCES\)\)return toast/);
+assert.match(app,/await ensureAttendanceSources\(STAFF_SOURCES\)/);
 const required=['vehicles','locks','courierClaim','sessions'];
 const ready=Object.fromEntries(required.map(x=>[x,{loaded:true,error:false,fromCache:false,pending:false,serverAt:Date.now()}]));
 assert.equal(assessSources(ready,{required}).trusted,true);

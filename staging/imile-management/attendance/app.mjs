@@ -1,6 +1,6 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDocFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {getStorage,ref as storageRef,uploadBytes,getBlob} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
@@ -9,7 +9,7 @@ import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
-let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={};
+let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
 const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
 const STAFF_SOURCES=['vehicles','locks','sessions','drivers','accesses','plans'];
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
@@ -35,7 +35,7 @@ function subscribe(path,onData,sourceName){
   onData(snapshot);render();
  },error=>{
   sourceMeta[sourceName]={...(sourceMeta[sourceName]||{}),loaded:false,error:true};
-  toast('Nincs hiteles adatkapcsolat: '+error.message,true);setBusy(true);render();
+  toast('Nincs hiteles adatkapcsolat: '+error.message,true);render();
  });
  unsubs.push(unsubscribe);
 }
@@ -87,6 +87,51 @@ function startStaff(){
  subscribe(collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()})),'accesses');
  subscribe(collection(db,'courierDayPlans'),s=>data.plans=s.docs.map(d=>({id:d.id,...d.data()})),'plans');
 }
+
+/**
+ * A long courier shift can leave unchanged snapshots older than 15 minutes.
+ * Explicit server reads renew the source evidence WITHOUT guessing online
+ * freshness, and WITHOUT using Google Sheets or mutating any records.
+ * The subsequent Firestore transaction always revalidates car/session locks.
+ */
+async function refreshAttendanceSources(){
+ if(!user||!navigator.onLine)throw Error('Az adatok frissítéséhez internetkapcsolat szükséges.');
+ const principal=user.uid,principalIsStaff=isStaff;
+ const courierSessions=query(collection(db,'vehicleSessions'),where('uid','==',user.uid));
+ const targets=isStaff?[
+  ['vehicles',collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['locks',collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['sessions',collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['drivers',collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['accesses',collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['plans',collection(db,'courierDayPlans'),s=>data.plans=s.docs.map(d=>({id:d.id,...d.data()}))]
+ ]:[
+  ['vehicles',collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['locks',collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['courierClaim',doc(db,'courierLocks',user.uid),s=>data.courierClaim=s.exists()?{id:s.id,...s.data()}:null],
+  ['sessions',courierSessions,s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()}))]
+ ];
+ const snapshots=await Promise.all(targets.map(async ([,reference])=>
+  reference.type==='document'?getDocFromServer(reference):getDocsFromServer(reference)));
+ if(!navigator.onLine)throw Error('A frissítés közben megszakadt az internetkapcsolat.');
+ if(!user||user.uid!==principal||isStaff!==principalIsStaff)throw Error('A belépett felhasználó időközben megváltozott.');
+ // All server reads must succeed before committing any UI state or trust.
+ const receivedAt=Date.now();
+ if(isStaff)resetBulkApproval();
+ for(let i=0;i<targets.length;i++){
+  const [name,,onData]=targets[i];
+  onData(snapshots[i]);
+  sourceMeta[name]={loaded:true,fromCache:false,pending:false,error:false,serverAt:receivedAt};
+ }
+ render();
+ const required=isStaff?STAFF_SOURCES:COURIER_SOURCES;
+ if(!sourcesTrusted(required))throw Error('Az újraolvasott adatok még nem hitelesek.');
+}
+async function ensureAttendanceSources(required){
+ if(sourcesTrusted(required))return;
+ await refreshAttendanceSources();
+ if(!sourcesTrusted(required))throw Error('A szerveres adatok ellenőrzése sikertelen.');
+}
 function renderCourier(){
  if(!sourcesTrusted(COURIER_SOURCES)){
   show('checkinSection',false);show('checkoutSection',false);show('waitingSection',false);
@@ -132,8 +177,12 @@ function renderRoster(){
  }).join(''):'<p class="empty">Még nincs futár-előrejelzés erre a napra.</p>';
  $('rosterForm').querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='rosterDate')el.disabled=!['admin','editor'].includes(staffRole);});
 }
+function resetBulkApproval(){
+ for(const key of ['bulkCars','bulkKeys','bulkClean'])$(key).checked=false;
+}
 function renderStaff(){
  if(!sourcesTrusted(STAFF_SOURCES)){
+  resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -144,6 +193,10 @@ function renderStaff(){
   return;
  }
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
+ // Any newly checked-out/removed vehicle invalidates the earlier bulk
+ // confirmation; the manager must physically check the UPDATED list.
+ const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
+ if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
  $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Ellenőrzött szabad autó',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  $('activeList').innerHTML=active.length?active.map(s=>'<article class="vehicle">'+adminSession(s)+'</article>').join(''):'<p class="empty">Nincs aktív kiadás.</p>';
@@ -161,7 +214,7 @@ async function checkin(e){
  e.preventDefault();if(busy)return;setBusy(true);
  try{
   if(!navigator.onLine)throw Error('Internetkapcsolat nélkül nem lehet autót átvenni.');
-  if(!sourcesTrusted(COURIER_SOURCES))throw Error('A szabad autók adatai még nincsenek szerverrel ellenőrizve.');
+  await ensureAttendanceSources(COURIER_SOURCES);
   const form=e.target,plate=PLATE(form.elements.plate.value),km=Number(form.elements.km.value);
   if(!form.elements.condition.checked)throw Error('Ellenőrizd a járművet.');
   const files=allPhotoFiles(form);
@@ -185,7 +238,7 @@ async function checkout(e){
  e.preventDefault();if(busy)return;setBusy(true);
  try{
   if(!navigator.onLine)throw Error('Internetkapcsolat nélkül nem lehet kijelentkezni.');
-  if(!sourcesTrusted(COURIER_SOURCES))throw Error('Az aktuális autóhasználatot még nem igazolta vissza a szerver.');
+  await ensureAttendanceSources(COURIER_SOURCES);
   const form=e.target,claim=ownClaim(),session=activeSession();
   if(!claim||!session)throw Error('Nincs aktív autóhasználat.');
   if(!form.elements.keyDropped.checked)throw Error('Előbb tedd a kulcsot a ládába.');
@@ -206,7 +259,7 @@ async function checkout(e){
  }catch(error){toast('Kicsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
 }
 async function reviewOne(sessionId,{car,key,clean,damage}){
- if(!sourcesTrusted(STAFF_SOURCES))throw Error('A reggeli visszavételhez friss, szerverrel ellenőrzött adatok szükségesek.');
+ await ensureAttendanceSources(STAFF_SOURCES);
  const sRef=doc(db,'vehicleSessions',sessionId);
  await runTransaction(db,async tx=>{
   const s=await tx.get(sRef);
@@ -223,6 +276,13 @@ async function reviewOne(sessionId,{car,key,clean,damage}){
 }
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();setBusy(true);try{const f=new FormData(e.target);await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(err){toast('Belépés sikertelen. Ellenőrizd a hozzáférésedet.',true);}finally{setBusy(false);}});
 $('logout').addEventListener('click',()=>signOut(auth));
+$('refreshAttendanceData').addEventListener('click',async ()=>{
+ if(!user||busy)return;
+ setBusy(true);
+ try{await refreshAttendanceSources();toast('A járműadatok szerverről frissítve.');}
+ catch(err){toast('Nem sikerült frissíteni: '+err.message,true);}
+ finally{setBusy(false);}
+});
 $('checkinForm').addEventListener('submit',checkin);
 $('rosterForm').addEventListener('submit',async e=>{
  e.preventDefault();if(busy||!['admin','editor'].includes(staffRole))return;
@@ -284,7 +344,7 @@ $('reviewList').addEventListener('click',async e=>{
 });
 $('bulkReview').addEventListener('click',async ()=>{
  if(busy)return;
- if(!sourcesTrusted(STAFF_SOURCES))return toast('Nincs hiteles adatkapcsolat: az összes visszavétel tiltva.',true);
+ try{await ensureAttendanceSources(STAFF_SOURCES);}catch(err){return toast('Nincs hiteles adatkapcsolat: '+err.message,true);}
  const selected=data.sessions.filter(x=>x.status==='awaiting_review');
  const result=bulkReviewEligible({sessions:selected,physicallyChecked:$('bulkCars').checked,keysChecked:$('bulkKeys').checked});
  if(!result.ok||!$('bulkClean').checked)return toast('Összes visszavétel tiltva: '+(result.reason||'Tisztasági ellenőrzés szükséges.'),true);
@@ -296,9 +356,11 @@ $('bulkReview').addEventListener('click',async ()=>{
  }catch(err){toast('Részleges visszavétel: '+ok+'/'+selected.length+'. A többi autó zárolva marad. '+err.message,true);}
  finally{setBusy(false);}
 });
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&user)render();});
+setInterval(()=>{if(user&&!document.hidden)render();},60000);
 onAuthStateChanged(auth,async u=>{
- clearSubscriptions();user=u;access=null;isStaff=false;staffRole='';
- show('loginPanel',!u);show('loadingPanel',!!u);show('courierPanel',false);show('adminPanel',false);show('deniedPanel',false);show('logout',!!u);
+ clearSubscriptions();user=u;access=null;isStaff=false;staffRole='';lastWaitingSignature='';resetBulkApproval();
+ show('loginPanel',!u);show('loadingPanel',!!u);show('courierPanel',false);show('adminPanel',false);show('deniedPanel',false);show('logout',!!u);show('refreshAttendanceData',!!u);
  if(!u)return;
  try{
   const [staff,courier]=await Promise.all([getDocFromServer(doc(db,'users',u.uid)),getDocFromServer(doc(db,'courierAccess',u.uid))]);
