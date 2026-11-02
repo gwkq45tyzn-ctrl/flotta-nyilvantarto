@@ -8,6 +8,7 @@ import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable,sha256Blob as sha256} from './photo-upload.mjs';
 import {buildFleetOverview} from './fleet-overview.mjs';
 import {auditCourierAccess} from './access-audit.mjs';
+import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 import {encodeJpeg,validPhotoFile} from './photo-codec.mjs';
 import {photoProofMatches} from './photo-proof.mjs';
@@ -21,7 +22,7 @@ const canReviewVehicles=()=>isStaff&&['admin','editor'].includes(staffRole);
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
 const sourcesTrusted=required=>sourceHealth(required).trusted;
 const tomorrow=()=>{const today=new Date(day()+'T12:00:00Z');today.setUTCDate(today.getUTCDate()+1);return today.toISOString().slice(0,10);};
-let rosterDate='';
+let rosterDate='',dailyReportDate='';
 let authGeneration=0,pendingCheckIn=null;
 const photoCache=new Map();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,8 +185,8 @@ function renderRoster(){
  const drivers=data.drivers.filter(x=>x.active===true&&allowed.has(x.id));
  driverSelect.innerHTML='<option value="">Válassz futárt…</option>'+drivers.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.id)+'</option>').join('');
  if(drivers.some(x=>x.id===previous))driverSelect.value=previous;
- const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,plans:data.plans,accesses:data.accesses});
- if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv.';return;}
+ const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,driverLocks:data.driverLocks,plans:data.plans,accesses:data.accesses});
+ if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv: '+report.reason;return;}
  const kpis=[['Üzemképes autók',report.operationalCars],['Aktív Attendance nélkül',report.physicallyReady],
   ['Tervezett futárok',report.plannedCouriers],['Megerősített futárok',report.confirmedCouriers],
   ['Hiányzó megerősített futárok',report.missingConfirmed],['Használatban lévő autók',report.inUseCars],
@@ -205,6 +206,9 @@ function renderStaff(){
  if(!sourcesTrusted(STAFF_SOURCES)){
   resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
+  $('dailyReport').textContent='A napi kilométeradatok szerveres megerősítésre várnak.';
+  $('dailyDate').disabled=true;
+  $('exportDailyCsv').disabled=true;
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -215,12 +219,38 @@ function renderStaff(){
   show('bulkPanel',false);
   return;
  }
+ $('dailyDate').disabled=false;
+ $('exportDailyCsv').disabled=false;
  const canReview=canReviewVehicles();
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
  // confirmation; the manager must physically check the UPDATED list.
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote,x.cleanlinessNote].join(':')).sort().join('|');
  if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
+ const daily=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
+ $('dailyDate').max=day();
+ if(!dailyReportDate) $('dailyDate').value=day();
+ if(!daily.ready){
+  $('dailyReport').textContent='A napi riport nem számítható: '+daily.reason;
+ }else{
+  const overview='<div class="stats">'+[
+   ['Becsekkolások a napon',daily.checkins],['Kicsekkolások a napon',daily.checkouts],
+   ['Bejelentett km',daily.reportedKm],['Visszaigazolt km',daily.reviewedKm],
+   ['Visszaadásra vár (összes)',daily.awaitingReviewNow],
+   ['Adateltérések',daily.issues.length]
+  ].map(([label,value])=>'<div class="stat"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>').join('')+'</div>';
+  const drivers=daily.couriers.map(row=>'<article class="vehicle"><strong>'+esc(row.driverId)
+   +'</strong><div class="meta">Kicsekkolás: '+esc(row.checkouts)
+   +' · Bejelentett km: '+esc(row.reportedKm)
+   +' · Visszaigazolt km: '+esc(row.reviewedKm)
+   +' · Autó(k): '+esc(row.plates.join(', ')||'—')+'</div></article>').join('')
+   ||'<p class="empty">Ma még nincs kilométerrel lezárt cégesautó-használat.</p>';
+  const problems=daily.issues.length?'<p class="hint">Ellenőrzendő események: '
+   +daily.issues.map(x=>esc(x.id)+' ('+esc(x.reason)+')').join('; ')+'</p>':'';
+  $('dailyReport').innerHTML=overview+'<div class="stack">'+drivers+'</div>'+problems;
+ }
+
+
  const accessReport=auditCourierAccess(data.accesses);
  const warnings=[
   ...accessReport.duplicates.map(x=>x.driverId+': '+x.activeAccounts+' aktív hozzáférés ugyanahhoz a DA-kódhoz.'),
@@ -371,6 +401,20 @@ $('rosterForm').addEventListener('submit',async e=>{
  }catch(error){toast('Nem menthető a terv: '+error.message,true);}finally{setBusy(false);}
 });
 $('rosterDate').addEventListener('change',e=>{rosterDate=e.target.value;renderRoster();});
+$('dailyDate').addEventListener('change',e=>{dailyReportDate=e.target.value;if(user&&isStaff)renderStaff();});
+$('exportDailyCsv').addEventListener('click',()=>{
+ if(!user||!isStaff||!sourcesTrusted(STAFF_SOURCES))
+  return toast('A napi riport exportjához hiteles szerveres adatok szükségesek.',true);
+ const report=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
+ if(!report.ready)return toast('A napi riport nem exportálható: '+report.reason,true);
+ const bytes=attendanceReportCsv(report);
+ const url=URL.createObjectURL(new Blob([bytes],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');
+ link.href=url;link.download='imile-attendance-'+report.date+'.csv';
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+
 $('checkoutForm').addEventListener('submit',checkout);
 let shownPhotoUrls=[];
 async function openPhotos(sessionId){
