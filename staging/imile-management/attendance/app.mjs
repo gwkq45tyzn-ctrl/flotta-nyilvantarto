@@ -5,9 +5,14 @@ import {getStorage,ref as storageRef,uploadBytes,getBlob} from 'https://www.gsta
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
+import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
-let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false;
+let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={};
+const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
+const STAFF_SOURCES=['vehicles','locks','sessions','drivers','accesses','plans'];
+const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
+const sourcesTrusted=required=>sourceHealth(required).trusted;
 const tomorrow=()=>{const today=new Date(day()+'T12:00:00Z');today.setUTCDate(today.getUTCDate()+1);return today.toISOString().slice(0,10);};
 let rosterDate='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -19,13 +24,21 @@ function photoInputs(root,stage){
  // Mobile browsers may use camera or file picker. Never persist photos on device.
 }
 photoInputs('inPhotos','in');photoInputs('outPhotos','out');
-function subscribe(path,onData){
- const unsubscribe=onSnapshot(path,snapshot=>{
+function subscribe(path,onData,sourceName){
+ const unsubscribe=onSnapshot(path,{includeMetadataChanges:true},snapshot=>{
+  const meta=snapshot.metadata,prior=sourceMeta[sourceName]||{};
+  sourceMeta[sourceName]={
+   loaded:true,fromCache:meta.fromCache,pending:meta.hasPendingWrites,error:false,
+   serverAt:!meta.fromCache&&!meta.hasPendingWrites?Date.now():prior.serverAt
+  };
   onData(snapshot);render();
- },error=>{toast('Nincs hiteles adatkapcsolat: '+error.message,true);setBusy(true);});
+ },error=>{
+  sourceMeta[sourceName]={...(sourceMeta[sourceName]||{}),loaded:false,error:true};
+  toast('Nincs hiteles adatkapcsolat: '+error.message,true);setBusy(true);render();
+ });
  unsubs.push(unsubscribe);
 }
-function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null};}
+function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];sourceMeta={};data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null};}
 function setBusy(value){busy=value;for(const id of ['checkinButton','checkoutButton','bulkReview'])$(id).disabled=value;}
 function allPhotoFiles(form){
  return PHOTO_KEYS.map(key=>{
@@ -53,20 +66,25 @@ async function uploadPhotos(files,sessionId,stage){
 const ownClaim=()=>data.courierClaim;
 const activeSession=()=>data.sessions.find(s=>s.id===ownClaim()?.sessionId);
 function startCourier(){
- subscribe(collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(doc(db,'courierLocks',user.uid),s=>data.courierClaim=s.exists()?{id:s.id,...s.data()}:null);
- subscribe(query(collection(db,'vehicleSessions'),where('uid','==',user.uid)),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})));
+ subscribe(collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()})),'vehicles');
+ subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})),'locks');
+ subscribe(doc(db,'courierLocks',user.uid),s=>data.courierClaim=s.exists()?{id:s.id,...s.data()}:null,'courierClaim');
+ subscribe(query(collection(db,'vehicleSessions'),where('uid','==',user.uid)),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})),'sessions');
 }
 function startStaff(){
- subscribe(collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()})));
- subscribe(collection(db,'courierDayPlans'),s=>data.plans=s.docs.map(d=>({id:d.id,...d.data()})));
+ subscribe(collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()})),'vehicles');
+ subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})),'locks');
+ subscribe(collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})),'sessions');
+ subscribe(collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()})),'drivers');
+ subscribe(collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()})),'accesses');
+ subscribe(collection(db,'courierDayPlans'),s=>data.plans=s.docs.map(d=>({id:d.id,...d.data()})),'plans');
 }
 function renderCourier(){
+ if(!sourcesTrusted(COURIER_SOURCES)){
+  show('checkinSection',false);show('checkoutSection',false);show('waitingSection',false);
+  $('courierStatus').textContent='A szerveres autóadatok ellenőrzésére várunk. '+sourceHealth(COURIER_SOURCES).message;
+  return;
+ }
  $('courierName').textContent='Futár · '+access.driverId;
  const claim=ownClaim(),session=activeSession();
  show('checkinSection',!claim);show('checkoutSection',!!claim&&session?.status==='active');
@@ -107,6 +125,16 @@ function renderRoster(){
  $('rosterForm').querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='rosterDate')el.disabled=!['admin','editor'].includes(staffRole);});
 }
 function renderStaff(){
+ if(!sourcesTrusted(STAFF_SOURCES)){
+  $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
+  $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
+  $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
+  $('rosterStats').textContent='A létszámadatok ellenőrzése folyamatban.';
+  $('rosterList').textContent='';
+  $('rosterForm').querySelectorAll('input,select,button').forEach(el=>el.disabled=true);
+  show('bulkPanel',false);
+  return;
+ }
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
  $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Ellenőrzött szabad autó',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
@@ -125,6 +153,7 @@ async function checkin(e){
  e.preventDefault();if(busy)return;setBusy(true);
  try{
   if(!navigator.onLine)throw Error('Internetkapcsolat nélkül nem lehet autót átvenni.');
+  if(!sourcesTrusted(COURIER_SOURCES))throw Error('A szabad autók adatai még nincsenek szerverrel ellenőrizve.');
   const form=e.target,plate=PLATE(form.elements.plate.value),km=Number(form.elements.km.value);
   if(!form.elements.condition.checked)throw Error('Ellenőrizd a járművet.');
   const files=allPhotoFiles(form);
@@ -148,6 +177,7 @@ async function checkout(e){
  e.preventDefault();if(busy)return;setBusy(true);
  try{
   if(!navigator.onLine)throw Error('Internetkapcsolat nélkül nem lehet kijelentkezni.');
+  if(!sourcesTrusted(COURIER_SOURCES))throw Error('Az aktuális autóhasználatot még nem igazolta vissza a szerver.');
   const form=e.target,claim=ownClaim(),session=activeSession();
   if(!claim||!session)throw Error('Nincs aktív autóhasználat.');
   if(!form.elements.keyDropped.checked)throw Error('Előbb tedd a kulcsot a ládába.');
@@ -168,6 +198,7 @@ async function checkout(e){
  }catch(error){toast('Kicsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
 }
 async function reviewOne(sessionId,{car,key,clean,damage}){
+ if(!sourcesTrusted(STAFF_SOURCES))throw Error('A reggeli visszavételhez friss, szerverrel ellenőrzött adatok szükségesek.');
  const sRef=doc(db,'vehicleSessions',sessionId);
  await runTransaction(db,async tx=>{
   const s=await tx.get(sRef);
@@ -245,6 +276,7 @@ $('reviewList').addEventListener('click',async e=>{
 });
 $('bulkReview').addEventListener('click',async ()=>{
  if(busy)return;
+ if(!sourcesTrusted(STAFF_SOURCES))return toast('Nincs hiteles adatkapcsolat: az összes visszavétel tiltva.',true);
  const selected=data.sessions.filter(x=>x.status==='awaiting_review');
  const result=bulkReviewEligible({sessions:selected,physicallyChecked:$('bulkCars').checked,keysChecked:$('bulkKeys').checked});
  if(!result.ok||!$('bulkClean').checked)return toast('Összes visszavétel tiltva: '+(result.reason||'Tisztasági ellenőrzés szükséges.'),true);
