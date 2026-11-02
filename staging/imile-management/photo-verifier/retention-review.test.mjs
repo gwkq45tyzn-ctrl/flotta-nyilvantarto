@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {photoRetentionReview as review} from './retention-review.mjs';
+const uid='qa_retention',sid='s_'+'a'.repeat(32),now=20*86400000,name='attendance/'+uid+'/'+sid+'/in/front.jpg';
+const base={object:{name,generation:'123',createdAt:100},session:{uid,id:sid,status:'reviewed',reviewedAt:200},permit:{uid,sessionId:sid,inExpiresAt:300,outExpiresAt:400,resumeUntil:500},lease:{status:'revoked',resumeUntil:500},locks:[],receipt:{uid,sessionId:sid,stage:'in',verified:true,objects:{front:{name,generation:'123'}}},now,days:7,inventoryTrusted:true};
+test('eligible reviewed original is review-only, never deletion approval',()=>assert.deepEqual(review(base),{action:'REVIEW_CANDIDATE_ONLY',reason:'REVIEWED_PHOTO',deleteAuthorized:false,generation:'123'}));
+test('active and awaiting-review sessions stay protected',()=>{for(const status of ['active','awaiting_review'])assert.equal(review({...base,session:{...base.session,status}}).action,'HOLD');});
+test('any lock or legal hold protects original',()=>{assert.equal(review({...base,locks:[{sessionId:sid}]}).action,'HOLD');assert.equal(review({...base,legalHold:true}).action,'HOLD');});
+test('live permit/resume window and unknown metadata fail closed',()=>{for(const patch of [{permit:null},{inventoryTrusted:false},{locks:undefined},{permit:{...base.permit,outExpiresAt:now+1}},{lease:{status:'open'}}])assert.equal(review({...base,...patch}).action,'HOLD');});
+test('original generations and revoked proofs cannot be silently purged',()=>{assert.equal(review({...base,object:{...base.object,generation:'124'}}).action,'HOLD');assert.equal(review({...base,receipt:{...base.receipt,verified:false}}).action,'HOLD');});
+test('retention starts after final review and resume horizon',()=>assert.equal(review({...base,session:{...base.session,reviewedAt:now-1000}}).reason,'RETENTION_WINDOW_OPEN'));
+test('known abandoned expired stage is only a manual review candidate',()=>{assert.equal(review({...base,session:null,receipt:null}).reason,'ABANDONED_EXPIRED_UPLOAD');assert.equal(review({...base,session:null,receipt:null,permit:null}).action,'HOLD');});
+test('quota/journal/log records and other paths outside photo scope never eligible',()=>{for(const name of ['photoUploadQuotas/day','photoUploadRequests/id','logs/a','attendance/other/'+sid+'/in/front.jpg'])assert.equal(review({...base,object:{...base.object,name}}).action,'HOLD');});

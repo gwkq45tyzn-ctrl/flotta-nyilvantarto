@@ -1,0 +1,355 @@
+{
+  "observedAt": "2026-11-02T13:06:14.705Z",
+  "repository": "gwkq45tyzn-ctrl/flotta-nyilvantarto",
+  "pinnedBaseline": "fbf5a04a0537f3525d72f9a7029f7a3e2bc1ee8a",
+  "stack": [
+    {
+      "number": 62,
+      "head": "fbf5a04a0537f3525d72f9a7029f7a3e2bc1ee8a",
+      "headRef": "qa/attendance-appcheck-20261102",
+      "base": "7fe729528c5cf1900f8fedadaa60d36cc98dafc1",
+      "baseRef": "qa/attendance-upload-quota-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 60,
+      "head": "7fe729528c5cf1900f8fedadaa60d36cc98dafc1",
+      "headRef": "qa/attendance-upload-quota-20261102",
+      "base": "d8ae8239176c5df4f4b6e9438f7910d7f1c0395c",
+      "baseRef": "qa/attendance-storage-lock-chain-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 59,
+      "head": "d8ae8239176c5df4f4b6e9438f7910d7f1c0395c",
+      "headRef": "qa/attendance-storage-lock-chain-20261102",
+      "base": "5655132574788d4f9703481e890cbceb27d2c405",
+      "baseRef": "qa/attendance-storage-stage-guard-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 58,
+      "head": "5655132574788d4f9703481e890cbceb27d2c405",
+      "headRef": "qa/attendance-storage-stage-guard-20261102",
+      "base": "0ddad27392c4eb56d64228be483d510166333811",
+      "baseRef": "qa/attendance-condition-csv-detail-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 57,
+      "head": "0ddad27392c4eb56d64228be483d510166333811",
+      "headRef": "qa/attendance-condition-csv-detail-20261102",
+      "base": "962eee9a05625ccc6c5556486b62d171a305d0dc",
+      "baseRef": "qa/attendance-incidents-invalid-mileage-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 56,
+      "head": "962eee9a05625ccc6c5556486b62d171a305d0dc",
+      "headRef": "qa/attendance-incidents-invalid-mileage-20261102",
+      "base": "fc0d0144abd2a14698c951a0887f539909e215d9",
+      "baseRef": "qa/photo-receipt-revoke-disabled-account-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 55,
+      "head": "fc0d0144abd2a14698c951a0887f539909e215d9",
+      "headRef": "qa/photo-receipt-revoke-disabled-account-20261102",
+      "base": "97e1554c00397471d67d7fab595f4eee0df6f710",
+      "baseRef": "qa/private-photo-verifier-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 54,
+      "head": "97e1554c00397471d67d7fab595f4eee0df6f710",
+      "headRef": "qa/private-photo-verifier-20261102",
+      "base": "86107df4e7e56895e9e72656d508a63308b351ab",
+      "baseRef": "qa/attendance-condition-daily-report-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 53,
+      "head": "86107df4e7e56895e9e72656d508a63308b351ab",
+      "headRef": "qa/attendance-condition-daily-report-20261102",
+      "base": "a896e3e3fd0fcc4da2134e023e0a880015064c2a",
+      "baseRef": "qa/depo-active-driver-capacity-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 52,
+      "head": "a896e3e3fd0fcc4da2134e023e0a880015064c2a",
+      "headRef": "qa/depo-active-driver-capacity-20261102",
+      "base": "4b914b85195a311d0ac778ec24c622b9ec812e8c",
+      "baseRef": "qa/attendance-review-checkbox-persist-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 51,
+      "head": "4b914b85195a311d0ac778ec24c622b9ec812e8c",
+      "headRef": "qa/attendance-review-checkbox-persist-20261102",
+      "base": "34a6b0ac52a10182d73d441b7b4055d0ec897bd9",
+      "baseRef": "qa/imile-unified-attendance-report-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 50,
+      "head": "34a6b0ac52a10182d73d441b7b4055d0ec897bd9",
+      "headRef": "qa/imile-unified-attendance-report-20261102",
+      "base": "b8a3dd9ff576be0a1b988c45ec2e61d9097a72ff",
+      "baseRef": "qa/attendance-retry-and-review-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 47,
+      "head": "b8a3dd9ff576be0a1b988c45ec2e61d9097a72ff",
+      "headRef": "qa/attendance-retry-and-review-20261102",
+      "base": "c6933ac5467ee9378af97f8d30e00bc7581c81cf",
+      "baseRef": "qa/attendance-courier-access-audit-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 46,
+      "head": "c6933ac5467ee9378af97f8d30e00bc7581c81cf",
+      "headRef": "qa/attendance-courier-access-audit-20261102",
+      "base": "f96287d9fc766de9171fd38e1d152db11bd41958",
+      "baseRef": "qa/attendance-driver-lock-audit-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 45,
+      "head": "f96287d9fc766de9171fd38e1d152db11bd41958",
+      "headRef": "qa/attendance-driver-lock-audit-20261102",
+      "base": "7c84557bab88ae9f5063bfc6977a4b48a1bb60e5",
+      "baseRef": "qa/attendance-driver-code-lock-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 44,
+      "head": "7c84557bab88ae9f5063bfc6977a4b48a1bb60e5",
+      "headRef": "qa/attendance-driver-code-lock-20261102",
+      "base": "d01cfa6c80aaf466baf6a792812dacbe5a629576",
+      "baseRef": "qa/attendance-staff-role-controls-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 43,
+      "head": "d01cfa6c80aaf466baf6a792812dacbe5a629576",
+      "headRef": "qa/attendance-staff-role-controls-20261102",
+      "base": "2670081b4356a9d98929be58e6f4a59bf34139cc",
+      "baseRef": "qa/attendance-capacity-plate-dedupe-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 42,
+      "head": "2670081b4356a9d98929be58e6f4a59bf34139cc",
+      "headRef": "qa/attendance-capacity-plate-dedupe-20261102",
+      "base": "e0e6daf33f94be0f9a64e473be6e52c33860033f",
+      "baseRef": "qa/attendance-truthful-fleet-overview-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 41,
+      "head": "e0e6daf33f94be0f9a64e473be6e52c33860033f",
+      "headRef": "qa/attendance-truthful-fleet-overview-20261102",
+      "base": "d49ffaa347243e1ccb653b4b5f5d4cbf34f2bb80",
+      "baseRef": "qa/attendance-shift-refresh-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 40,
+      "head": "d49ffaa347243e1ccb653b4b5f5d4cbf34f2bb80",
+      "headRef": "qa/attendance-shift-refresh-20261102",
+      "base": "40b4a968ccc056090e639760b3cfb3e45cfd3b74",
+      "baseRef": "qa/attendance-photo-retry-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 39,
+      "head": "40b4a968ccc056090e639760b3cfb3e45cfd3b74",
+      "headRef": "qa/attendance-photo-retry-20261102",
+      "base": "6845fa3c9b3dc93c4b68173184f1fc662c9fae9e",
+      "baseRef": "qa/attendance-live-data-guard-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 37,
+      "head": "6845fa3c9b3dc93c4b68173184f1fc662c9fae9e",
+      "headRef": "qa/attendance-live-data-guard-20261102",
+      "base": "dfcd6b5e5682214223c98530293ef0ba3bacde75",
+      "baseRef": "qa/attendance-storage-emulator-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 36,
+      "head": "dfcd6b5e5682214223c98530293ef0ba3bacde75",
+      "headRef": "qa/attendance-storage-emulator-20261102",
+      "base": "cae924174643b817e90221b090bcf2b85e6017f5",
+      "baseRef": "qa/depo-own-attendance-cutover-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 35,
+      "head": "cae924174643b817e90221b090bcf2b85e6017f5",
+      "headRef": "qa/depo-own-attendance-cutover-20261101",
+      "base": "4ba21cc53c50e5eadf889acb1bcf2bc17c1cc572",
+      "baseRef": "qa/self-service-attendance-core-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 34,
+      "head": "5a70ea0fc5e69192ddd4b27a9185da6b8c42539d",
+      "headRef": "qa/self-service-attendance-core-20261101",
+      "base": "cf1735126c4ebf25a4f1b906afdd191a29855ef7",
+      "baseRef": "qa/depo-vehicle-status-alerts-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 33,
+      "head": "cf1735126c4ebf25a4f1b906afdd191a29855ef7",
+      "headRef": "qa/depo-vehicle-status-alerts-20261101",
+      "base": "332a63f1158d3513fc7ea2cd74f14a7e24451f80",
+      "baseRef": "qa/attendance-source-header-gate-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 32,
+      "head": "332a63f1158d3513fc7ea2cd74f14a7e24451f80",
+      "headRef": "qa/attendance-source-header-gate-20261101",
+      "base": "6fb439299283b54e07fd5f632cbd87660f0e158e",
+      "baseRef": "qa/attendance-publisher-emulator-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 31,
+      "head": "6fb439299283b54e07fd5f632cbd87660f0e158e",
+      "headRef": "qa/attendance-publisher-emulator-20261101",
+      "base": "3c890a9c8fa838c81671eac3fe791a47f32bf8c6",
+      "baseRef": "qa/attendance-atomic-contract-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 29,
+      "head": "3c890a9c8fa838c81671eac3fe791a47f32bf8c6",
+      "headRef": "qa/attendance-atomic-contract-20261101",
+      "base": "30707b2857c7c239b0feda751f11672046fce66f",
+      "baseRef": "fix/depo-physical-booking-guard-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 28,
+      "head": "30707b2857c7c239b0feda751f11672046fce66f",
+      "headRef": "fix/depo-physical-booking-guard-20261101",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "baseRef": "staging/imile-management-integration",
+      "state": "open",
+      "draft": true
+    }
+  ],
+  "integratedSidePRs": [
+    {
+      "number": 49,
+      "head": "935d3fe667a65aff2f4574eb03af9a520592a2b3",
+      "base": "f24ff8a6fb4020e44ff6ea5f93a05e68675de7b6",
+      "headRef": "qa/attendance-daily-report-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 48,
+      "head": "f24ff8a6fb4020e44ff6ea5f93a05e68675de7b6",
+      "base": "c6933ac5467ee9378af97f8d30e00bc7581c81cf",
+      "headRef": "qa/depo-capacity-da-lock-consistency-20261102",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 27,
+      "head": "1a575cc87e6cbae7488e0982386d1c14327a2594",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "qa/depo-vehicle-booking-claims-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 24,
+      "head": "d78e1e0239854781da05cb7b59ea280931b80924",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "fix/cutover-source-quality-labels-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 23,
+      "head": "2fd4ea12e5de1ac0aee3a3da49eeaaa510909757",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "qa/core-fleet-stable-bundle-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 22,
+      "head": "e554fe877f580e611e7fdfc85f31f698167981d8",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "fix/core-fleet-live-source-guard-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 21,
+      "head": "e5dca34f4e7a6c9ff1b641ffa4838e67ee59fc5d",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "fix/fleet-today-reservations-20261101",
+      "state": "open",
+      "draft": true
+    },
+    {
+      "number": 20,
+      "head": "46687ded24b5693a217c31b6abd61054a8eea34e",
+      "base": "7224d626276a95f7781477cdc243c5f5e40670cf",
+      "headRef": "fix/fleet-service-history-safety-20261101",
+      "state": "open",
+      "draft": true
+    }
+  ],
+  "unrelatedOpenPRsNotAutoIncluded": [
+    16,
+    15,
+    14,
+    12,
+    9,
+    8,
+    7,
+    6,
+    3,
+    2
+  ]
+}

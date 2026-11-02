@@ -21,9 +21,16 @@ jobs:
     name: Staging – offline schema and web checks
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Pontos kiadási függőségek csak olvasó Git-ellenőrzése
+        run: |
+          node staging/imile-management/photo-verifier/release-manifest.mjs --fetch-dependencies
+          node --test staging/imile-management/photo-verifier/release-manifest.test.mjs
       - name: Staging Firebase webkonfiguráció ellenőrzése
         run: node depokapacitas/firebase-config.test.mjs
       - name: Mai fizikai és Attendance járműfoglalási védelem
@@ -153,7 +160,7 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore,storage,functions --project demo-imile-photo --config firebase.photo-verifier-emulator.json "node staging/imile-management/photo-verifier/emulator.test.mjs"
       - name: 'Szerveres fotókvóta és engedélyek – párhuzamos UID/DA és jogosultság-visszaélés'
         run: |
-          node --test staging/imile-management/photo-verifier/quota-policy.test.mjs staging/imile-management/photo-verifier/app-check.test.mjs staging/imile-management/photo-verifier/call-limits.test.mjs staging/imile-management/photo-verifier/pilot-preflight.test.mjs
+          node --test staging/imile-management/photo-verifier/quota-policy.test.mjs staging/imile-management/photo-verifier/app-check.test.mjs staging/imile-management/photo-verifier/call-limits.test.mjs staging/imile-management/photo-verifier/pilot-preflight.test.mjs staging/imile-management/photo-verifier/retention-review.test.mjs
           node staging/imile-management/photo-verifier/app-check-qa.mjs emulators:exec --only auth,firestore,storage,functions --project demo-imile-quota --config firebase.photo-quota-emulator.json "node staging/imile-management/photo-verifier/quota-qa.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
@@ -173,6 +180,17 @@ jobs:
 
       - name: Izolált, letölthető staging webcsomag építése
         run: node staging/imile-management/build-preview.mjs
+      - name: Commithoz kötött release manifest és webhash ellenőrzése
+        run: |
+          node staging/imile-management/photo-verifier/release-manifest.mjs release-manifest.json
+          node staging/imile-management/photo-verifier/release-manifest.mjs --verify release-manifest.json
+      - name: Kiadási manifest archiválása, nem Hosting-tartalom
+        uses: actions/upload-artifact@v4
+        with:
+          name: imile-staging-release-manifest
+          path: release-manifest.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Ellenőrzött staging webcsomag archiválása
         uses: actions/upload-artifact@v4
         with:
