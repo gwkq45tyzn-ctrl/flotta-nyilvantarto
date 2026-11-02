@@ -18,7 +18,7 @@ import {vehicleDisplayStatus} from './vehicle-display-status.mjs';
 import {planCapacity} from '../staging/imile-management/attendance/roster.mjs';
 
 const $=id=>document.getElementById(id);
-const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[],vehicleSessions:[],vehicleLocks:[],courierDayPlans:[],courierAccess:[]},unsubscribe:[],loaded:new Set(),errors:new Set()};
+const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[],vehicleSessions:[],vehicleLocks:[],driverLocks:[],courierDayPlans:[],courierAccess:[]},unsubscribe:[],loaded:new Set(),errors:new Set()};
 const names={overview:'Áttekintés',alerts:'Összes teendő',planning:'Beosztás és foglalás',drivers:'Futárok',vehicles:'Autók',demands:'Kerületi csomagigény',results:'Futárteljesítmény',attendance:'Jelenlét és fotók',import:'Excel és adatok',admin:'Felhasználók'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n||0).toLocaleString('hu-HU');
@@ -90,11 +90,11 @@ function centralTaskList(limit=null){
     more+jump+detail);
 }
 function ownCompanyCarPanel(){
- const required=['vehicles','vehicleSessions','vehicleLocks','courierDayPlans','courierAccess'];
+ const required=['vehicles','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess'];
  const trusted=assessSources(state.sourceMeta,{online:navigator.onLine,required});
  if(!trusted.trusted)return section('Saját cégesautós kapacitás','<p class="notice">Az új Attendance és futárterv forrásai még nem ellenőrzöttek: '+esc(trusted.message)+'</p>');
  const report=planCapacity({date:state.date,vehicles:get('vehicles'),locks:get('vehicleLocks'),
-  plans:get('courierDayPlans'),accesses:get('courierAccess')});
+  driverLocks:get('driverLocks'),plans:get('courierDayPlans'),accesses:get('courierAccess')});
  if(!report.ready)return section('Saját cégesautós kapacitás','<p class="notice">Nem számítható: '+esc(report.reason)+'</p>');
  const content='<div class="grid kpis">'+
   kpi('Üzemképes autók',report.operationalCars,'Szervizes és leállított kizárva')+
@@ -102,7 +102,7 @@ function ownCompanyCarPanel(){
   kpi('Megerősített futárok',report.confirmedCouriers,'Kizárólag cégesautós futárterv')+
   kpi('Hiányzó futárok',report.missingConfirmed,'Megerősített létszám alapján')+
   '</div><p class="inline-note">Tervezett futárok: '+fmt(report.plannedCouriers)+
-  ' · Még ellenőrizetlen járművek: '+fmt(report.unverifiedCars)+
+  ' · Digitálisan zárolt autók: '+fmt(report.unverifiedCars)+
   '. Nem előzetes rendszámfoglalás. <a href="../staging/imile-management/attendance/index.html">Saját Attendance megnyitása</a></p>';
  return section('Önálló futárlétszám és cégesautó-kapacitás · '+esc(state.date),content);
 }
@@ -248,7 +248,7 @@ function admin(){if(state.role!=='admin')return '';const legacyCompare=section('
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,alerts:alertsView,planning,drivers,vehicles,demands,results,attendance,import:imports,admin}[state.view];const tools=['overview','alerts'].includes(state.view)?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
 function listen(){
  for(const un of state.unsubscribe)un();state.unsubscribe=[];state.loaded=new Set();state.errors=new Set();state.sourceMeta={};
- for(const name of ['drivers','vehicles','driverCapacities','bookings','demands','results','sourceRows','fleetRecords','fleetAssignments','attendanceVehicleGuards','vehicleSessions','vehicleLocks','courierDayPlans','courierAccess',...(state.role==='admin'?['users']:[])]){
+ for(const name of ['drivers','vehicles','driverCapacities','bookings','demands','results','sourceRows','fleetRecords','fleetAssignments','attendanceVehicleGuards','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess',...(state.role==='admin'?['users']:[])]){
   const unsub=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
    state.data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));state.loaded.add(name);state.errors.delete(name);
    const meta=snap.metadata,confirmed=!meta.fromCache&&!meta.hasPendingWrites;
