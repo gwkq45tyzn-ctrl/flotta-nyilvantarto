@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
-import {doc,setDoc} from 'firebase/firestore';
+import {doc,setDoc,deleteDoc} from 'firebase/firestore';
 import {ref,uploadBytes,getMetadata,deleteObject} from 'firebase/storage';
 
 const projectId='demo-attendance-storage';
@@ -65,17 +65,59 @@ try {
   await check('oversized image blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'image/jpeg'},new Uint8Array(8*1024*1024+1)));
   await check('checkout upload requires a real active vehicle session',false,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
   await env.withSecurityRulesDisabled(async admin=>{
-    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,status:'active'});
-    await setDoc(doc(admin.firestore(),'courierLocks',owner),{plate:'ABC123',sessionId:sid,state:'active'});
+    await setDoc(doc(admin.firestore(),'driverLocks','DAX001'),{driverId:'DAX001',uid:other,plate:'XYZ987',sessionId:'s_'+'f'.repeat(32),state:'active'});
   });
-  await check('valid checkout image accepted for active vehicle',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
+  await check('check-in denied if canonical DA code is claimed by another UID',false,()=>store(ownerStore,file(owner,'in','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>deleteDoc(doc(admin.firestore(),'driverLocks','DAX001')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const db=admin.firestore();
+    await setDoc(doc(db,'vehicleSessions',sid),{uid:owner,driverId:'DAX001',plate:'ABC123',status:'active'});
+    await setDoc(doc(db,'courierLocks',owner),{plate:'ABC123',sessionId:sid,state:'active'});
+    await setDoc(doc(db,'vehicleLocks','ABC123'),{plate:'ABC123',uid:owner,driverId:'DAX001',sessionId:sid,state:'active'});
+    await setDoc(doc(db,'driverLocks','DAX001'),{driverId:'DAX001',uid:owner,plate:'ABC123',sessionId:sid,state:'active'});
+  });
+  await check('valid checkout image accepted for all matching locks',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>deleteDoc(doc(admin.firestore(),'driverLocks','DAX001')));
+  await check('checkout denied if canonical DA lock missing',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    await setDoc(doc(admin.firestore(),'driverLocks','DAX001'),{driverId:'DAX001',uid:owner,plate:'ABC123',sessionId:'s_'+'f'.repeat(32),state:'active'});
+  });
+  await check('checkout denied if DA lock points to another session',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const db=admin.firestore();
+    await setDoc(doc(db,'driverLocks','DAX001'),{driverId:'DAX001',uid:owner,plate:'ABC123',sessionId:sid,state:'active'});
+    await setDoc(doc(db,'vehicleLocks','ABC123'),{plate:'ABC123',uid:other,driverId:'DAX001',sessionId:sid,state:'active'});
+  });
+  await check('checkout denied if vehicle lock belongs to another UID',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const db=admin.firestore();
+    await setDoc(doc(db,'vehicleLocks','ABC123'),{plate:'ABC123',uid:owner,driverId:'DAX001',sessionId:sid,state:'active'});
+    await setDoc(doc(db,'courierLocks',owner),{plate:'XYZ987',sessionId:sid,state:'active'});
+  });
+  await check('checkout denied if courier lock has another plate',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const db=admin.firestore();
+    await setDoc(doc(db,'courierLocks',owner),{plate:'ABC123',sessionId:sid,state:'active'});
+    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX999',active:true});
+  });
+  await check('checkout denied after courier DA access changed',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    const db=admin.firestore();
+    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX001',active:true});
+    await setDoc(doc(db,'vehicleSessions',sid),{uid:other,driverId:'DAX001',plate:'ABC123',status:'active'});
+  });
+  await check('checkout denied if active session owner does not match',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
+  await env.withSecurityRulesDisabled(async admin=>{
+    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,driverId:'DAX001',plate:'ABC123',status:'active'});
+  });
+  await check('checkout accepted after restoring all consistent claims',true,()=>store(ownerStore,file(owner,'out','right.jpg')));
   await check('new check-in photo denied during an outstanding vehicle lock',false,()=>store(ownerStore,file(owner,'in','back.jpg')));
   await env.withSecurityRulesDisabled(async admin=>{
     await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,status:'awaiting_review'});
   });
   await check('new checkout image denied after checked-out status',false,()=>store(ownerStore,file(owner,'out','left.jpg')));
   await check('storage paths outside attendance denied',false,()=>store(ownerStore,'private/tracking.jpg'));
-  assert.equal(successes,24);
+  assert.equal(successes,32);
   console.log('PASS: '+successes+' Storage/Firestore security checks; synthetic image bytes only');
 }finally{
   await env.cleanup();
