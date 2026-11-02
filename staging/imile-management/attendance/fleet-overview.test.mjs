@@ -24,7 +24,8 @@ assert.equal(out.rows[0].state,'review_required','Conflicting lock status needs 
 out=buildFleetOverview({vehicles:v,locks:[locks[0],{...locks[0]}],sessions,driverLocks});
 assert.equal(out.rows[0].state,'review_required','Duplicate claim must not become free');
 out=buildFleetOverview({vehicles:v,locks:[{plate:'UNKNOWN',sessionId:'session_x',driverId:'DA0003'}],sessions,driverLocks});
-assert.equal(out.unmatchedLocks.length,1,'Unknown claimed car must be surfaced');
+assert.ok(out.unmatchedLocks.some(x=>x.plate==='UNKNOWN'),'Unknown claimed car must be surfaced');
+assert.ok(out.unmatchedLocks.some(x=>/DA-kód szerinti autózár/.test(x.text)),'Unpaired DA locks must also be surfaced');
 out=buildFleetOverview({vehicles:[v[0],{plate:'ABC123',status:'Elérhető'}],locks:[],sessions:[],driverLocks});
 assert.ok(out.rows.some(x=>x.state==='review_required'),'Duplicate plate after normalization is unsafe');
 assert.deepEqual(buildFleetOverview({vehicles:null,locks:[],sessions:[]}),{ready:false,rows:[],unmatchedLocks:[]});
