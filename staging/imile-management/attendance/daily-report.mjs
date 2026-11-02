@@ -54,7 +54,9 @@ export function attendanceDailyReport({date,sessions}={}){
   if(cleanliness)cleanlinessReports++;
   if(damage||cleanliness)conditionFlags.push({
    id:session.id,driverId:validDriver?driverId:'(hibás DA-kód)',
-   plate:String(session.plate||''),damage,cleanliness,status:session.status
+   plate:String(session.plate||''),damage,cleanliness,status:session.status,
+   damageNote:damage?session.damageNote.trim():'',
+   cleanlinessNote:cleanliness?session.cleanlinessNote.trim():''
   });
   if(!validDriver){
    issues.push({id:session.id,reason:'Hiányzó vagy hibás DA-kód'});continue;
@@ -86,22 +88,39 @@ export function attendanceDailyReport({date,sessions}={}){
   reportedKm,reviewedKm,damageReports,cleanlinessReports,conditionFlags,issues,couriers};
 }
 
+// Shared export escaping, including quoted newlines, leading whitespace and
+// spreadsheet formula prefixes in courier-supplied damage notes.
+const csvField=value=>{
+ let str=String(value??'').replace(/[\r\n]/g,' ');
+ if(/^\s*[=+@\-]/.test(str))str="'"+str;
+ return '"'+str.replace(/"/g,'""')+'"';
+};
+const encodeCsv=rows=>'\uFEFF'+rows.map(row=>row.map(csvField).join(';')).join('\r\n')+'\r\n';
+
 /** Excel-compatible UTF-8 semicolon CSV; never execute spreadsheet formulas. */
 export function attendanceReportCsv(report){
  if(!report?.ready||!validDay(report.date)||!Array.isArray(report.couriers))
   throw Error('Csak ellenőrzött napi riport exportálható.');
- const field=value=>{
-  let str=String(value??'');
-  // Keep untrusted identifiers from becoming Excel/Sheets formulas.
-  str=str.replace(/[\r\n]/g,' ');
-  if(/^\s*[=+@\-]/.test(str))str="'"+str;
-  return '"'+str.replace(/"/g,'""')+'"';
- };
  const rows=[
   ['Nap','Futár DA','Kicsekkolások','Reggel ellenőrzött','Bejelentett km','Visszaigazolt km','Sérülésjelzések','Tisztasági jelzések','Rendszámok'],
   ...report.couriers.map(x=>[
    report.date,x.driverId,x.checkouts,x.reviewed,x.reportedKm,x.reviewedKm,x.damageReports||0,x.cleanlinessReports||0,(x.plates||[]).join(', ')
   ])
  ];
- return '\uFEFF'+rows.map(row=>row.map(field).join(';')).join('\r\n')+'\r\n';
+ return encodeCsv(rows);
+}
+
+/** Separate incident export: never omit a defect because of invalid mileage. */
+export function attendanceConditionCsv(report){
+ if(!report?.ready||!validDay(report.date)||!Array.isArray(report.conditionFlags))
+  throw Error('Csak ellenőrzött járműállapot-riport exportálható.');
+ return encodeCsv([
+  ['Nap','Eseményazonosító','Rendszám','Futár DA','Sérülés jelzése','Sérülés megjegyzés',
+   'Tisztasági jelzés','Tisztaság megjegyzés','Visszavétel állapota'],
+  ...report.conditionFlags.map(x=>[
+   report.date,x.id,x.plate,x.driverId,x.damage?'Igen':'Nem',x.damageNote||'',
+   x.cleanliness?'Igen':'Nem',x.cleanlinessNote||'',
+   x.status==='reviewed'?'Visszavéve':'Ellenőrzésre vár'
+  ])
+ ]);
 }
