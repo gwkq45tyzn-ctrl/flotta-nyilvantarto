@@ -68,4 +68,23 @@ const spaced=attendanceReportCsv({...r,couriers:[{
 assert.ok(spaced.includes("'   =IMPORTXML"),'CSV formula with leading spaces must be neutralized');
 assert.ok(injection.includes('""'),'CSV quotes must be escaped');
 
+
+const flaggedWithBadKm=attendanceDailyReport({date:today,sessions:[
+ {...s('vehicle-damage','DA0901','awaiting_review',700,650,
+  '2026-11-02T06:00:00Z','2026-11-02T16:00:00Z','DAM901'),damageNote:'Door dent'},
+ {...s('vehicle-dirt','?','reviewed',10,30,
+  '2026-11-02T06:00:00Z','2026-11-02T17:00:00Z','DIR901'),cleanlinessNote:'Unclean cabin'}
+]});
+assert.equal(flaggedWithBadKm.ready,true);
+assert.equal(flaggedWithBadKm.reportedKm,0,'Invalid driver or km must never generate trusted distance');
+assert.equal(flaggedWithBadKm.damageReports,1,'Damage must survive odometer errors');
+assert.equal(flaggedWithBadKm.cleanlinessReports,1,'Unclean vehicle must survive invalid DA identity');
+assert.equal(flaggedWithBadKm.conditionFlags.length,2);
+assert.equal(flaggedWithBadKm.issues.length,2);
+assert.deepEqual(flaggedWithBadKm.couriers.map(x=>({
+ driverId:x.driverId,km:x.reportedKm,damage:x.damageReports
+})),[{driverId:'DA0901',km:0,damage:1}]);
+assert.ok(attendanceReportCsv(flaggedWithBadKm).includes('"0";"0";"1";"0"'),
+ 'Per-driver CSV must include damage even when the odometer is rejected');
+
 console.log('PASS: Budapest-time courier daily km reporting, unverified mileage and anomaly reporting');
