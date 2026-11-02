@@ -14,43 +14,41 @@ service firebase.storage {
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
-  // Reject new uploads BEFORE triggering the private verifier whenever
-  // the canonical car, courier and DA possession records do not agree.
-  // This does not implement a per-day/session upload budget.
-  function claimsMatch(uid,sid,plate,driverId) {
-    let c = /databases/(default)/documents/courierLocks/$(uid);
-    let v = /databases/(default)/documents/vehicleLocks/$(plate);
-    let d = /databases/(default)/documents/driverLocks/$(driverId);
-    return firestore.exists(c) && firestore.exists(v) && firestore.exists(d)
-      && firestore.get(c).data.sessionId == sid
-      && firestore.get(c).data.plate == plate
-      && firestore.get(c).data.state == 'active'
-      && firestore.get(v).data.sessionId == sid
-      && firestore.get(v).data.plate == plate
-      && firestore.get(v).data.uid == uid
-      && firestore.get(v).data.driverId == driverId
-      && firestore.get(v).data.state == 'active'
-      && firestore.get(d).data.sessionId == sid
-      && firestore.get(d).data.plate == plate
-      && firestore.get(d).data.uid == uid
-      && firestore.get(d).data.driverId == driverId
-      && firestore.get(d).data.state == 'active';
-  }
-  function validCheckout(uid,sid) {
-    let s = /databases/(default)/documents/vehicleSessions/$(sid);
-    let a = /databases/(default)/documents/courierAccess/$(uid);
-    return firestore.exists(s)
-      && firestore.get(s).data.uid == uid
-      && firestore.get(s).data.status == 'active'
-      && firestore.get(s).data.driverId == firestore.get(a).data.driverId
-      && claimsMatch(uid,sid,firestore.get(s).data.plate,firestore.get(s).data.driverId);
-  }
+  // Storage Rules permit at most TWO distinct Firestore documents per
+  // request. courier() already reads courierAccess; in reads courierLocks
+  // OR out reads vehicleSessions. All three possession locks are validated
+  // later by the private verifier and the Firestore transaction.
+  // No daily upload quota is enforced here.
   function allowedPhotoStage(uid,sid,stage) {
-    let a = /databases/(default)/documents/courierAccess/$(uid);
+    let access = /databases/(default)/documents/courierAccess/$(uid);
+    let s = /databases/(default)/documents/vehicleSessions/$(sid);
     return stage == 'in'
       ? !firestore.exists(/databases/(default)/documents/courierLocks/$(uid))
-        && !firestore.exists(/databases/(default)/documents/driverLocks/$(firestore.get(a).data.driverId))
-      : validCheckout(uid,sid);
+      : firestore.exists(s)
+        && firestore.get(s).data.uid == uid
+        && firestore.get(s).data.status == 'active'
+        && firestore.get(s).data.driverId == firestore.get(access).data.driverId
+        && firestore.get(s).data.plate is string
+        && firestore.get(s).data.plate.matches('^[A-Z0-9]{4,12}
+  match /attendance/{uid}/{sid}/{stage}/{photo} {
+    // Only a signed-in courier can CREATE original images under their own
+    // immutable event prefix. No overwrites, deletes, or public access.
+    allow read: if (courier() && request.auth.uid == uid) || staff();
+    allow create: if resource == null && courier() && request.auth.uid == uid
+      && sid.matches('^s_[a-f0-9]{32}$')
+      && stage in ['in','out']
+      && photo in ['front.jpg','left.jpg','right.jpg','back.jpg',
+                   'cabinFront.jpg','cabinRear.jpg','cargo.jpg']
+      && request.resource.size > 0
+      && request.resource.size <= 8 * 1024 * 1024
+      && request.resource.contentType == 'image/jpeg'
+      && allowedPhotoStage(uid,sid,stage);
+    allow update, delete: if false;
+  }
+  match /{allPaths=**} { allow read, write: if false; }
+ }
+}
+);
   }
   match /attendance/{uid}/{sid}/{stage}/{photo} {
     // Only a signed-in courier can CREATE original images under their own
