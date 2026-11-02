@@ -1,3 +1,4 @@
+import {attachQaAppCheck} from './app-check-client-qa.mjs';
 // Full Auth + callable Functions + Firestore + Storage, synthetic loopback only.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -25,7 +26,7 @@ const apps=[];let passed=0;
 const id=()=>randomBytes(16).toString('hex');
 const check=async(name,fn)=>{await fn();passed++;console.log('PASS '+name);};
 const err=(fn,code)=>assert.rejects(fn,e=>e.message?.includes(code),'expected '+code);
-async function client(user){const a=initializeApp({projectId:project,apiKey:'synthetic-api-key',storageBucket:BUCKET},user);apps.push(a);
+async function client(user){const a=initializeApp({projectId:project,apiKey:'synthetic-api-key',storageBucket:BUCKET},user);apps.push(a);attachQaAppCheck(a);
  const au=getAuth(a);connectAuthEmulator(au,'http://127.0.0.1:9398',{disableWarnings:true});if(user!=='anonymous')await signInWithEmailAndPassword(au,user+'@example.invalid','SYNTHETIC-QUOTA-LOCAL-2026');
  const d=getFirestore(a);connectFirestoreEmulator(d,'127.0.0.1',8888);const storage=getStorage(a);connectStorageEmulator(storage,'127.0.0.1',9297);
  const f=getFunctions(a,'europe-west3');connectFunctionsEmulator(f,'127.0.0.1',5108);return {db:d,storage,call:async p=>(await httpsCallable(f,'attendancePhotoPermit')(p)).data};}
@@ -47,6 +48,7 @@ const review=async(c,s,keyPresent=true)=>{const b=writeBatch(c.db),fleet=doc(c.d
 const reason='SYNTHETIC_TEST jogosult kivétel ellenőrzése';
 try{
  await env.clearFirestore();await env.clearStorage();
+ await db.doc('photoPermitSecurityPolicy/current').set({revision:1,uidPerMinute:10000,uidBurst:10000,daPerMinute:10000,daBurst:10000});
  for(const user of [uid,other,'qa_second','qa_admin','qa_editor','qa_viewer']){try{await auth.deleteUser(user);}catch(e){if(e.code!=='auth/user-not-found')throw e;}await auth.createUser({uid:user,email:user+'@example.invalid',password:'SYNTHETIC-QUOTA-LOCAL-2026'});}
  for(const [u,d]of [[uid,driver],[other,driver],['qa_second',driver2]])await db.doc('courierAccess/'+u).set({uid:u,driverId:d,active:true});
  for(const d of [driver,driver2])await db.doc('drivers/'+d).set({daCode:d,name:'SYNTHETIC_TEST',vendor:'QA',capacity:50,active:true});

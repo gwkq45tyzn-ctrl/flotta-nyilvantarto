@@ -1,0 +1,12 @@
+{
+  "scope": "PR60 follow-on, App Check and callable load protection; no rules edits",
+  "project": "imile-management-staging",
+  "cloudMutations": false,
+  "newControlCollections": ["photoPermitSecurityPolicy", "photoPermitCallLimits"],
+  "browserControlReadWrite": "denied by existing recursive deny-all",
+  "storageDistinctFirestoreReadsPerAuthorization": 2,
+  "preserved": ["photoReceipts", "7+7 original JPEG", "generation and sha256 verification", "UID/DA daily quota", "admin audit and revoke", "vehicle/courier/DA locks", "morning physical review", "daily reports", "DepoKapacitas source health"],
+  "appCheck": {"sdkEnforced": true, "productionAppAllowlist": true, "localSignatureVerified": true, "cloudDebugTokenCreated": false, "tokenConsumption": false},
+  "limitations": ["No financial hard cap", "No real Google attestation tested", "No effective inherited/deny IAM proof", "No cloud bucket or runtime provisioned", "Source IAM collection boundaries do not constrain Admin SDK writes"],
+  "deploymentDecision": "NO-GO pending separate approvals"
+}
