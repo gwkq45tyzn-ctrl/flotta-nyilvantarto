@@ -7,6 +7,7 @@ import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkRe
 import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {buildFleetOverview} from './fleet-overview.mjs';
+import {auditCourierAccess} from './access-audit.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -191,6 +192,7 @@ function renderStaff(){
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
+  $('accessAlerts').textContent='A futárhozzáférések szerveres ellenőrzésére várunk.';
   $('rosterStats').textContent='A létszámadatok ellenőrzése folyamatban.';
   $('rosterList').textContent='';
   $('rosterForm').querySelectorAll('input,select,button').forEach(el=>el.disabled=true);
@@ -203,6 +205,13 @@ function renderStaff(){
  // confirmation; the manager must physically check the UPDATED list.
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
  if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
+ const accessReport=auditCourierAccess(data.accesses);
+ const warnings=[
+  ...accessReport.duplicates.map(x=>x.driverId+': '+x.activeAccounts+' aktív hozzáférés ugyanahhoz a DA-kódhoz.'),
+  ...accessReport.invalid.map(x=>'Érvénytelen hozzáférés: '+x.driverId+' ('+x.uid+')')
+ ];
+ $('accessAlerts').innerHTML=warnings.length?warnings.map(w=>'<p class="hint">⚠ '+esc(w)+'</p>').join('')
+  :'<p class="hint">Nem található duplikált aktív DA-kódos hozzáférés.</p>';
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
  $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Aktív Attendance nélkül',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  $('activeList').innerHTML=active.length?active.map(s=>'<article class="vehicle">'+adminSession(s)+'</article>').join(''):'<p class="empty">Nincs aktív kiadás.</p>';
