@@ -19,7 +19,7 @@ const canReviewVehicles=()=>isStaff&&['admin','editor'].includes(staffRole);
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
 const sourcesTrusted=required=>sourceHealth(required).trusted;
 const tomorrow=()=>{const today=new Date(day()+'T12:00:00Z');today.setUTCDate(today.getUTCDate()+1);return today.toISOString().slice(0,10);};
-let rosterDate='';
+let rosterDate='',dailyReportDate='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(id,value)=>{$(id).hidden=!value};
 const toast=(msg,error=false)=>{const n=$('notice');n.textContent=msg;n.classList.toggle('error',error);n.hidden=false;};
@@ -191,6 +191,7 @@ function renderStaff(){
   resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
   $('dailyReport').textContent='A napi kilométeradatok szerveres megerősítésre várnak.';
+  $('dailyDate').disabled=true;
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -201,13 +202,16 @@ function renderStaff(){
   show('bulkPanel',false);
   return;
  }
+ $('dailyDate').disabled=false;
  const canReview=canReviewVehicles();
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
  // confirmation; the manager must physically check the UPDATED list.
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
  if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
- const daily=attendanceDailyReport({date:day(),sessions:data.sessions});
+ const daily=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
+ $('dailyDate').max=day();
+ if(!dailyReportDate) $('dailyDate').value=day();
  if(!daily.ready){
   $('dailyReport').textContent='A napi riport nem számítható: '+daily.reason;
  }else{
@@ -358,6 +362,7 @@ $('rosterForm').addEventListener('submit',async e=>{
  }catch(error){toast('Nem menthető a terv: '+error.message,true);}finally{setBusy(false);}
 });
 $('rosterDate').addEventListener('change',e=>{rosterDate=e.target.value;renderRoster();});
+$('dailyDate').addEventListener('change',e=>{dailyReportDate=e.target.value;if(user&&isStaff)renderStaff();});
 $('checkoutForm').addEventListener('submit',checkout);
 let shownPhotoUrls=[];
 async function openPhotos(sessionId){
