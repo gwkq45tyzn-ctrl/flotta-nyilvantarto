@@ -4,8 +4,8 @@
  * No Google Sheets, manual Fleet overrides, or inferred key handovers.
  */
 import {PLATE} from './core.mjs';
-export function buildFleetOverview({vehicles,locks,sessions}={}){
- if(!Array.isArray(vehicles)||!Array.isArray(locks)||!Array.isArray(sessions))
+export function buildFleetOverview({vehicles,locks,sessions,driverLocks}={}){
+ if(!Array.isArray(vehicles)||!Array.isArray(locks)||!Array.isArray(sessions)||!Array.isArray(driverLocks))
   return {ready:false,rows:[],unmatchedLocks:[]};
  const locksByPlate=new Map();
  for(const lock of locks){
@@ -14,6 +14,11 @@ export function buildFleetOverview({vehicles,locks,sessions}={}){
   locksByPlate.set(plate,[...(locksByPlate.get(plate)||[]),lock]);
  }
  const sessionsById=new Map(sessions.filter(x=>x?.id).map(x=>[x.id,x]));
+ const daLocks=new Map();
+ for(const lock of driverLocks){
+  const driverId=String(lock?.driverId||lock?.id||'');
+  daLocks.set(driverId,[...(daLocks.get(driverId)||[]),lock]);
+ }
  const carIds=new Set(),rows=[],seen=new Set();
  for(const v of vehicles){
   const plate=PLATE(v?.plate||v?.id);
@@ -28,8 +33,13 @@ export function buildFleetOverview({vehicles,locks,sessions}={}){
   }
   if(matches.length){
    const lock=matches[0],session=sessionsById.get(lock.sessionId);
+   const matchingDaLocks=daLocks.get(String(lock.driverId||''))||[];
+   const daLock=matchingDaLocks[0];
+   const driverMatches=matchingDaLocks.length===1&&daLock.sessionId===lock.sessionId
+    &&daLock.uid===lock.uid&&daLock.driverId===lock.driverId
+    &&PLATE(daLock.plate)===plate&&daLock.state===lock.state;
    const dataMatch=session&&PLATE(session.plate)===plate&&session.id===lock.sessionId
-     &&session.uid===lock.uid&&session.driverId===lock.driverId;
+     &&session.uid===lock.uid&&session.driverId===lock.driverId&&driverMatches;
    if(!dataMatch||session.status!==lock.state||v.status!=='Elérhető'){
     rows.push({...base,state:'review_required',text:'Eltérő autóátvételi adatok – ellenőrizendő',
      driverId:String(lock.driverId||''),sessionId:String(lock.sessionId||'')});
@@ -42,6 +52,8 @@ export function buildFleetOverview({vehicles,locks,sessions}={}){
     rows.push({...base,state:'review_required',text:'Ismeretlen autózár – ellenőrizendő',
      driverId:String(lock.driverId||''),sessionId:String(lock.sessionId||'')});
    }
+  }else if(driverLocks.some(x=>PLATE(x.plate)===plate)){
+   rows.push({...base,state:'review_required',text:'DA-kód foglalja az autót, de autózár hiányzik – ellenőrizendő'});
   }else if(v.status==='Elérhető'){
    rows.push({...base,state:'no_active_session',text:'Nincs aktív Attendance-kiadás; fizikai jelenlét nem igazolt'});
   }else{
@@ -52,5 +64,16 @@ export function buildFleetOverview({vehicles,locks,sessions}={}){
  const unmatchedLocks=[...locksByPlate].filter(([plate])=>!carIds.has(plate))
   .flatMap(([plate,items])=>items.map(lock=>({plate,driverId:lock.driverId||'',
    text:'Autózárhoz nincs ismert autótörzs – ellenőrizendő'})));
+ for(const [driverId,items] of daLocks){
+  for(const daLock of items){
+   const paired=(locksByPlate.get(PLATE(daLock.plate))||[])
+    .some(lock=>lock.driverId===driverId&&lock.sessionId===daLock.sessionId
+     &&lock.uid===daLock.uid&&lock.state===daLock.state);
+   if(!paired||items.length>1)unmatchedLocks.push({
+    plate:PLATE(daLock.plate),driverId,
+    text:'DA-kód szerinti autózár nem illeszkedik a tényleges kiadáshoz – ellenőrizendő'
+   });
+  }
+ }
  return {ready:true,rows,unmatchedLocks};
 }

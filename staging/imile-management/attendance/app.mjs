@@ -10,9 +10,9 @@ import {buildFleetOverview} from './fleet-overview.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
-let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
+let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],driverLocks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
 const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
-const STAFF_SOURCES=['vehicles','locks','sessions','drivers','accesses','plans'];
+const STAFF_SOURCES=['vehicles','locks','driverLocks','sessions','drivers','accesses','plans'];
 const canReviewVehicles=()=>isStaff&&['admin','editor'].includes(staffRole);
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
 const sourcesTrusted=required=>sourceHealth(required).trusted;
@@ -41,7 +41,7 @@ function subscribe(path,onData,sourceName){
  });
  unsubs.push(unsubscribe);
 }
-function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];sourceMeta={};data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null};}
+function clearSubscriptions(){unsubs.forEach(fn=>fn());unsubs=[];sourceMeta={};data={vehicles:[],locks:[],driverLocks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null};}
 function setBusy(value){busy=value;for(const id of ['checkinButton','checkoutButton','bulkReview'])$(id).disabled=value;}
 function allPhotoFiles(form){
  return PHOTO_KEYS.map(key=>{
@@ -84,6 +84,7 @@ function startCourier(){
 function startStaff(){
  subscribe(collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()})),'vehicles');
  subscribe(collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()})),'locks');
+ subscribe(collection(db,'driverLocks'),s=>data.driverLocks=s.docs.map(d=>({id:d.id,...d.data()})),'driverLocks');
  subscribe(collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()})),'sessions');
  subscribe(collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()})),'drivers');
  subscribe(collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()})),'accesses');
@@ -103,6 +104,7 @@ async function refreshAttendanceSources(){
  const targets=isStaff?[
   ['vehicles',collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()}))],
   ['locks',collection(db,'vehicleLocks'),s=>data.locks=s.docs.map(d=>({id:d.id,...d.data()}))],
+  ['driverLocks',collection(db,'driverLocks'),s=>data.driverLocks=s.docs.map(d=>({id:d.id,...d.data()}))],
   ['sessions',collection(db,'vehicleSessions'),s=>data.sessions=s.docs.map(d=>({id:d.id,...d.data()}))],
   ['drivers',collection(db,'drivers'),s=>data.drivers=s.docs.map(d=>({id:d.id,...d.data()}))],
   ['accesses',collection(db,'courierAccess'),s=>data.accesses=s.docs.map(d=>({id:d.id,...d.data()}))],
@@ -205,7 +207,7 @@ function renderStaff(){
  $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Aktív Attendance nélkül',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  $('activeList').innerHTML=active.length?active.map(s=>'<article class="vehicle">'+adminSession(s)+'</article>').join(''):'<p class="empty">Nincs aktív kiadás.</p>';
 
- const inventory=buildFleetOverview({vehicles:data.vehicles,locks:data.locks,sessions:data.sessions});
+ const inventory=buildFleetOverview({vehicles:data.vehicles,locks:data.locks,sessions:data.sessions,driverLocks:data.driverLocks});
  $('allVehicleList').innerHTML=inventory.rows.map(x=>{
   const driver=data.drivers.find(d=>d.id===x.driverId);
   return '<article class="vehicle"><strong>'+esc(x.plate)+'</strong><div class="meta">'+esc(x.text)
