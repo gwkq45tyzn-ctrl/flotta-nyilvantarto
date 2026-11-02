@@ -41,7 +41,7 @@ assert.equal(invalid.reportedKm,0);
 
 const csv=attendanceReportCsv(r);
 assert.ok(csv.startsWith('\uFEFF'),'Excel export must be UTF-8 BOM');
-assert.match(csv,/Nap;"?/,'At least one CSV header field must be present');
+assert.ok(csv.includes('"Nap";"Futár DA"'),'Expected semicolon-separated quoted header fields');
 assert.match(csv,/'?"DA001"/,'Actual daily courier report must be exportable');
 assert.match(csv,/150/,'Reported distance must be present in the report');
 assert.throws(()=>attendanceReportCsv({ready:false}),/ellenőrzött/);
