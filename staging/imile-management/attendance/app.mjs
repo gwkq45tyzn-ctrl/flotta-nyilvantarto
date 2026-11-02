@@ -6,6 +6,7 @@ import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable} from './photo-upload.mjs';
+import {buildFleetOverview} from './fleet-overview.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -166,7 +167,7 @@ function renderRoster(){
  if(drivers.some(x=>x.id===previous))driverSelect.value=previous;
  const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,plans:data.plans,accesses:data.accesses});
  if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv.';return;}
- const kpis=[['Üzemképes autók',report.operationalCars],['Fizikailag ellenőrzött szabad',report.physicallyReady],
+ const kpis=[['Üzemképes autók',report.operationalCars],['Aktív Attendance nélkül',report.physicallyReady],
   ['Tervezett futárok',report.plannedCouriers],['Megerősített futárok',report.confirmedCouriers],
   ['Hiányzó megerősített futárok',report.missingConfirmed],['Visszavételre váró autók',report.unverifiedCars]];
  $('rosterStats').innerHTML=kpis.map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
@@ -185,6 +186,7 @@ function renderStaff(){
   resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
+  $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
   $('rosterStats').textContent='A létszámadatok ellenőrzése folyamatban.';
   $('rosterList').textContent='';
@@ -198,8 +200,18 @@ function renderStaff(){
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
  if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
- $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Ellenőrzött szabad autó',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
+ $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Aktív Attendance nélkül',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  $('activeList').innerHTML=active.length?active.map(s=>'<article class="vehicle">'+adminSession(s)+'</article>').join(''):'<p class="empty">Nincs aktív kiadás.</p>';
+
+ const inventory=buildFleetOverview({vehicles:data.vehicles,locks:data.locks,sessions:data.sessions});
+ $('allVehicleList').innerHTML=inventory.rows.map(x=>{
+  const driver=data.drivers.find(d=>d.id===x.driverId);
+  return '<article class="vehicle"><strong>'+esc(x.plate)+'</strong><div class="meta">'+esc(x.text)
+   +(x.driverId?' · '+esc(driver?.name||x.driverId)+' ('+esc(x.driverId)+')':'')+'</div></article>';
+ }).concat(inventory.unmatchedLocks.map(x=>'<article class="vehicle"><strong>'+esc(x.plate)
+  +'</strong><div class="meta">'+esc(x.text)+' · '+esc(x.driverId)+'</div></article>')).join('')
+  ||'<p class="empty">Nincs autó a közös törzsadatbázisban.</p>';
+
  $('reviewList').innerHTML=waiting.length?waiting.map(s=>'<article class="vehicle" data-session="'+esc(s.id)+'">'+adminSession(s)+
  '<div class="meta">Záró km: '+esc(s.endKm)+' · kijelentkezés: '+esc(displayTime(s.endedAt))+'</div>'+
  (s.damageNote?'<p class="hint">Sérülés/észrevétel: '+esc(s.damageNote)+'</p>':'')+
