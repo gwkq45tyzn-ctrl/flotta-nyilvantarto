@@ -350,7 +350,7 @@ $('quotaAdminForm').addEventListener('submit',async e=>{
  }catch(error){toast('A kivétel nem menthető: '+error.message,true);}finally{setBusy(false);}
 });
 $('restartPhotoPermit').addEventListener('click',()=>{
- if(busy||!user||!confirm('Az új feltöltési munkamenet napi keretet használ. Előkészíted?'))return;
+ if(busy||!user)return;
  clearPermitRequest(user.uid);pendingCheckIn=null;photoCache.clear();show('restartPhotoPermit',false);
  toast('Az új feltöltés előkészítve. A becsekkolás gombbal indíthatod.');
 });

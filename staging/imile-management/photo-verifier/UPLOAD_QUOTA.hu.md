@@ -114,6 +114,11 @@ az issuer közvetlen meghívásánál is ugyanaz a szerepvizsgálat érvényes.
   alrendszerek tesztfixture-jei csak szerveres engedélymezőt kapnak, hamis receipt
   továbbra sincs a verifier-tesztben. Az új kvótateszt MINDEN érvényes engedélyt
   valódi callable-en kér; nem használja a legacy permit fixture-t.
+- Két további, valódi ideiglenes Git-repón futó CI-védelmi teszt: egy függetlenül
+  előrelépett production/main nem számít e PR módosításának, de az e változtatásban
+  érintett `index.html` vagy `features/` mindig leállítja az ellenőrzést.
+  A kapu a PR tényleges base SHA-jához, staging pushnál a before SHA-hoz kötött;
+  hiányzó/hibás kiindulásnál fail closed. A main tartalmát nem másoljuk a stagingbe.
 - A preview csomag új kliensmodulját csomagoljuk. Backend/tesztfixture nem kerül a webbe.
 
 Parancsok:

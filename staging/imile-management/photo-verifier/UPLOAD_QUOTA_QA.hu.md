@@ -7,6 +7,7 @@ A #59 sikeres CI-jét ellenőriztük, változtatásait megőriztük.
 18 további jogosultság- és zárláncteszt: sikeres. A teljes új CI pontos commitját
 és eredményét a draft PR Checks oldalán kell ellenőrizni; a régi CI nem bizonyíték
 az új kódra. A meglévő teljes staging workflow és emulátoros regressziók megmaradtak.
+Két további CI-védelmi Git-regresszióval a célzott Node tesztek száma összesen 33.
 
 ## Új mobilos/asztali végponti ellenőrzések – valódi böngésző
 
@@ -36,6 +37,11 @@ Termék-konfiguráció nem módosult a helyi QA-adapter miatt. Semmi nem került
 8. Az adminfelületen a függő engedélyt visszavontuk, ugyanazon azonosítót indokoltan
    újranyitottuk, majd QA végén újra visszavontuk. Mindhárom művelet auditált;
    a kvóta nem nőtt tovább és nem is térült vissza. Aktív autózár 0.
+9. A visszavont engedély tudatos újraindítását külön is ellenőriztük. Az előkészítő
+   gomb csak a helyi kéréskulcsot törli; a következő becsekkolás fogyaszthat keretet,
+   ezért a gomb ezt előre jelzi. Nincs szükség külön natív JavaScript-modalra.
+   A már kimerült keretet ezzel sem lehetett megkerülni. A végső kiegészítő próba
+   után mindkét kvóta `used:3, extra:2`, az utolsó engedély visszavont, autózár 0.
 
 A böngészős normál 7+7 és újrapróbálás így az új szerveres engedélyezésen ment át.
 Az admin tesztlap eltérő helyi portot használ, hogy egyszerre két külön Auth
@@ -46,7 +52,7 @@ Az általános, korábban sikeres 29 böngészős csoportot nem futtattuk újra.
 
 Csak a helyi demo-emulátorban: tesztfiókok, futárok/autók, két reviewed session,
 eredeti fotók/receipt-ek, kvóták/kérésnaplók és auditok. A függő böngészős
-feltöltés három képe visszavont engedéllyel megmaradt. Nincs hozzá aktív session
+feltöltések két prefixen összesen hat képe visszavont engedélyekkel megmaradt. Nincs hozzájuk aktív session
 vagy birtoklási zár. A korrupciós zárláncteszt explicit jelölt ideiglenes
 sessionjét és saját zárait az azonosító ellenőrzése után töröltük; más adatot nem.
 

@@ -165,9 +165,11 @@ jobs:
       - name: Attendance atomi publikáló – kizárólag szintetikus loopback tranzakciók
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-attendance-atomic --config firebase.attendance-qa.json "node --test staging/imile-management/qa/attendance-publisher/emulator.test.mjs"
       - name: A flotta belépési pontjának érintetlensége
+        env:
+          PROTECTED_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          git diff --exit-code origin/main -- index.html
+          node --test staging/imile-management/qa/production-entry-guard.test.mjs
+          node staging/imile-management/qa/production-entry-guard.mjs
 
       - name: Izolált, letölthető staging webcsomag építése
         run: node staging/imile-management/build-preview.mjs
