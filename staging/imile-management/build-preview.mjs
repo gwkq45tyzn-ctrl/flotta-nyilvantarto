@@ -20,6 +20,7 @@ const allowed=[
   'staging/imile-management/attendance/app.mjs',
   'staging/imile-management/attendance/photo-codec.mjs',
   'staging/imile-management/attendance/photo-proof.mjs',
+  'staging/imile-management/attendance/daily-report.mjs',
   'staging/imile-management/attendance/core.mjs',
   'staging/imile-management/attendance/photo-upload.mjs',
   'staging/imile-management/attendance/fleet-overview.mjs',

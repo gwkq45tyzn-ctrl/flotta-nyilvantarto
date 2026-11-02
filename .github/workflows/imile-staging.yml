@@ -50,6 +50,7 @@ jobs:
           node --test staging/imile-management/attendance/staff-role.integration.test.mjs
           node --test staging/imile-management/attendance/photo-codec.test.mjs
           node --test staging/imile-management/attendance/photo-proof.test.mjs
+          node --test staging/imile-management/attendance/daily-report.test.mjs
           node --check staging/imile-management/attendance/core.mjs
       - name: Kötelező fájlok és Firebase klienskód ellenőrzése
         run: node depokapacitas/tests/check.mjs
