@@ -7,7 +7,7 @@ const app=readFileSync(new URL('./app.mjs',import.meta.url),'utf8');
 const specs=[
  ['checkin','async function checkin(e){','async function checkout(e){',/sourcesTrusted\(COURIER_SOURCES\)/,/uploadPhotos\(files,sessionId,'in'\)/],
  ['checkout','async function checkout(e){','async function reviewOne(',/sourcesTrusted\(COURIER_SOURCES\)/,/uploadPhotos\(files,session.id,'out'\)/],
- ['morning return','async function reviewOne(', '$('+"'lloginForm'"+').addEventListener',/sourcesTrusted\(STAFF_SOURCES\)/,/runTransaction\(db/]
+ ['morning return','async function reviewOne(', "$('loginForm').addEventListener",/sourcesTrusted\(STAFF_SOURCES\)/,/runTransaction\(db/]
 ];
 for(const [label,start,end,gate,action] of specs){
  const from=app.indexOf(start),to=app.indexOf(end,from+start.length);
