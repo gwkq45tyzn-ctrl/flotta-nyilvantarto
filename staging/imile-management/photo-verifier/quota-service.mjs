@@ -38,7 +38,7 @@ export class PhotoQuotaService{
  }
  async locks(tx,uid,driverId){return Promise.all(['courierLocks/'+uid,'driverLocks/'+driverId].map(p=>tx.get(this.ref(p))));}
  async ensureNoCar(tx,uid,driverId){if((await this.locks(tx,uid,driverId)).some(s=>s.exists))deny('VEHICLE_STILL_LOCKED');}
- async policy(tx){const p=(await tx.get(this.ref('photoUploadPolicy/current'))).data();if(!p)deny('POLICY_NOT_CONFIGURED');validatePolicy(p);if(!p.enabled)deny('UPLOADS_DISABLED');return p;}
+ async policy(tx,{allowDisabled=false}={}){const p=(await tx.get(this.ref('photoUploadPolicy/current'))).data();if(!p)deny('POLICY_NOT_CONFIGURED');validatePolicy(p);if(!p.enabled&&!allowDisabled)deny('UPLOADS_DISABLED');return p;}
  response(p,stage,reused){return {uid:p.uid,driverId:p.driverId,sessionId:p.sessionId,source:p.source,requestId:p.requestId,stage,expiresAt:ms(stage==='in'?p.inExpiresAt:p.outExpiresAt),reused};}
  async courier(uid,data){
   const candidate='s_'+randomBytes(16).toString('hex');
@@ -110,7 +110,10 @@ export class PhotoQuotaService{
     if(!Number.isInteger(data.expectedRevision)||data.expectedRevision!==(prior?.revision||0)||data.policy.revision!==data.expectedRevision+1)deny('POLICY_REVISION_CONFLICT');
     tx.set(ref,data.policy);result={revision:data.policy.revision};audit.before=prior||null;audit.after=data.policy;
    }else{
-    const p=await this.policy(tx),access=await this.courierAccess(tx,data.targetUid,{requireActive:data.action!=='adminRevoke'}),driverId=access.driverId;
+    // STOP must never disable the admin's ability to narrow/revoke an existing
+    // pending capability. Grant/resume still require enabled:true. Active usage
+    // remains protected by SESSION_ALREADY_CREATED and the three-lock check.
+    const p=await this.policy(tx,{allowDisabled:data.action==='adminRevoke'}),access=await this.courierAccess(tx,data.targetUid,{requireActive:data.action!=='adminRevoke'}),driverId=access.driverId;
     audit.targetUid=data.targetUid;audit.driverId=driverId;
     if(data.action==='adminGrant'){
      if(!Number.isInteger(data.amount)||data.amount<1||data.amount>p.maxAdminExtraPerDay)deny('INVALID_EXTRA');
