@@ -43,7 +43,7 @@ const csv=attendanceReportCsv(r);
 assert.ok(csv.startsWith('\uFEFF'),'Excel export must be UTF-8 BOM');
 assert.ok(csv.includes('"Nap";"Futár DA"'),'Expected semicolon-separated quoted header fields');
 assert.match(csv,/'?"DA001"/,'Actual daily courier report must be exportable');
-assert.match(csv,/150/,'Reported distance must be present in the report');
+assert.ok(csv.includes('"110";"75"')&&csv.includes('"40";"40"'),'Reported and reviewed kilometers must be preserved per courier');
 assert.throws(()=>attendanceReportCsv({ready:false}),/ellenőrzött/);
 const injection=attendanceReportCsv({...r,couriers:[{
  driverId:'=HYPERLINK("danger")',checkouts:1,reviewed:1,reportedKm:4,reviewedKm:4,
