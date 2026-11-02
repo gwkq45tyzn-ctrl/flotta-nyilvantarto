@@ -248,6 +248,8 @@ function renderStaff(){
    ['Becsekkolások a napon',daily.checkins],['Kicsekkolások a napon',daily.checkouts],
    ['Bejelentett km',daily.reportedKm],['Visszaigazolt km',daily.reviewedKm],
    ['Visszaadásra vár (összes)',daily.awaitingReviewNow],
+   ['Jelzett sérülések',daily.damageReports],
+   ['Jelzett tisztasági problémák',daily.cleanlinessReports],
    ['Adateltérések',daily.issues.length]
   ].map(([label,value])=>'<div class="stat"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>').join('')+'</div>';
   const drivers=daily.couriers.map(row=>'<article class="vehicle"><strong>'+esc(row.driverId)
@@ -258,7 +260,14 @@ function renderStaff(){
    ||'<p class="empty">Ma még nincs kilométerrel lezárt cégesautó-használat.</p>';
   const problems=daily.issues.length?'<p class="hint">Ellenőrzendő események: '
    +daily.issues.map(x=>esc(x.id)+' ('+esc(x.reason)+')').join('; ')+'</p>':'';
-  $('dailyReport').innerHTML=overview+'<div class="stack">'+drivers+'</div>'+problems;
+  const conditionFlags=daily.conditionFlags.length?'<h3>Futár által jelzett járműállapotok</h3><div class="stack">'
+   +daily.conditionFlags.map(x=>'<article class="vehicle"><strong>'+esc(x.plate)+' · '+esc(x.driverId)
+     +'</strong><div class="meta">'
+     +(x.damage?'Sérülés jelezve. ':'')
+     +(x.cleanliness?'Tisztasági probléma jelezve. ':'')
+     +(x.status==='reviewed'?'Reggel visszavéve.':'Visszaadás még ellenőrzésre vár.')
+     +'</div></article>').join('')+'</div>':'';
+  $('dailyReport').innerHTML=overview+'<div class="stack">'+drivers+'</div>'+conditionFlags+problems;
  }
 
 
