@@ -86,6 +86,7 @@ try{
  const c=await client(uid),o=await client(other),ed=await client('synthetic_editor'),viewer=await client('synthetic_viewer');
  await check('real Auth emulator courier login',async()=>assert.equal(getAuth(clients[0]).currentUser.uid,uid));
  await check('invented seven paths cannot issue car',()=>assertFails(create(c,uid,sid,driver,plate)));
+ await check('checkout photo cannot be uploaded before real active vehicle session',()=>assertFails(uploadBytes(ref(c.storage,paths(uid,sid,'out').front),jpeg,{contentType:'image/jpeg'})));
  await check('other UID cannot upload own-prefix forged photo',()=>assertFails(uploadBytes(ref(o.storage,paths(uid,sid,'in').front),jpeg,{contentType:'image/jpeg'})));
  await check('anonymous Storage read denied',()=>assertFails(getBytes(ref(env.unauthenticatedContext().storage('gs://'+BUCKET),paths(uid,sid,'in').front))));
  await upload(c,uid,sid,'in',KEYS.slice(0,3));
@@ -98,6 +99,7 @@ try{
  await check('original overwrite denied',()=>assertFails(uploadBytes(ref(c.storage,paths(uid,sid,'in').front),jpeg,{contentType:'image/jpeg'})));
  await check('original delete denied',()=>assertFails(deleteObject(ref(c.storage,paths(uid,sid,'in').front))));
  await check('verified photo enables atomic issue and three locks',async()=>{await create(c,uid,sid,driver,plate);assert.equal((await db.doc('vehicleLocks/'+plate).get()).data().sessionId,sid);});
+ await check('second in-prefix cannot upload while the courier still possesses a car',()=>assertFails(uploadBytes(ref(c.storage,paths(uid,sid3,'in').front),jpeg,{contentType:'image/jpeg'})));
  await upload(o,other,sid2,'in');await waitProof(other,sid2,'in');
  await check('same car cannot be issued to another courier',()=>assertFails(create(o,other,sid2,driver2,plate)));
  await check('out receipt cannot precede active session',async()=>assert.equal((await direct(other,sid2,'out')).code,'CHECKOUT_NOT_ACTIVE'));
@@ -106,11 +108,13 @@ try{
  await upload(c,uid,sid,'out');await waitProof(uid,sid,'out');
  await check('key drop false blocks checkout',()=>assertFails(checkout(c,uid,sid,driver,plate,false)));
  await check('verified seven return photos enable checkout',()=>checkout(c,uid,sid,driver,plate));
+ await check('new in-prefix still denied while previous car awaits physical review',()=>assertFails(uploadBytes(ref(c.storage,paths(uid,sid3,'in').front),jpeg,{contentType:'image/jpeg'})));
  await check('awaiting-review car remains locked',async()=>{assert.equal((await db.doc('vehicleLocks/'+plate).get()).data().state,'awaiting_review');await assertFails(create(o,other,sid2,driver2,plate));});
  await check('viewer cannot approve return',()=>assertFails(review(viewer,uid,sid,driver,plate)));
  await check('missing key keeps all locks',()=>assertFails(review(ed,uid,sid,driver,plate,{keyPresent:false})));
  await check('unchecked damage keeps all locks',()=>assertFails(review(ed,uid,sid,driver,plate,{damageReviewed:false})));
  await check('morning physical review frees car and updates canonical mileage',async()=>{await review(ed,uid,sid,driver,plate);assert.equal((await db.doc('vehicleLocks/'+plate).get()).exists,false);assert.equal((await db.doc('driverLocks/'+driver).get()).exists,false);assert.equal((await db.doc('fleetRecords/vehicle__'+plate).get()).data().data.mileage,150);});
+ await check('fabricated checkout session remains forbidden after return',()=>assertFails(uploadBytes(ref(c.storage,paths(uid,sid3,'out').front),jpeg,{contentType:'image/jpeg'})));
  await check('daily report and free-car calculation consume new server data',async()=>{
   const sessions=(await db.collection('vehicleSessions').get()).docs.map(d=>({id:d.id,...d.data()}));
   const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest'}).format(new Date());
