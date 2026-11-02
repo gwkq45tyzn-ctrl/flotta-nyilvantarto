@@ -51,6 +51,11 @@ const injection=attendanceReportCsv({...r,couriers:[{
 }]});
 assert.ok(injection.includes("'=HYPERLINK"),'Spreadsheet formula must be prefixed with an apostrophe');
 assert.ok(injection.includes("'@IMPORT"),'Plate formula-like content must be escaped');
+const spaced=attendanceReportCsv({...r,couriers:[{
+ driverId:'DA0999',checkouts:1,reviewed:1,reportedKm:0,reviewedKm:0,
+ plates:['   =IMPORTXML("unsafe")']
+}]});
+assert.ok(spaced.includes("'   =IMPORTXML"),'CSV formula with leading spaces must be neutralized');
 assert.ok(injection.includes('""'),'CSV quotes must be escaped');
 
 console.log('PASS: Budapest-time courier daily km reporting, unverified mileage and anomaly reporting');
