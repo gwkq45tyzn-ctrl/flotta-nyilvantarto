@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {attendanceDailyReport} from './daily-report.mjs';
+import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
 const moment=s=>({toDate:()=>new Date(s)});
 const s=(id,driverId,status,startKm,endKm,startedAt,endedAt,plate='ABC123')=>({
  id,driverId,status,startKm,endKm,startedAt:moment(startedAt),
@@ -38,4 +38,19 @@ const invalid=attendanceDailyReport({date:today,sessions:[
 assert.equal(invalid.checkouts,0);
 assert.equal(invalid.issues.length,2,'Do not count active checkout or unknown driver');
 assert.equal(invalid.reportedKm,0);
+
+const csv=attendanceReportCsv(r);
+assert.ok(csv.startsWith('\uFEFF'),'Excel export must be UTF-8 BOM');
+assert.match(csv,/Nap;"?/,'At least one CSV header field must be present');
+assert.match(csv,/'?"DA001"/,'Actual daily courier report must be exportable');
+assert.match(csv,/150/,'Reported distance must be present in the report');
+assert.throws(()=>attendanceReportCsv({ready:false}),/ellenőrzött/);
+const injection=attendanceReportCsv({...r,couriers:[{
+ driverId:'=HYPERLINK("danger")',checkouts:1,reviewed:1,reportedKm:4,reviewedKm:4,
+ plates:['@IMPORT','+BAD','-BAD','A;"B']
+}]});
+assert.ok(injection.includes("'=HYPERLINK"),'Spreadsheet formula must be prefixed with an apostrophe');
+assert.ok(injection.includes("'@IMPORT"),'Plate formula-like content must be escaped');
+assert.ok(injection.includes('""'),'CSV quotes must be escaped');
+
 console.log('PASS: Budapest-time courier daily km reporting, unverified mileage and anomaly reporting');
