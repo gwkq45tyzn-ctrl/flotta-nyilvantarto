@@ -14,6 +14,16 @@ service firebase.storage {
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
+  // Prevent uploading checkout images for fabricated or already returned
+  // sessions. An "in" prefix is likewise not permitted while the courier has
+  // an outstanding car/DA claim. This reduces abuse but is NOT a daily quota.
+  function allowedPhotoStage(uid,sid,stage) {
+    return stage == 'in'
+      ? !firestore.exists(/databases/(default)/documents/courierLocks/$(uid))
+      : firestore.exists(/databases/(default)/documents/vehicleSessions/$(sid))
+        && firestore.get(/databases/(default)/documents/vehicleSessions/$(sid)).data.uid == uid
+        && firestore.get(/databases/(default)/documents/vehicleSessions/$(sid)).data.status == 'active';
+  }
   match /attendance/{uid}/{sid}/{stage}/{photo} {
     // Only a signed-in courier can CREATE original images under their own
     // immutable event prefix. No overwrites, deletes, or public access.
@@ -25,7 +35,8 @@ service firebase.storage {
                    'cabinFront.jpg','cabinRear.jpg','cargo.jpg']
       && request.resource.size > 0
       && request.resource.size <= 8 * 1024 * 1024
-      && request.resource.contentType == 'image/jpeg';
+      && request.resource.contentType == 'image/jpeg'
+      && allowedPhotoStage(uid,sid,stage);
     allow update, delete: if false;
   }
   match /{allPaths=**} { allow read, write: if false; }
