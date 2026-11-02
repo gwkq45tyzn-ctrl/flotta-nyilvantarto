@@ -35,19 +35,23 @@ export function planCheckIn({uid,access,vehicle,lock,claim,sessionId,mileage,pho
  if(!checked.ok)return checked;
  return Object.freeze({ok:true,plate:PLATE(vehicle.plate||vehicle.id),driverId:access.driverId,uid,sessionId,mileage});
 }
-export function planCheckOut({uid,session,mileage,photos,damageNote=''}={}){
+export function planCheckOut({uid,session,mileage,photos,damageNote='',cleanlinessNote='',keyDropped=false}={}){
  if(!session||session.uid!==uid||session.status!=='active')return deny('Nincs aktív autóhasználat.');
  if(!validKm(mileage)||mileage<session.startKm)return deny('A záró kilométer nem lehet kisebb a kezdő értéknél.');
  if(typeof damageNote!=='string'||damageNote.length>1000)return deny('Túl hosszú megjegyzés.');
+ if(typeof cleanlinessNote!=='string'||cleanlinessNote.length>1000)return deny('Túl hosszú tisztasági megjegyzés.');
+ if(keyDropped!==true)return deny('A kulcs ládába helyezését igazolni kell.');
  const checked=validatePhotos(photos,uid,session.id,'out');
  if(!checked.ok)return checked;
- return Object.freeze({ok:true,status:'awaiting_review',endKm:mileage,damageNote});
+ return Object.freeze({ok:true,status:'awaiting_review',endKm:mileage,damageNote,cleanlinessNote,keyDropped:true});
 }
-export function planReview({session,carPresent,keyPresent,clean,damageReviewed=false}={}){
+export function planReview({session,carPresent,keyPresent,clean,damageReviewed=false,cleanlinessReviewed=false}={}){
  if(!session||session.status!=='awaiting_review')return deny('Csak kijelentkezett, ellenőrzésre váró autó vehető vissza.');
  if(carPresent!==true||keyPresent!==true)return deny('Az autó és a kulcs fizikai jelenléte nem igazolt.');
  if(clean!==true||String(session.damageNote||'').trim()&&!damageReviewed)
   return deny('Tisztaság vagy sérülés miatt külön intézkedés szükséges.');
+ if(String(session.cleanlinessNote||'').trim()&&!cleanlinessReviewed)
+  return deny('A jelzett tisztasági probléma külön ellenőrzést igényel.');
  return Object.freeze({ok:true,status:'reviewed'});
 }
 export function bulkReviewEligible({sessions,physicallyChecked,keysChecked}={}){

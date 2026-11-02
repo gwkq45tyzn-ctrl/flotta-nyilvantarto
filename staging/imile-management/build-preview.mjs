@@ -18,6 +18,8 @@ const allowed=[
   'staging/imile-management/core-cutover-preflight.mjs',
   'staging/imile-management/attendance/index.html',
   'staging/imile-management/attendance/app.mjs',
+  'staging/imile-management/attendance/photo-transfer.mjs',
+  'staging/imile-management/attendance/photo-proof.mjs',
   'staging/imile-management/attendance/core.mjs',
   'staging/imile-management/attendance/roster.mjs',
   'staging/imile-management/attendance/style.css',

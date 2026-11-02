@@ -17,10 +17,14 @@ export function planCapacity({date,vehicles=[],locks=[],plans=[],accesses=[]}={}
  const working=vehicles.filter(x=>x.status==='Elérhető');
  const locked=new Set(locks.map(x=>x.plate));
  const physicallyReady=working.filter(x=>!locked.has(x.plate||x.id)).length;
+ const workingIds=new Set(working.map(x=>x.plate||x.id));
+ const inUseCars=new Set(locks.filter(x=>x.state==='active'&&workingIds.has(x.plate)).map(x=>x.plate)).size;
+ const awaitingReviewCars=new Set(locks.filter(x=>x.state==='awaiting_review'&&workingIds.has(x.plate)).map(x=>x.plate)).size;
  return {ready:true,date,operationalCars:working.length,physicallyReady,
   plannedCouriers:planned.size,confirmedCouriers:confirmed.size,
   missingConfirmed:Math.max(0,working.length-confirmed.size),
   missingPlanned:Math.max(0,working.length-planned.size),
   unverifiedCars:working.length-physicallyReady,
+  inUseCars,awaitingReviewCars,
   potentialUtilization:Math.min(working.length,confirmed.size)};
 }

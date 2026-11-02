@@ -13,9 +13,9 @@ for(const patch of [{lock:{}},{claim:{}},{mileage:-1},{mileage:123.4},{access:{.
  {vehicle:{...vehicle,status:'Szerviz'}},{photos:{...paths('in'),cargo:''}}])
  assert.equal(checkIn(patch).ok,false);
 const session={id:sessionId,uid,plate:'ABC123',status:'active',startKm:12345,damageNote:''};
-const out=opts=>planCheckOut({uid,session,mileage:12500,photos:paths('out'),...opts});
+const out=opts=>planCheckOut({uid,session,mileage:12500,photos:paths('out'),keyDropped:true,...opts});
 assert.equal(out().status,'awaiting_review');
-for(const bad of [{mileage:12344},{mileage:1.5},{photos:paths('in')},{session:{...session,status:'awaiting_review'}},{uid:'otheruser'}])
+for(const bad of [{mileage:12344},{mileage:1.5},{keyDropped:false},{cleanlinessNote:42},{photos:paths('in')},{session:{...session,status:'awaiting_review'}},{uid:'otheruser'}])
  assert.equal(out(bad).ok,false);
 const returned={...session,status:'awaiting_review'};
 assert.equal(planReview({session:returned,carPresent:true,keyPresent:true,clean:true}).ok,true);
@@ -25,6 +25,10 @@ assert.equal(planReview({session:returned,carPresent:true,keyPresent:true,clean:
 const damage={...returned,damageNote:'Törött kilincs'};
 assert.equal(planReview({session:damage,carPresent:true,keyPresent:true,clean:true}).ok,false);
 assert.equal(planReview({session:damage,carPresent:true,keyPresent:true,clean:true,damageReviewed:true}).ok,true);
+const dirty={...returned,cleanlinessNote:'SYNTHETIC tisztasági jelzés'};
+assert.equal(planReview({session:dirty,carPresent:true,keyPresent:true,clean:true}).ok,false);
+assert.equal(planReview({session:dirty,carPresent:true,keyPresent:true,clean:true,cleanlinessReviewed:true}).ok,true);
+assert.equal(bulkReviewEligible({sessions:[dirty],physicallyChecked:true,keysChecked:true}).ok,false);
 assert.equal(bulkReviewEligible({sessions:[returned],physicallyChecked:false,keysChecked:true}).ok,false);
 assert.equal(bulkReviewEligible({sessions:[returned],physicallyChecked:true,keysChecked:true}).ok,true);
 assert.equal(bulkReviewEligible({sessions:[returned,damage],physicallyChecked:true,keysChecked:true}).ok,false);

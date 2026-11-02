@@ -79,6 +79,32 @@ service cloud.firestore {
         && paths.cabinRear == 'attendance/' + uid + '/' + sid + '/' + stage + '/cabinRear.jpg'
         && paths.cargo == 'attendance/' + uid + '/' + sid + '/' + stage + '/cargo.jpg';
     }
+    // A filename map does not prove that Storage objects exist. A separately
+    // approved IAM verifier must inspect all immutable objects before issuing
+    // this receipt. No browser role, including admin, can manufacture it.
+    function trustedPhotos(paths,uid,sid,stage) {
+      let proof = get(/databases/$(database)/documents/photoReceipts/$(uid)/sessions/$(sid)/stages/$(stage));
+      return proof != null && proof.data.uid == uid && proof.data.sessionId == sid
+        && proof.data.stage == stage && proof.data.source == 'storage-verifier-v1'
+        && proof.data.verified == true && proof.data.paths == paths
+        && proof.data.verifiedAt is timestamp && proof.data.verifiedAt <= request.time;
+    }
+    function currentVehicleMileage(plate,km) {
+      let record = get(/databases/$(database)/documents/fleetRecords/$('vehicle__' + plate));
+      return record == null || km >= record.data.data.mileage;
+    }
+    function validReviewChecks(data,session) {
+      return exactFields(data,['carPresent','keyPresent','clean','damageReviewed','cleanlinessReviewed'])
+        && data.carPresent == true && data.keyPresent == true && data.clean == true
+        && data.damageReviewed is bool && data.cleanlinessReviewed is bool
+        && (session.damageNote == '' || data.damageReviewed == true)
+        && (!('cleanlinessNote' in session) || session.cleanlinessNote == '' || data.cleanlinessReviewed == true);
+    }
+    match /photoReceipts/{uid}/sessions/{sid}/stages/{stage} {
+      allow get: if signedIn() && (request.auth.uid == uid || member());
+      allow list: if member();
+      allow create, update, delete: if false;
+    }
 
     // Company-car headcount planning; no driver/vehicle plate preassignment.
     match /courierDayPlans/{key} {
@@ -111,24 +137,32 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /vehicleSessions/{sid} {
-      allow get,list: if member() || (courier() && resource.data.uid == request.auth.uid);
+      // The client transaction must read its new (not-yet-existing) ID before
+      // creating it. Missing-document reads disclose no other courier's record.
+      allow get: if member() || (courier() && (resource == null || resource.data.uid == request.auth.uid));
+      allow list: if member() || (courier() && resource.data.uid == request.auth.uid);
       allow create: if courier()
         && sid.matches('^s_[a-f0-9]{32}$')
         && exactFields(request.resource.data,[
           'uid','driverId','plate','status','startKm','endKm','inPhotos','outPhotos',
-          'damageNote','startedAt','endedAt','reviewedAt','reviewedBy'])
+          'damageNote','cleanlinessNote','keyDropped','reviewChecks','startedAt','endedAt','reviewedAt','reviewedBy'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.driverId == get(courierPath()).data.driverId
         && validVehiclePlate(request.resource.data.plate)
         && request.resource.data.status == 'active'
         && nonNegative(request.resource.data.startKm,100000000)
+        && currentVehicleMileage(request.resource.data.plate,request.resource.data.startKm)
         && request.resource.data.endKm == null && request.resource.data.outPhotos == {}
         && request.resource.data.damageNote == ''
+        && request.resource.data.cleanlinessNote == '' && request.resource.data.keyDropped == false
+        && request.resource.data.reviewChecks == {}
         && request.resource.data.startedAt == request.time
         && request.resource.data.endedAt == null
         && request.resource.data.reviewedAt == null
         && request.resource.data.reviewedBy == ''
         && checkPhotos(request.resource.data.inPhotos,request.auth.uid,sid,'in')
+        && trustedPhotos(request.resource.data.inPhotos,request.auth.uid,sid,'in')
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.plate)).data.status == 'Elérhető'
         && (!exists(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.plate))
           || get(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.plate)).data.active == false)
@@ -143,12 +177,14 @@ service cloud.firestore {
         courier() && resource.data.uid == request.auth.uid
         && resource.data.status == 'active'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status','endKm','outPhotos','damageNote','endedAt'])
+          'status','endKm','outPhotos','damageNote','cleanlinessNote','keyDropped','endedAt'])
         && request.resource.data.status == 'awaiting_review'
         && nonNegative(request.resource.data.endKm,100000000)
         && request.resource.data.endKm >= resource.data.startKm
         && checkPhotos(request.resource.data.outPhotos,resource.data.uid,sid,'out')
+        && trustedPhotos(request.resource.data.outPhotos,resource.data.uid,sid,'out')
         && optionalText(request.resource.data.damageNote,1000)
+        && optionalText(request.resource.data.cleanlinessNote,1000) && request.resource.data.keyDropped == true
         && request.resource.data.endedAt == request.time
         && getAfter(vehicleLockPath(resource.data.plate)).data.state == 'awaiting_review'
         && getAfter(courierLockPath(resource.data.uid)).data.state == 'awaiting_review'
@@ -157,10 +193,12 @@ service cloud.firestore {
         // co-transactional deletion of BOTH physical possession locks.
         editor() && resource.data.status == 'awaiting_review'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status','reviewedAt','reviewedBy'])
+          'status','reviewChecks','reviewedAt','reviewedBy'])
         && request.resource.data.status == 'reviewed'
         && request.resource.data.reviewedAt == request.time
         && request.resource.data.reviewedBy == request.auth.uid
+        && validReviewChecks(request.resource.data.reviewChecks,resource.data)
+        && getAfter(/databases/$(database)/documents/fleetRecords/$('vehicle__' + resource.data.plate)).data.data.mileage >= resource.data.endKm
         && !existsAfter(vehicleLockPath(resource.data.plate))
         && !existsAfter(courierLockPath(resource.data.uid))
       );

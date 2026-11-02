@@ -11,12 +11,13 @@ service firebase.storage {
   function courier() {
     return signedIn()
       && firestore.exists(/databases/(default)/documents/courierAccess/$(request.auth.uid))
-      && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true;
+      && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true
+      && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
   match /attendance/{uid}/{sid}/{stage}/{photo} {
     // Only a signed-in courier can CREATE original images under their own
     // immutable event prefix. No overwrites, deletes, or public access.
-    allow read: if (signedIn() && request.auth.uid == uid) || staff();
+    allow read: if (courier() && request.auth.uid == uid) || staff();
     allow create: if resource == null && courier() && request.auth.uid == uid
       && sid.matches('^s_[a-f0-9]{32}$')
       && stage in ['in','out']

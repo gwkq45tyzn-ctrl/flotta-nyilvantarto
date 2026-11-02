@@ -54,6 +54,8 @@ try {
   await check('other courier cannot upload under another uid',false,()=>store(otherStore,file()));
   await check('staff cannot upload photo for courier',false,()=>store(editorStore,file(owner,'out')));
   await check('inactive courier cannot create',false,()=>store(inactiveStore,file(inactive)));
+  await env.withSecurityRulesDisabled(admin=>store(admin.storage('gs://'+projectId+'.appspot.com'),file(inactive)));
+  await check('inactive courier cannot read own photo prefix',false,()=>getMetadata(ref(inactiveStore,file(inactive))));
   await check('unauthenticated cannot create',false,()=>store(anonymous,file('anonymous','in')));
   await check('incorrect MIME type blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'text/plain'}));
   await check('missing or unsupported photo slot blocked',false,()=>store(ownerStore,file(owner,'in','roof.jpg')));
