@@ -76,8 +76,9 @@ export function attendanceReportCsv(report){
  const field=value=>{
   let str=String(value??'');
   // Keep untrusted identifiers from becoming Excel/Sheets formulas.
-  if(/^[=+@\-\t\r]/.test(str))str="'"+str;
-  return '"'+str.replace(/"/g,'""').replace(/[\r\n]/g,' ')+'"';
+  str=str.replace(/[\r\n]/g,' ');
+  if(/^\s*[=+@\-]/.test(str))str="'"+str;
+  return '"'+str.replace(/"/g,'""')+'"';
  };
  const rows=[
   ['Nap','Futár DA','Kicsekkolások','Reggel ellenőrzött','Bejelentett km','Visszaigazolt km','Rendszámok'],
