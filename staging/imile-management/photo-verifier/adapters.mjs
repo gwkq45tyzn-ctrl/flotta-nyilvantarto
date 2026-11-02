@@ -14,7 +14,7 @@ export function serverAdapters(app){
  const check=async(tx,id)=>{
   const read=async p=>(await tx.get(db.doc(p))).data();
   const access=await read('courierAccess/'+id.uid);
-  if(access?.uid!==id.uid||access.active!==true||typeof access.driverId!=='string'||!/^[-A-Z0-9_]{1,40}$/.test(access.driverId))reject('COURIER_DENIED');
+  if(access?.uid!==id.uid||access.active!==true||typeof access.driverId!=='string'||!/^[A-Z0-9_-]{4,40}$/.test(access.driverId))reject('COURIER_DENIED');
   const driver=await read('drivers/'+access.driverId);
   if(driver?.active!==true)reject('DRIVER_INACTIVE');
   const session=await read('vehicleSessions/'+id.sessionId);
