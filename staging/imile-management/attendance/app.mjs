@@ -13,6 +13,7 @@ const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),s
 let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
 const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
 const STAFF_SOURCES=['vehicles','locks','sessions','drivers','accesses','plans'];
+const canReviewVehicles=()=>isStaff&&['admin','editor'].includes(staffRole);
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
 const sourcesTrusted=required=>sourceHealth(required).trusted;
 const tomorrow=()=>{const today=new Date(day()+'T12:00:00Z');today.setUTCDate(today.getUTCDate()+1);return today.toISOString().slice(0,10);};
@@ -194,6 +195,7 @@ function renderStaff(){
   show('bulkPanel',false);
   return;
  }
+ const canReview=canReviewVehicles();
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
  // confirmation; the manager must physically check the UPDATED list.
@@ -215,10 +217,12 @@ function renderStaff(){
  $('reviewList').innerHTML=waiting.length?waiting.map(s=>'<article class="vehicle" data-session="'+esc(s.id)+'">'+adminSession(s)+
  '<div class="meta">Záró km: '+esc(s.endKm)+' · kijelentkezés: '+esc(displayTime(s.endedAt))+'</div>'+
  (s.damageNote?'<p class="hint">Sérülés/észrevétel: '+esc(s.damageNote)+'</p>':'')+
- '<div class="checks"><label><input type="checkbox" data-check="car"> Autó megvan</label><label><input type="checkbox" data-check="key"> Kulcs megvan</label><label><input type="checkbox" data-check="clean"> Tiszta</label></div>'+
+ (canReview?'<div class="checks"><label><input type="checkbox" data-check="car"> Autó megvan</label><label><input type="checkbox" data-check="key"> Kulcs megvan</label><label><input type="checkbox" data-check="clean"> Tiszta</label></div>'+
  (s.damageNote?'<label class="tick"><input type="checkbox" data-check="damage"> Sérülést külön ellenőriztem</label>':'')+
- '<button class="primary" type="button" data-review="'+esc(s.id)+'">Autó visszavétele</button></article>').join(''):'<p class="empty">Nincs ellenőrzésre váró autó.</p>';
- show('bulkPanel',waiting.length>0);
+ '<button class="primary" type="button" data-review="'+esc(s.id)+'">Autó visszavétele</button>':
+ '<p class="hint">Csak jogosult depóvezető vagy szerkesztő rögzítheti a visszavételt.</p>')+
+ '</article>').join(''):'<p class="empty">Nincs ellenőrzésre váró autó.</p>';
+ show('bulkPanel',canReview&&waiting.length>0);
  renderRoster();
 }
 function render(){if(!user)return;if(isStaff)renderStaff();else if(access)renderCourier();}
@@ -271,6 +275,7 @@ async function checkout(e){
  }catch(error){toast('Kicsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
 }
 async function reviewOne(sessionId,{car,key,clean,damage}){
+ if(!canReviewVehicles())throw Error('Csak jogosult belső munkatárs igazolhatja a visszavételt.');
  await ensureAttendanceSources(STAFF_SOURCES);
  const sRef=doc(db,'vehicleSessions',sessionId);
  await runTransaction(db,async tx=>{
@@ -346,6 +351,7 @@ $('photosDialog').addEventListener('close',()=>{shownPhotoUrls.forEach(url=>URL.
 document.addEventListener('click',e=>{const btn=e.target.closest('[data-photo-session]');if(btn&&isStaff)openPhotos(btn.dataset.photoSession);});
 $('reviewList').addEventListener('click',async e=>{
  const btn=e.target.closest('[data-review]');if(!btn||busy)return;
+ if(!canReviewVehicles())return toast('Nincs visszavételi jogosultság.',true);
  const card=btn.closest('[data-session]'),id=btn.dataset.review;
  const has=name=>card.querySelector('[data-check="'+name+'"]')?.checked===true;
  if(!has('car')||!has('key')||!has('clean'))return toast('Az autót, a kulcsot és a tisztaságot külön ellenőrizd.',true);
@@ -356,6 +362,7 @@ $('reviewList').addEventListener('click',async e=>{
 });
 $('bulkReview').addEventListener('click',async ()=>{
  if(busy)return;
+ if(!canReviewVehicles())return toast('Nincs csoportos visszavételi jogosultság.',true);
  try{await ensureAttendanceSources(STAFF_SOURCES);}catch(err){return toast('Nincs hiteles adatkapcsolat: '+err.message,true);}
  const selected=data.sessions.filter(x=>x.status==='awaiting_review');
  const result=bulkReviewEligible({sessions:selected,physicallyChecked:$('bulkCars').checked,keysChecked:$('bulkKeys').checked});
