@@ -1,0 +1,9 @@
+{
+  "firestore": {"rules": "depokapacitas/firestore.rules"},
+  "storage": {"rules": "staging/imile-management/attendance/storage.rules"},
+  "emulators": {
+    "firestore": {"host": "127.0.0.1", "port": 8787},
+    "storage": {"host": "127.0.0.1", "port": 9199},
+    "ui": {"enabled": false}
+  }
+}
