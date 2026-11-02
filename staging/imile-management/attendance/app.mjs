@@ -218,7 +218,7 @@ function renderStaff(){
   $('dailyReport').textContent='A napi riport nem számítható: '+daily.reason;
  }else{
   const overview='<div class="stats">'+[
-   ['Ma indult',daily.checkins],['Ma kicsekkolt',daily.checkouts],
+   ['Becsekkolások a napon',daily.checkins],['Kicsekkolások a napon',daily.checkouts],
    ['Bejelentett km',daily.reportedKm],['Visszaigazolt km',daily.reviewedKm],
    ['Visszaadásra vár (összes)',daily.awaitingReviewNow],
    ['Adateltérések',daily.issues.length]
