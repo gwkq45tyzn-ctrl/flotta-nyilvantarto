@@ -8,7 +8,7 @@ import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {buildFleetOverview} from './fleet-overview.mjs';
 import {auditCourierAccess} from './access-audit.mjs';
-import {attendanceDailyReport} from './daily-report.mjs';
+import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -192,6 +192,7 @@ function renderStaff(){
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
   $('dailyReport').textContent='A napi kilométeradatok szerveres megerősítésre várnak.';
   $('dailyDate').disabled=true;
+  $('exportDailyCsv').disabled=true;
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -203,6 +204,7 @@ function renderStaff(){
   return;
  }
  $('dailyDate').disabled=false;
+ $('exportDailyCsv').disabled=false;
  const canReview=canReviewVehicles();
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
@@ -363,6 +365,18 @@ $('rosterForm').addEventListener('submit',async e=>{
 });
 $('rosterDate').addEventListener('change',e=>{rosterDate=e.target.value;renderRoster();});
 $('dailyDate').addEventListener('change',e=>{dailyReportDate=e.target.value;if(user&&isStaff)renderStaff();});
+$('exportDailyCsv').addEventListener('click',()=>{
+ if(!user||!isStaff||!sourcesTrusted(STAFF_SOURCES))
+  return toast('A napi riport exportjához hiteles szerveres adatok szükségesek.',true);
+ const report=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
+ if(!report.ready)return toast('A napi riport nem exportálható: '+report.reason,true);
+ const bytes=attendanceReportCsv(report);
+ const url=URL.createObjectURL(new Blob([bytes],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');
+ link.href=url;link.download='imile-attendance-'+report.date+'.csv';
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
 $('checkoutForm').addEventListener('submit',checkout);
 let shownPhotoUrls=[];
 async function openPhotos(sessionId){
