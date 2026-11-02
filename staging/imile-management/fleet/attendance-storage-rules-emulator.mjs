@@ -65,7 +65,7 @@ try {
   await check('oversized image blocked',false,()=>store(ownerStore,file(owner,'in','left.jpg'),{contentType:'image/jpeg'},new Uint8Array(8*1024*1024+1)));
   await check('checkout upload requires a real active vehicle session',false,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
   await env.withSecurityRulesDisabled(async admin=>{
-    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,status:'active'});
+    await setDoc(doc(admin.firestore(),'vehicleSessions',sid),{uid:owner,driverId:'DAX001',plate:'ABC123',status:'active'});
     await setDoc(doc(admin.firestore(),'courierLocks',owner),{plate:'ABC123',sessionId:sid,state:'active'});
   });
   await check('valid checkout image accepted for active vehicle',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
