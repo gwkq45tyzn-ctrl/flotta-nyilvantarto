@@ -185,7 +185,7 @@ function renderRoster(){
  const drivers=data.drivers.filter(x=>x.active===true&&allowed.has(x.id));
  driverSelect.innerHTML='<option value="">Válassz futárt…</option>'+drivers.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.id)+'</option>').join('');
  if(drivers.some(x=>x.id===previous))driverSelect.value=previous;
- const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,driverLocks:data.driverLocks,plans:data.plans,accesses:data.accesses});
+ const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,driverLocks:data.driverLocks,plans:data.plans,accesses:data.accesses,drivers:data.drivers});
  if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv: '+report.reason;return;}
  const kpis=[['Üzemképes autók',report.operationalCars],['Aktív Attendance nélkül',report.physicallyReady],
   ['Tervezett futárok',report.plannedCouriers],['Megerősített futárok',report.confirmedCouriers],
