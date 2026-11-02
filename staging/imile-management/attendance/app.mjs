@@ -5,6 +5,7 @@ import {getStorage,ref as storageRef,uploadBytes,getBlob} from 'https://www.gsta
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
+import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -50,6 +51,7 @@ function allPhotoFiles(form){
 }
 async function uploadPhotos(files,sessionId,stage){
  const paths={};
+ let reused=0;
  for(const {key,file} of files){
   // Re-encode every image as JPEG to normalize browser-camera MIME and strip EXIF metadata.
   const bitmap=await createImageBitmap(file);
@@ -58,9 +60,15 @@ async function uploadPhotos(files,sessionId,stage){
   canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Fotó tömörítése sikertelen.')),'image/jpeg',0.8));
   const path='attendance/'+user.uid+'/'+sessionId+'/'+stage+'/'+key+'.jpg';
-  await uploadBytes(storageRef(storage,path),blob,{contentType:'image/jpeg'});
-  paths[key]=path;
+  const result=await uploadOrVerifyImmutable({
+   path,blob,
+   upload:(p,image)=>uploadBytes(storageRef(storage,p),image,{contentType:'image/jpeg'}),
+   readOriginal:p=>getBlob(storageRef(storage,p))
+  });
+  if(result.reused)reused++;
+  paths[key]=result.path;
  }
+ if(reused)toast(reused+' korábbi, azonos tartalmú fénykép megőrizve. Nem írtuk felül az eredeti képeket.');
  return paths;
 }
 const ownClaim=()=>data.courierClaim;
