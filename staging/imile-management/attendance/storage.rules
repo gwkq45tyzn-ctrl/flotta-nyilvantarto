@@ -17,7 +17,7 @@ service firebase.storage {
     // Only a signed-in courier can CREATE original images under their own
     // immutable event prefix. No overwrites, deletes, or public access.
     allow read: if (signedIn() && request.auth.uid == uid) || staff();
-    allow create: if courier() && request.auth.uid == uid
+    allow create: if resource == null && courier() && request.auth.uid == uid
       && sid.matches('^s_[a-f0-9]{32}$')
       && stage in ['in','out']
       && photo in ['front.jpg','left.jpg','right.jpg','back.jpg',
