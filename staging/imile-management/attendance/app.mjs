@@ -96,6 +96,7 @@ function startStaff(){
  */
 async function refreshAttendanceSources(){
  if(!user||!navigator.onLine)throw Error('Az adatok frissítéséhez internetkapcsolat szükséges.');
+ const principal=user.uid,principalIsStaff=isStaff;
  const courierSessions=query(collection(db,'vehicleSessions'),where('uid','==',user.uid));
  const targets=isStaff?[
   ['vehicles',collection(db,'vehicles'),s=>data.vehicles=s.docs.map(d=>({id:d.id,...d.data()}))],
@@ -113,6 +114,7 @@ async function refreshAttendanceSources(){
  const snapshots=await Promise.all(targets.map(async ([,reference])=>
   reference.type==='document'?getDocFromServer(reference):getDocsFromServer(reference)));
  if(!navigator.onLine)throw Error('A frissítés közben megszakadt az internetkapcsolat.');
+ if(!user||user.uid!==principal||isStaff!==principalIsStaff)throw Error('A belépett felhasználó időközben megváltozott.');
  // All server reads must succeed before committing any UI state or trust.
  const receivedAt=Date.now();
  for(let i=0;i<targets.length;i++){
