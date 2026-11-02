@@ -14,15 +14,43 @@ service firebase.storage {
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
-  // Prevent uploading checkout images for fabricated or already returned
-  // sessions. An "in" prefix is likewise not permitted while the courier has
-  // an outstanding car/DA claim. This reduces abuse but is NOT a daily quota.
+  // Reject new uploads BEFORE triggering the private verifier whenever
+  // the canonical car, courier and DA possession records do not agree.
+  // This does not implement a per-day/session upload budget.
+  function claimsMatch(uid,sid,plate,driverId) {
+    let c = /databases/(default)/documents/courierLocks/$(uid);
+    let v = /databases/(default)/documents/vehicleLocks/$(plate);
+    let d = /databases/(default)/documents/driverLocks/$(driverId);
+    return firestore.exists(c) && firestore.exists(v) && firestore.exists(d)
+      && firestore.get(c).data.sessionId == sid
+      && firestore.get(c).data.plate == plate
+      && firestore.get(c).data.state == 'active'
+      && firestore.get(v).data.sessionId == sid
+      && firestore.get(v).data.plate == plate
+      && firestore.get(v).data.uid == uid
+      && firestore.get(v).data.driverId == driverId
+      && firestore.get(v).data.state == 'active'
+      && firestore.get(d).data.sessionId == sid
+      && firestore.get(d).data.plate == plate
+      && firestore.get(d).data.uid == uid
+      && firestore.get(d).data.driverId == driverId
+      && firestore.get(d).data.state == 'active';
+  }
+  function validCheckout(uid,sid) {
+    let s = /databases/(default)/documents/vehicleSessions/$(sid);
+    let a = /databases/(default)/documents/courierAccess/$(uid);
+    return firestore.exists(s)
+      && firestore.get(s).data.uid == uid
+      && firestore.get(s).data.status == 'active'
+      && firestore.get(s).data.driverId == firestore.get(a).data.driverId
+      && claimsMatch(uid,sid,firestore.get(s).data.plate,firestore.get(s).data.driverId);
+  }
   function allowedPhotoStage(uid,sid,stage) {
+    let a = /databases/(default)/documents/courierAccess/$(uid);
     return stage == 'in'
       ? !firestore.exists(/databases/(default)/documents/courierLocks/$(uid))
-      : firestore.exists(/databases/(default)/documents/vehicleSessions/$(sid))
-        && firestore.get(/databases/(default)/documents/vehicleSessions/$(sid)).data.uid == uid
-        && firestore.get(/databases/(default)/documents/vehicleSessions/$(sid)).data.status == 'active';
+        && !firestore.exists(/databases/(default)/documents/driverLocks/$(firestore.get(a).data.driverId))
+      : validCheckout(uid,sid);
   }
   match /attendance/{uid}/{sid}/{stage}/{photo} {
     // Only a signed-in courier can CREATE original images under their own
