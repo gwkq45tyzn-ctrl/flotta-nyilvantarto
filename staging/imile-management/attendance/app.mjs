@@ -2,6 +2,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {getStorage,ref as storageRef,uploadBytes,getBlob,getMetadata} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
+import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
@@ -13,8 +14,10 @@ import {assessSources} from '../../../depokapacitas/source-health.mjs';
 import {encodeJpeg,validPhotoFile} from './photo-codec.mjs';
 import {photoProofMatches,readVerifiedPhoto} from './photo-proof.mjs';
 import {initialVehicleDetails} from '../fleet/operations-data.mjs';
+import {requestPhotoPermit,clearPermitRequest} from './photo-permit.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
+const permitCall=httpsCallable(getFunctions(app,'europe-west3'),'attendancePhotoPermit');
 let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],driverLocks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
 const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
 const STAFF_SOURCES=['vehicles','locks','driverLocks','sessions','drivers','accesses','plans'];
@@ -317,8 +320,40 @@ function renderStaff(){
  show('bulkPanel',canReview&&waiting.length>0);
  $('reviewList').querySelectorAll('input,button[data-review]').forEach(el=>el.disabled=busy);
  $('bulkPanel').querySelectorAll('input,button').forEach(el=>el.disabled=busy);
- renderRoster();
+ renderRoster();renderQuotaAdmin();
 }
+let pendingQuotaOperation=null;
+function renderQuotaAdmin(){
+ const enabled=staffRole==='admin'&&sourcesTrusted(STAFF_SOURCES);
+ show('quotaAdminPanel',staffRole==='admin');
+ const select=$('quotaTarget'),prior=select.value;
+ select.innerHTML='<option value="">Válassz futárt…</option>'+data.accesses.filter(a=>a.active).map(a=>
+  '<option value="'+esc(a.uid||a.id)+'">'+esc(a.driverId)+' · '+esc(a.uid||a.id)+'</option>').join('');
+ if([...select.options].some(o=>o.value===prior))select.value=prior;
+ $('quotaAdminForm').querySelectorAll('input,select,textarea,button').forEach(el=>el.disabled=!enabled||busy);
+}
+const adminOperationId=()=>crypto.randomUUID().replaceAll('-','');
+$('quotaAdminForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(busy||staffRole!=='admin')return;setBusy(true);
+ try{
+  await ensureAttendanceSources(STAFF_SOURCES);
+  const actor=user.uid,form=e.target,action=form.elements.action.value,targetUid=form.elements.targetUid.value,reason=form.elements.reason.value.trim();
+  const target=data.accesses.find(a=>(a.uid||a.id)===targetUid&&a.active);
+  if(!target)throw Error('Válassz aktív futárhozzáférést.');
+  const payload={action,targetUid,reason,...action==='adminGrant'?{amount:Number(form.elements.amount.value)}:{sessionId:target.photoUploadPermit?.sessionId}};
+  if(action!=='adminGrant'&&!payload.sessionId)throw Error('Nincs függő feltöltési engedély.');
+  const fingerprint=JSON.stringify({actor,...payload});
+  if(pendingQuotaOperation?.fingerprint!==fingerprint)pendingQuotaOperation={fingerprint,operationId:adminOperationId()};
+  await permitCall({...payload,operationId:pendingQuotaOperation.operationId});
+  if(user?.uid!==actor)throw Error('A bejelentkezés megváltozott.');
+  pendingQuotaOperation=null;form.elements.reason.value='';toast('A naplózott fotófeltöltési kivétel elkészült.');
+ }catch(error){toast('A kivétel nem menthető: '+error.message,true);}finally{setBusy(false);}
+});
+$('restartPhotoPermit').addEventListener('click',()=>{
+ if(busy||!user)return;
+ clearPermitRequest(user.uid);pendingCheckIn=null;photoCache.clear();show('restartPhotoPermit',false);
+ toast('Az új feltöltés előkészítve. A becsekkolás gombbal indíthatod.');
+});
 function render(){if(!user)return;if(isStaff)renderStaff();else if(access)renderCourier();}
 async function checkin(e){
  e.preventDefault();if(busy)return;setBusy(true);
@@ -328,9 +363,11 @@ async function checkin(e){
   const form=e.target,plate=PLATE(form.elements.plate.value),km=Number(form.elements.km.value);
   if(!form.elements.condition.checked)throw Error('Ellenőrizd a járművet.');
   const files=allPhotoFiles(form);
-  const intent=user.uid+'|'+plate+'|'+km;
-  if(pendingCheckIn?.intent!==intent)pendingCheckIn={intent,sessionId:'s_'+crypto.randomUUID().replace(/-/g,'')};
-  const sessionId=pendingCheckIn.sessionId;
+  const actor=user.uid,grant=await requestPhotoPermit(permitCall,{uid:actor,stage:'in'});
+  if(user?.uid!==actor)throw Error('A bejelentkezés megváltozott.');
+  pendingCheckIn={sessionId:grant.sessionId};
+  const sessionId=grant.sessionId;
+  show('restartPhotoPermit',false);
   const proposed=Object.fromEntries(PHOTO_KEYS.map(k=>[k,'attendance/'+user.uid+'/'+sessionId+'/in/'+k+'.jpg']));
   const preflight=planCheckIn({uid:user.uid,access,vehicle:data.vehicles.find(v=>PLATE(v.plate||v.id)===plate),
    lock:data.locks.find(l=>l.plate===plate),claim:ownClaim(),sessionId,mileage:km,photos:proposed});
@@ -354,8 +391,8 @@ async function checkin(e){
    tx.set(cRef,{plate,sessionId,state:'active'});
    tx.set(dRef,{driverId:plan.driverId,plate,uid:user.uid,sessionId,state:'active'});
   });
-  toast('Becsekkolás sikeres. A jármű használatba került.');form.reset();pendingCheckIn=null;photoCache.clear();
- }catch(error){toast('Becsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
+  toast('Becsekkolás sikeres. A jármű használatba került.');form.reset();clearPermitRequest(actor);pendingCheckIn=null;photoCache.clear();
+ }catch(error){show('restartPhotoPermit',error.restartAllowed===true);toast('Becsekkolás sikertelen: '+error.message,true);}finally{setBusy(false);}
 }
 async function checkout(e){
  e.preventDefault();if(busy)return;setBusy(true);
@@ -371,6 +408,8 @@ async function checkout(e){
   const proposed=Object.fromEntries(PHOTO_KEYS.map(k=>[k,'attendance/'+user.uid+'/'+session.id+'/out/'+k+'.jpg']));
   const preflight=planCheckOut({uid:user.uid,session,mileage:km,photos:proposed,damageNote,cleanlinessNote,keyDropped:true});
   if(!preflight.ok)throw Error(preflight.reason);
+  const actor=user.uid;await requestPhotoPermit(permitCall,{uid:actor,stage:'out',sessionId:session.id});
+  if(user?.uid!==actor)throw Error('A bejelentkezés megváltozott.');
   const paths=await uploadPhotos(files,session.id,'out');
   const sRef=doc(db,'vehicleSessions',session.id),lRef=doc(db,'vehicleLocks',session.plate),cRef=doc(db,'courierLocks',user.uid),dRef=doc(db,'driverLocks',session.driverId);
   await runTransaction(db,async tx=>{

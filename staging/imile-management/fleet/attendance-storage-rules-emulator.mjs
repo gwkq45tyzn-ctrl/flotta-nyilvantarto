@@ -8,6 +8,7 @@ import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
 import {doc,setDoc} from 'firebase/firestore';
 import {ref,uploadBytes,getMetadata,deleteObject} from 'firebase/storage';
+import {permitFixture} from './attendance-permit-fixture.mjs';
 
 const projectId='demo-attendance-storage';
 const [firestoreRules,storageRules]=await Promise.all([
@@ -35,7 +36,7 @@ try {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async admin=>{
     const db=admin.firestore();
-    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX001',active:true});
+    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX001',active:true,photoUploadPermit:permitFixture(owner,'DAX001',sid)});
     await setDoc(doc(db,'courierAccess',other),{uid:other,driverId:'DAX002',active:true});
     await setDoc(doc(db,'courierAccess',inactive),{uid:inactive,driverId:'DAX003',active:false});
     await setDoc(doc(db,'users','editor'),{name:'QA editor',role:'editor',active:true});
@@ -70,12 +71,12 @@ try {
   });
   await check('valid checkout image accepted for active vehicle',true,()=>store(ownerStore,file(owner,'out','cargo.jpg')));
   await env.withSecurityRulesDisabled(async admin=>{
-    await setDoc(doc(admin.firestore(),'courierAccess',owner),{uid:owner,driverId:'DAX999',active:true});
+    await setDoc(doc(admin.firestore(),'courierAccess',owner),{uid:owner,driverId:'DAX999',active:true,photoUploadPermit:permitFixture(owner,'DAX001',sid)});
   });
   await check('checkout denied after canonical DA reassignment',false,()=>store(ownerStore,file(owner,'out','right.jpg')));
   await env.withSecurityRulesDisabled(async admin=>{
     const db=admin.firestore();
-    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX001',active:true});
+    await setDoc(doc(db,'courierAccess',owner),{uid:owner,driverId:'DAX001',active:true,photoUploadPermit:permitFixture(owner,'DAX001',sid)});
     await setDoc(doc(db,'vehicleSessions',sid),{uid:owner,driverId:'DAX001',plate:'BAD-PLATE',status:'active'});
   });
   await check('checkout denied for malformed session plate',false,()=>store(ownerStore,file(owner,'out','right.jpg')));

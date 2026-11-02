@@ -3,6 +3,7 @@ import {onObjectFinalized,onObjectDeleted,onObjectMetadataUpdated} from 'firebas
 import {logger} from 'firebase-functions';
 import {verifyEvent,BUCKET} from './verifier.mjs';
 import {serverAdapters} from './adapters.mjs';
+export {attendancePhotoPermit} from './quota-callable.mjs';
 const options={bucket:BUCKET,region:'europe-west3',memory:'1GiB',cpu:1,
  concurrency:1,minInstances:0,maxInstances:2,timeoutSeconds:120,retry:true,
  serviceAccount:'attendance-photo-verifier@imile-management-staging.iam.gserviceaccount.com'};

@@ -1,0 +1,116 @@
+// Full Auth + callable Functions + Firestore + Storage, synthetic loopback only.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {randomBytes} from 'node:crypto';
+import sharp from 'sharp';
+import {initializeApp as initAdmin} from 'firebase-admin/app';
+import {getFirestore as adminDb,Timestamp} from 'firebase-admin/firestore';
+import {getAuth as adminAuth} from 'firebase-admin/auth';
+import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
+import {initializeApp,deleteApp} from 'firebase/app';
+import {getAuth,connectAuthEmulator,signInWithEmailAndPassword} from 'firebase/auth';
+import {getFirestore,connectFirestoreEmulator,doc,setDoc,updateDoc,deleteDoc,getDoc,getDocs,collection,writeBatch,serverTimestamp} from 'firebase/firestore';
+import {getStorage,connectStorageEmulator,ref,uploadBytes,uploadBytesResumable,getBytes,getMetadata} from 'firebase/storage';
+import {getFunctions,connectFunctionsEmulator,httpsCallable} from 'firebase/functions';
+import {BUCKET,KEYS,pathsFor} from './verifier.mjs';
+import {POLICY_EXAMPLE,counterKeys,dayKey} from './quota-policy.mjs';
+import {initialVehicleDetails} from '../fleet/operations-data.mjs';
+import {uploadOrVerifyImmutable} from '../attendance/photo-upload.mjs';
+import {attendanceDailyReport} from '../attendance/daily-report.mjs';
+for(const [k,pattern]of [['FIRESTORE_EMULATOR_HOST',/^127\.0\.0\.1:8888$/],['FIREBASE_AUTH_EMULATOR_HOST',/^127\.0\.0\.1:9398$/],['STORAGE_EMULATOR_HOST',/^(http:\/\/)?127\.0\.0\.1:9297$/]])assert.match(process.env[k]||'',pattern,'LOOPBACK_REQUIRED');
+const project='demo-imile-quota',app=initAdmin({projectId:project,storageBucket:BUCKET}),db=adminDb(app),auth=adminAuth(app);
+const env=await initializeTestEnvironment({projectId:project,firestore:{host:'127.0.0.1',port:8888,rules:await fs.readFile(new URL('../../../depokapacitas/firestore.rules',import.meta.url),'utf8')},storage:{host:'127.0.0.1',port:9297,rules:await fs.readFile(new URL('../attendance/storage.rules',import.meta.url),'utf8')}});
+const uid='qa_owner',other='qa_duplicate',driver='SYNDA01',driver2='SYNDA02',plate='SYN8001';
+const apps=[];let passed=0;
+const id=()=>randomBytes(16).toString('hex');
+const check=async(name,fn)=>{await fn();passed++;console.log('PASS '+name);};
+const err=(fn,code)=>assert.rejects(fn,e=>e.message?.includes(code),'expected '+code);
+async function client(user){const a=initializeApp({projectId:project,apiKey:'synthetic-api-key',storageBucket:BUCKET},user);apps.push(a);
+ const au=getAuth(a);connectAuthEmulator(au,'http://127.0.0.1:9398',{disableWarnings:true});if(user!=='anonymous')await signInWithEmailAndPassword(au,user+'@example.invalid','SYNTHETIC-QUOTA-LOCAL-2026');
+ const d=getFirestore(a);connectFirestoreEmulator(d,'127.0.0.1',8888);const storage=getStorage(a);connectStorageEmulator(storage,'127.0.0.1',9297);
+ const f=getFunctions(a,'europe-west3');connectFunctionsEmulator(f,'127.0.0.1',5108);return {db:d,storage,call:async p=>(await httpsCallable(f,'attendancePhotoPermit')(p)).data};}
+const begin=(c,key=id())=>c.call({action:'begin',requestId:key});
+const count=async(u=uid,d=driver)=>Promise.all(counterKeys(dayKey(Date.now()),u,d).map(async k=>(await db.doc('photoUploadQuotas/'+k).get()).data()));
+const permit=async u=>(await db.doc('courierAccess/'+u).get()).data().photoUploadPermit;
+const ledger=s=>db.doc('photoUploadPermits/'+s);
+const receipt=(u,s,stage)=>db.doc(`photoReceipts/${u}/sessions/${s}/stages/${stage}`);
+const paths=(u,s,stage)=>pathsFor({uid:u,sessionId:s,stage});
+const jpeg=await sharp({create:{width:64,height:48,channels:3,background:'#385c98'}}).jpeg().toBuffer();
+const photo=(c,u,s,stage,key,bytes=jpeg)=>uploadBytes(ref(c.storage,paths(u,s,stage)[key]),bytes,{contentType:'image/jpeg'});
+async function waitReceipt(u,s,stage){const until=Date.now()+45000;while(Date.now()<until){const p=(await receipt(u,s,stage).get()).data();if(p?.verified)return p;await new Promise(r=>setTimeout(r,150));}throw Error('RECEIPT_TIMEOUT');}
+async function expire(u,{terminal=false}={}){const p=await permit(u),patch={inExpiresAt:Timestamp.fromMillis(Date.now()-1000),...terminal?{resumeUntil:Timestamp.fromMillis(Date.now()-500)}:{}};
+ await db.doc('courierAccess/'+u).update({photoUploadPermit:{...p,...patch}});await ledger(p.sessionId).update(patch);
+ if(terminal)await db.doc('photoUploadLeases/'+p.driverId).update({resumeUntil:patch.resumeUntil});}
+const issue=(c,u,s,d,p)=>{const b=writeBatch(c.db);b.set(doc(c.db,'vehicleSessions',s),{uid:u,driverId:d,plate:p,status:'active',startKm:100,endKm:null,inPhotos:paths(u,s,'in'),outPhotos:{},damageNote:'',cleanlinessNote:'',keyDropped:false,reviewChecks:{},startedAt:serverTimestamp(),endedAt:null,reviewedAt:null,reviewedBy:''});b.set(doc(c.db,'vehicleLocks',p),{plate:p,uid:u,driverId:d,sessionId:s,state:'active'});b.set(doc(c.db,'courierLocks',u),{plate:p,sessionId:s,state:'active'});b.set(doc(c.db,'driverLocks',d),{driverId:d,plate:p,uid:u,sessionId:s,state:'active'});return b.commit();};
+const finish=(c,s,keyDropped=true)=>{const b=writeBatch(c.db);b.update(doc(c.db,'vehicleSessions',s),{status:'awaiting_review',endKm:125,outPhotos:paths(uid,s,'out'),damageNote:'',cleanlinessNote:'',keyDropped,endedAt:serverTimestamp()});for(const [col,key]of [['vehicleLocks',plate],['courierLocks',uid],['driverLocks',driver]])b.update(doc(c.db,col,key),{state:'awaiting_review'});return b.commit();};
+const review=async(c,s,keyPresent=true)=>{const b=writeBatch(c.db),fleet=doc(c.db,'fleetRecords','vehicle__'+plate),old=(await getDoc(fleet)).data();b.update(doc(c.db,'vehicleSessions',s),{status:'reviewed',reviewChecks:{carPresent:true,keyPresent,clean:true,damageReviewed:false,cleanlinessReviewed:false},reviewedAt:serverTimestamp(),reviewedBy:'qa_editor'});b.update(fleet,{'data.mileage':125,revision:old.revision+1,updatedAt:serverTimestamp(),updatedBy:'qa_editor'});for(const [col,key]of [['vehicleLocks',plate],['courierLocks',uid],['driverLocks',driver]])b.delete(doc(c.db,col,key));return b.commit();};
+const reason='SYNTHETIC_TEST jogosult kivétel ellenőrzése';
+try{
+ await env.clearFirestore();await env.clearStorage();
+ for(const user of [uid,other,'qa_second','qa_admin','qa_editor','qa_viewer']){try{await auth.deleteUser(user);}catch(e){if(e.code!=='auth/user-not-found')throw e;}await auth.createUser({uid:user,email:user+'@example.invalid',password:'SYNTHETIC-QUOTA-LOCAL-2026'});}
+ for(const [u,d]of [[uid,driver],[other,driver],['qa_second',driver2]])await db.doc('courierAccess/'+u).set({uid:u,driverId:d,active:true});
+ for(const d of [driver,driver2])await db.doc('drivers/'+d).set({daCode:d,name:'SYNTHETIC_TEST',vendor:'QA',capacity:50,active:true});
+ for(const role of ['admin','editor','viewer'])await db.doc('users/qa_'+role).set({name:'SYNTHETIC_TEST',role,active:true});
+ await db.doc('vehicles/'+plate).set({plate,model:'SYNTHETIC_TEST',status:'Elérhető'});await db.doc('fleetRecords/vehicle__'+plate).set({kind:'vehicle',data:initialVehicleDetails(plate,100),revision:1,createdAt:new Date(),createdBy:'qa_admin',updatedAt:new Date(),updatedBy:'qa_admin'});
+ const c=await client(uid),o=await client(other),second=await client('qa_second'),ad=await client('qa_admin'),ed=await client('qa_editor'),viewer=await client('qa_viewer'),anon=await client('anonymous');
+ await check('unauthenticated callable cannot mint permit',()=>err(()=>begin(anon),'AUTH_REQUIRED'));
+ await check('missing policy fails closed',()=>err(()=>begin(c),'POLICY_NOT_CONFIGURED'));
+ const config={...POLICY_EXAMPLE,enabled:true,uidDailyLimit:1,driverDailyLimit:1,maxAdminExtraPerDay:2,maxRequestAliases:16};
+ const configOp=id();
+ await check('admin policy bootstrap is versioned and audited callable',async()=>{assert.equal((await ad.call({action:'adminPolicy',operationId:configOp,expectedRevision:0,policy:config,reason})).revision,1);assert.equal((await db.doc('photoUploadAdminOps/'+configOp).get()).data().actorUid,'qa_admin');});
+ await check('courier cannot spoof UID, date or daily limit',()=>err(()=>c.call({action:'begin',requestId:id(),uid:'qa_admin',day:'2099-01-01',limit:10000}),'INVALID_REQUEST'));
+ await check('courier cannot choose session ID',()=>err(()=>c.call({action:'begin',requestId:id(),sessionId:'s_'+id()}),'INVALID_REQUEST'));
+ const fake='s_'+id();
+ await check('unpermitted new in session blocked at Storage before any verifier',()=>assertFails(photo(c,uid,fake,'in','front')));
+ for(const [role,client]of [['courier',c],['admin',ad]]){
+  await check(role+' cannot forge embedded permit',()=>assertFails(updateDoc(doc(client.db,'courierAccess',uid),{photoUploadPermit:{sessionId:fake,status:'open'}})));
+  for(const col of ['photoUploadPermits','photoUploadQuotas','photoUploadLeases','photoUploadRequests','photoUploadPolicy','photoUploadAdminOps'])
+   await check(role+' cannot write '+col,()=>assertFails(setDoc(doc(client.db,col,'SYNTHETIC_FORGED'),{uid,status:'open'})));
+ }
+ const requests=Array.from({length:6},id);let grant;
+ await check('parallel requests allocate ONE secure session and ONE UID/DA quota',async()=>{const all=await Promise.all(requests.map(k=>begin(c,k)));grant=all[0];assert.match(grant.sessionId,/^s_[a-f0-9]{32}$/);assert.equal(new Set(all.map(x=>x.sessionId)).size,1);assert.equal((await count())[0].used,1);assert.equal((await count())[1].used,1);});
+ const sid=grant.sessionId,key=grant.requestId;
+ await check('lost response / repeated key reuses grant without additional quota',async()=>{assert.equal((await begin(c,key)).sessionId,sid);assert.equal((await count())[0].used,1);});
+ await check('second UID with same DA cannot get another pending session',()=>err(()=>begin(o),'DA_UPLOAD_IN_PROGRESS'));
+ await check('duplicate DA cannot upload another UID capability',()=>assertFails(photo(o,other,sid,'in','front')));
+ await check('courier cannot read other ledger or private quota counters',async()=>{await assertFails(getDoc(doc(o.db,'photoUploadPermits',sid)));await assertFails(getDocs(collection(c.db,'photoUploadQuotas')));});
+ await check('issued permit allows three actual original images',async()=>{for(const k of KEYS.slice(0,3))await photo(c,uid,sid,'in',k);assert.equal((await receipt(uid,sid,'in').get()).exists,false);});
+ await check('cancelled resumable upload leaves incomplete stage unverified',async()=>{const task=uploadBytesResumable(ref(c.storage,paths(uid,sid,'in').back),jpeg,{contentType:'image/jpeg'});task.cancel();await assert.rejects(()=>task,e=>e.code==='storage/canceled');assert.equal((await receipt(uid,sid,'in').get()).exists,false);});
+ await expire(uid);
+ await check('expired capability is denied directly by Storage',()=>assertFails(photo(c,uid,sid,'in','back')));
+ await check('automatic renewal resumes SAME partial stage without daily charge',async()=>{const renewed=await begin(c,key);assert.equal(renewed.sessionId,sid);assert.ok(renewed.expiresAt>Date.now());assert.equal((await count())[1].used,1);});
+ await check('original immutable photos reused byte-for-byte then all seven verified',async()=>{for(const k of KEYS){const path=paths(uid,sid,'in')[k];await uploadOrVerifyImmutable({path,blob:new Blob([jpeg],{type:'image/jpeg'}),upload:async(p,b)=>uploadBytes(ref(c.storage,p),new Uint8Array(await b.arrayBuffer()),{contentType:'image/jpeg'}),readOriginal:async p=>new Blob([await getBytes(ref(c.storage,p))],{type:(await getMetadata(ref(c.storage,p))).contentType})});}const p=await waitReceipt(uid,sid,'in');assert.equal(Object.keys(p.objects).length,7);});
+ await check('permitted verified seven-photo check-in acquires all three locks',async()=>{await issue(c,uid,sid,driver,plate);for(const col of ['vehicleLocks','courierLocks','driverLocks'])assert.equal((await db.collection(col).get()).size,1);});
+ await check('active car blocks any new begin without consuming quota',()=>err(()=>begin(c),'VEHICLE_STILL_LOCKED'));
+ await check('admin cannot revoke permit underneath active vehicle use',()=>err(()=>ad.call({action:'adminRevoke',operationId:id(),targetUid:uid,sessionId:sid,reason}),'SESSION_ALREADY_CREATED'));
+ await check('checkout photos need server out-stage grant even with active session',()=>assertFails(photo(c,uid,sid,'out','front')));
+ await check('checkout grant does not consume exhausted daily new-session quota',async()=>{assert.equal((await c.call({action:'checkout',sessionId:sid})).sessionId,sid);assert.equal((await count())[0].used,1);});
+ await check('another seven return images verified by existing private service',async()=>{for(const k of KEYS)await photo(c,uid,sid,'out',k);await waitReceipt(uid,sid,'out');});
+ await check('key confirmation remains mandatory after quota integration',()=>assertFails(finish(c,sid,false)));
+ await check('normal checkout keeps car locked pending physical review',async()=>{await finish(c,sid);assert.equal((await db.doc('vehicleLocks/'+plate).get()).data().state,'awaiting_review');});
+ await check('viewer cannot perform morning return',()=>assertFails(review(viewer,sid)));
+ await check('missing key keeps vehicle locked',()=>assertFails(review(ed,sid,false)));
+ await check('morning return updates Fleet and native daily stats',async()=>{await review(ed,sid);assert.equal((await db.doc('fleetRecords/vehicle__'+plate).get()).data().data.mileage,125);const s=(await db.doc('vehicleSessions/'+sid).get()).data();assert.equal(attendanceDailyReport({date:dayKey(Date.now()),sessions:[{id:sid,...s}]}).reviewedKm,25);assert.equal((await db.collection('vehicleLocks').get()).size,0);});
+ await check('completed request replay never silently consumes new daily quota',()=>err(()=>begin(c,key),'PERMIT_EXPIRED_OR_FINISHED'));
+ await check('new request fails on exhausted UID/DA quota',()=>err(()=>begin(c),'DAILY_QUOTA_EXHAUSTED'));
+ await check('fresh Auth account cannot bypass shared DA daily limit',()=>err(()=>begin(o),'DAILY_QUOTA_EXHAUSTED'));
+ await check('same UID cannot bypass its counter by changed DA binding',async()=>{await db.doc('courierAccess/'+uid).update({driverId:driver2});try{await err(()=>begin(c),'DAILY_QUOTA_EXHAUSTED');}finally{await db.doc('courierAccess/'+uid).update({driverId:driver});}});
+ for(const [role,client]of [['courier',c],['editor',ed],['viewer',viewer]])await check(role+' cannot grant administrator exception',()=>err(()=>client.call({action:'adminGrant',operationId:id(),targetUid:uid,amount:1,reason}),'ADMIN_REQUIRED'));
+ const grantOp=id(),extra={action:'adminGrant',operationId:grantOp,targetUid:uid,amount:1,reason};
+ await check('admin extra quota updates UID AND DA and immutable audit atomically',async()=>{await ad.call(extra);const counters=await count();assert.equal(counters[0].extra,1);assert.equal(counters[1].extra,1);const audit=(await db.doc('photoUploadAdminOps/'+grantOp).get()).data();assert.equal(audit.action,'adminGrant');assert.equal(audit.reason,reason);});
+ await check('admin retry with reordered JSON does not grant twice',async()=>{const replay=await ad.call(Object.fromEntries(Object.entries(extra).reverse()));assert.equal(replay.replayed,true);assert.equal((await count())[1].extra,1);});
+ await check('same operation ID cannot authorize a different exception',()=>err(()=>ad.call({...extra,amount:2}),'OPERATION_ID_REUSED'));
+ await check('configured administrator extra bound cannot be exceeded',()=>err(()=>ad.call({...extra,operationId:id(),amount:2}),'ADMIN_EXTRA_LIMIT'));
+ let secondGrant;await check('admin-authorized additional new session consumes exactly one extra slot',async()=>{secondGrant=await begin(c);assert.notEqual(secondGrant.sessionId,sid);assert.equal((await count())[0].used,2);});
+ await expire(uid,{terminal:true});
+ await check('abandoned expired permit and its retry cannot restart or refund quota',async()=>{await err(()=>begin(c,secondGrant.requestId),'PERMIT_EXPIRED_OR_FINISHED');await assertFails(photo(c,uid,secondGrant.sessionId,'in','front'));assert.equal((await count())[0].used,2);});
+ const resumeOp=id();
+ await check('audited admin resume preserves same ID and quota count',async()=>{await ad.call({action:'adminResume',operationId:resumeOp,targetUid:uid,sessionId:secondGrant.sessionId,reason});assert.equal((await begin(c,secondGrant.requestId)).sessionId,secondGrant.sessionId);assert.equal((await count())[0].used,2);assert.equal((await db.doc('photoUploadAdminOps/'+resumeOp).get()).data().actorUid,'qa_admin');});
+ await check('admin revoke immediately removes Storage authorization without refund',async()=>{await ad.call({action:'adminRevoke',operationId:id(),targetUid:uid,sessionId:secondGrant.sessionId,reason});await assertFails(photo(c,uid,secondGrant.sessionId,'in','front'));assert.equal((await ledger(secondGrant.sessionId).get()).data().status,'revoked');assert.equal((await count())[1].used,2);});
+ await check('revoked old request cannot obtain replacement quota',()=>err(()=>begin(c,secondGrant.requestId),'PERMIT_EXPIRED_OR_FINISHED'));
+ await ad.call({...extra,operationId:id()});
+ await check('concurrent DIFFERENT UIDs cannot bypass final shared DA slot',async()=>{const results=await Promise.allSettled([begin(c),begin(o)]);assert.equal(results.filter(x=>x.status==='fulfilled').length,1);assert.equal((await count())[1].used,3);const winner=results[0].status==='fulfilled'?uid:other;await ad.call({action:'adminRevoke',operationId:id(),targetUid:winner,sessionId:results.find(x=>x.status==='fulfilled').value.sessionId,reason});});
+ await check('disabled Auth user cannot reach issuer with cached login token',async()=>{await auth.updateUser(uid,{disabled:true});try{await err(()=>begin(c),'AUTH_REQUIRED');}finally{await auth.updateUser(uid,{disabled:false});}});
+ await check('stale policy revision cannot overwrite approved limits',()=>err(()=>ad.call({action:'adminPolicy',operationId:id(),expectedRevision:0,policy:{...config,revision:2},reason}),'POLICY_REVISION_CONFLICT'));
+ console.log('PASS '+passed+' upload quota / capability / normal workflow emulator scenarios; no cloud writes');
+}finally{await Promise.all(apps.map(deleteApp));await env.cleanup();await app.delete();}

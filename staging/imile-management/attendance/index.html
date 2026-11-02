@@ -27,6 +27,7 @@
     <div class="photos" id="inPhotos"></div>
     <label class="tick"><input type="checkbox" name="condition" required> Az autót és a rendszámot ellenőriztem, a fotók most készültek.</label>
     <button class="primary" id="checkinButton" type="submit">Becsekkolás és autóátvétel</button>
+    <button id="restartPhotoPermit" type="button" hidden>Új feltöltés előkészítése – a következő indítás napi keretet használ</button>
   </form>
  </section>
  <section id="checkoutSection" class="panel" hidden><h2>Autó leadása</h2><p id="currentCar"></p>
@@ -54,6 +55,17 @@
   <div id="dailyReport" aria-live="polite">Napi adatok betöltése…</div>
  </section>
  <section class="panel"><h2>Futárhozzáférések ellenőrzése</h2><div id="accessAlerts" role="status" aria-live="polite">Ellenőrzés folyamatban…</div></section>
+ <section class="panel" id="quotaAdminPanel" hidden>
+  <h2>Fotófeltöltési kivétel – adminisztrátor</h2>
+  <p>A feloldás indoklással, naplózva történik. Lezárt vagy aktív autóhasználatot itt nem lehet felülírni.</p>
+  <form id="quotaAdminForm">
+   <label>Futárhozzáférés<select id="quotaTarget" name="targetUid" required><option value="">Válassz futárt…</option></select></label>
+   <label>Művelet<select name="action"><option value="adminGrant">Mai többletkeret</option><option value="adminResume">Függő feltöltés folytatásának engedélyezése</option><option value="adminRevoke">Függő engedély visszavonása</option></select></label>
+   <label>Többlet munkamenetek száma (többletkeretnél)<input name="amount" type="number" min="1" max="1000" step="1" value="1" required></label>
+   <label>Indoklás<textarea name="reason" minlength="10" maxlength="500" required></textarea></label>
+   <button type="submit">Naplózott kivétel mentése</button>
+  </form>
+ </section>
  <section class="panel">
   <h2>Másnapi futár- és autókapacitás</h2>
   <p>Csak a várható létszámot tervezzük, előre nem kötünk rendszámot futárhoz. Az üzemképes és a ténylegesen szabad autókat külön mutatjuk.</p>

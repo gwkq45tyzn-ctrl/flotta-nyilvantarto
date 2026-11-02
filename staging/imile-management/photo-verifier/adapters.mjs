@@ -3,6 +3,7 @@ import {getAuth} from 'firebase-admin/auth';
 import {getStorage} from 'firebase-admin/storage';
 import {isDeepStrictEqual} from 'node:util';
 import {BUCKET,MAX_BYTES,reject} from './verifier.mjs';
+import {validPermit} from './quota-policy.mjs';
 
 export function serverAdapters(app){
  const db=getFirestore(app),bucket=getStorage(app).bucket(BUCKET),auth=getAuth(app);
@@ -29,6 +30,7 @@ export function serverAdapters(app){
    for(const lock of [courier,da,car])if(lock?.sessionId!==id.sessionId||lock.plate!==session.plate||lock.state!=='active')reject('LOCK_MISMATCH');
    if(da.uid!==id.uid||car.uid!==id.uid||da.driverId!==access.driverId||car.driverId!==access.driverId)reject('LOCK_MISMATCH');
   }
+  if(!validPermit(access.photoUploadPermit,id.uid,access.driverId,id.sessionId,id.stage,Date.now()))reject('PERMIT_MISSING_OR_EXPIRED');
  };
  return {
   objects:{

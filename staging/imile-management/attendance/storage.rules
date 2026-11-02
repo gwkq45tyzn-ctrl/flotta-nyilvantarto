@@ -15,10 +15,21 @@ service firebase.storage {
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
   // Cloud Storage Rules may read at most two distinct Firestore documents.
-  // courier() reads courierAccess; a stage-specific rule reads one other
+  // The server capability reads courierAccess; a stage-specific rule reads one other
   // document: courierLocks (in) or vehicleSessions (out). The server verifier
   // and Firestore transaction handle all three possession locks.
-  // This is NOT a per-day upload quota.
+  // The server-only capability is issued atomically with daily UID/DA quota.
+  function permittedUpload(uid,sid,stage) {
+    let a = firestore.get(/databases/(default)/documents/courierAccess/$(uid)).data;
+    let p = a.photoUploadPermit;
+    return a.active == true && a.uid == uid
+      && p is map && p.source == 'upload-quota-v1' && p.version == 1
+      && p.uid == uid && p.driverId == a.driverId && p.sessionId == sid
+      && p.status == 'open' && p.createdAt is timestamp && p.createdAt <= request.time
+      && (stage == 'in' ? p.inExpiresAt is timestamp && p.inExpiresAt > request.time
+                          && p.resumeUntil is timestamp && p.resumeUntil > request.time && p.inExpiresAt <= p.resumeUntil
+                        : p.outExpiresAt is timestamp && p.outExpiresAt > request.time);
+  }
   function allowedPhotoStage(uid,sid,stage) {
     let access = /databases/(default)/documents/courierAccess/$(uid);
     let s = /databases/(default)/documents/vehicleSessions/$(sid);
@@ -35,7 +46,7 @@ service firebase.storage {
     // Only a signed-in courier can CREATE original images under their own
     // immutable event prefix. No overwrites, deletes, or public access.
     allow read: if (courier() && request.auth.uid == uid) || staff();
-    allow create: if resource == null && courier() && request.auth.uid == uid
+    allow create: if resource == null && signedIn() && request.auth.uid == uid
       && sid.matches('^s_[a-f0-9]{32}$')
       && stage in ['in','out']
       && photo in ['front.jpg','left.jpg','right.jpg','back.jpg',
@@ -43,7 +54,7 @@ service firebase.storage {
       && request.resource.size > 0
       && request.resource.size <= 8 * 1024 * 1024
       && request.resource.contentType == 'image/jpeg'
-      && allowedPhotoStage(uid,sid,stage);
+      && permittedUpload(uid,sid,stage) && allowedPhotoStage(uid,sid,stage);
     allow update, delete: if false;
   }
   match /{allPaths=**} { allow read, write: if false; }
