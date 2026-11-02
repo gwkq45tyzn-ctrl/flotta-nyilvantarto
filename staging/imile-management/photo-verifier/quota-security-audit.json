@@ -1,0 +1,9 @@
+{
+ "score":4,
+ "summary":"Prototípus: szerver által kiadott UID/DA/session/szakasz/lejárat kötés, atomi kettős napi számláló és DA lease, idempotencia, kliensírás teljes tiltása. A #59 Storage-védelmei megmaradnak két külön dokumentumon belül. A photoReceipts és JPEG-hitelesítés változatlan. Felhős IAM/terhelés/App Check még nem igazolt.",
+ "findings":[
+  {"check":"Authority Source","severity":"minor","issue":"Az Admin SDK megkerüli a Rules-t, a runtime IAM dokumentumszinten nem szűkíti a quota szolgáltatás Firestore-írását.","recommendation":"Dedikált kulcs nélküli SA, minimális IAM, verzióhoz kötött telepítés és külön cloud IAM QA; ne kapjon Owner/Editor jogot."},
+  {"check":"Resource Exhaustion/DoS","severity":"minor","issue":"A kvóta új sessionszámot és Storage-számosságot korlátoz; hitelesített callable ismétlések olvasási/CPU-költségét és teljes pénzügyi számlát nem zárja le.","recommendation":"Korlátozott jóváhagyott pilot, App Check/hívásterhelés-védelem, monitoring és költségriasztások; az engedélyezett policy és admin kivételek felülvizsgálata."},
+  {"check":"Business Logic vs Rules","severity":"minor","issue":"Kanonikus driver önálló inaktiválásakor a Storage két dokumentumos korlát miatt nem olvassa külön a drivert; issuer/verifier megtagadja az új engedélyt/igazolást.","recommendation":"Azonnali Storage-tiltáshoz courierAccess.active=false vagy függő engedély adminRevoke; ezeket a negatív tesztek ellenőrzik."}
+ ]
+}

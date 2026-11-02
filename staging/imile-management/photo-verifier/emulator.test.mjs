@@ -18,6 +18,7 @@ import {initialVehicleDetails} from '../fleet/operations-data.mjs';
 import {attendanceDailyReport} from '../attendance/daily-report.mjs';
 import {fleetSummary,bulkReviewEligible} from '../attendance/core.mjs';
 import {readVerifiedPhoto} from '../attendance/photo-proof.mjs';
+import {permitFixture} from '../fleet/attendance-permit-fixture.mjs';
 const project='demo-imile-photo';
 for(const k of ['FIRESTORE_EMULATOR_HOST','FIREBASE_AUTH_EMULATOR_HOST','STORAGE_EMULATOR_HOST'])
  assert.match(process.env[k]||'',/^(http:\/\/)?127\.0\.0\.1:\d+$/,'LOOPBACK_REQUIRED '+k);
@@ -47,7 +48,11 @@ async function client(user){
  const st=getStorage(a);connectStorageEmulator(st,'127.0.0.1',9198);return {db:d,storage:st};
 }
 const paths=(u,s,stage)=>pathsFor({uid:u,sessionId:s,stage});
-const upload=async(c,u,s,stage,keys=KEYS,bytes=jpeg)=>{for(const key of keys)await uploadBytes(ref(c.storage,paths(u,s,stage)[key]),bytes,{contentType:'image/jpeg'});};
+const upload=async(c,u,s,stage,keys=KEYS,bytes=jpeg)=>{
+ const access=(await db.doc('courierAccess/'+u).get()).data();
+ await db.doc('courierAccess/'+u).update({photoUploadPermit:permitFixture(u,access.driverId,s)});
+ for(const key of keys)await uploadBytes(ref(c.storage,paths(u,s,stage)[key]),bytes,{contentType:'image/jpeg'});
+};
 const create=(c,u,s,d,p,start=100)=>{
  const b=writeBatch(c.db);
  b.set(doc(c.db,'vehicleSessions',s),{uid:u,driverId:d,plate:p,status:'active',startKm:start,endKm:null,inPhotos:paths(u,s,'in'),outPhotos:{},damageNote:'',cleanlinessNote:'',keyDropped:false,reviewChecks:{},startedAt:serverTimestamp(),endedAt:null,reviewedAt:null,reviewedBy:''});

@@ -85,12 +85,25 @@ service cloud.firestore {
     // A filename map does not prove that Storage objects exist. A separately
     // approved IAM verifier must inspect all immutable objects before issuing
     // this receipt. No browser role, including admin, can manufacture it.
+    // One server-issued capability per courier. Browser roles cannot mint,
+    // replace or remove it; quota counters/leases/journals are also server-only.
+    function validPhotoPermit(uid,sid,stage) {
+      let a = get(/databases/$(database)/documents/courierAccess/$(uid)).data;
+      let p = a.photoUploadPermit;
+      return p is map && p.source == 'upload-quota-v1' && p.version == 1
+        && p.status == 'open' && p.uid == uid && p.driverId == a.driverId && p.sessionId == sid
+        && p.createdAt is timestamp && p.createdAt <= request.time
+        && (stage == 'in' ? p.inExpiresAt is timestamp && p.inExpiresAt > request.time
+                            && p.resumeUntil is timestamp && p.resumeUntil > request.time && p.inExpiresAt <= p.resumeUntil
+                          : p.outExpiresAt is timestamp && p.outExpiresAt > request.time);
+    }
     function trustedPhotos(paths,uid,sid,stage) {
       let proof = get(/databases/$(database)/documents/photoReceipts/$(uid)/sessions/$(sid)/stages/$(stage));
       return proof != null && proof.data.uid == uid && proof.data.sessionId == sid
         && proof.data.stage == stage && proof.data.source == 'storage-verifier-v1'
         && proof.data.verified == true && proof.data.paths == paths
-        && proof.data.verifiedAt is timestamp && proof.data.verifiedAt <= request.time;
+        && proof.data.verifiedAt is timestamp && proof.data.verifiedAt <= request.time
+        && validPhotoPermit(uid,sid,stage);
     }
     function currentVehicleMileage(plate,km) {
       let record = get(/databases/$(database)/documents/fleetRecords/$('vehicle__' + plate));
@@ -131,14 +144,38 @@ service cloud.firestore {
     match /courierAccess/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || member());
       allow list: if member();
-      allow create, update: if admin()
+      allow create: if admin()
+        && validCourierAccess(request.resource.data,uid)
         && exactFields(request.resource.data,['uid','driverId','active'])
         && request.resource.data.uid == uid
         && validDriverCode(request.resource.data.driverId)
         && request.resource.data.active is bool
         && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId));
+      allow update: if admin() && validCourierAccess(request.resource.data,uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid','driverId','active']);
       allow delete: if false;
     }
+    function validCourierAccess(data,uid) {
+      return data.keys().hasOnly(['uid','driverId','active','photoUploadPermit'])
+        && data.keys().hasAll(['uid','driverId','active']) && data.uid == uid
+        && validDriverCode(data.driverId) && data.active is bool
+        && exists(/databases/$(database)/documents/drivers/$(data.driverId));
+    }
+    // Permit ledger: immutable session binding, bounded timestamps and server
+    // status; quotas: integer used/extra; leases: canonical DA; requests: hash of
+    // UID+idempotency key; policy: versioned limits; adminOps: reason/actor/time.
+    // Admin SDK validates all schemas. ALL browser writes, including admin,
+    // are denied. No fallback or client-authored privileged control documents.
+    match /photoUploadPermits/{sid} {
+      allow get: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if admin();
+      allow create, update, delete: if false;
+    }
+    match /photoUploadQuotas/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadLeases/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadRequests/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadPolicy/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadAdminOps/{id} { allow read: if admin(); allow write: if false; }
     match /vehicleSessions/{sid} {
       // The client transaction must read its new (not-yet-existing) ID before
       // creating it. Missing-document reads disclose no other courier's record.
