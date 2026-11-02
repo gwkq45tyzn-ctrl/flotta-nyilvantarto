@@ -101,7 +101,7 @@ assert.ok(conditionCsv.startsWith('\uFEFF'));
 assert.ok(conditionCsv.includes('"Sérülés megjegyzés"')&&conditionCsv.includes('"Tisztaság megjegyzés"'));
 assert.ok(conditionCsv.includes('"bad-meter"')&&conditionCsv.includes('"unknown-driver"'),
  'All incidents must be retained even if mileage or courier code is invalid');
-assert.ok(conditionCsv.includes("'  =HYPERLINK"),'Courier-entered formulas must be inert in Excel');
+assert.ok(conditionCsv.includes("'=HYPERLINK"),'Courier-entered formulas must be inert after note trimming in Excel');
 assert.ok(conditionCsv.includes('""http://example.invalid""'),'Quoted comments must be escaped');
 assert.ok(conditionCsv.includes('"ABC899"')&&conditionCsv.includes('"XYZ899"'),
  'Both flagged plates must be included');
