@@ -1,0 +1,13 @@
+{
+  "functions": [{"source":"staging/imile-management/photo-verifier","codebase":"attendance-photo-qa"}],
+  "firestore":{"rules":"depokapacitas/firestore.rules"},
+  "storage":{"rules":"staging/imile-management/attendance/storage.rules"},
+  "emulators":{
+    "auth":{"host":"127.0.0.1","port":9298},
+    "firestore":{"host":"127.0.0.1","port":8788},
+    "storage":{"host":"127.0.0.1","port":9198},
+    "functions":{"host":"127.0.0.1","port":5008},
+    "hub":{"host":"127.0.0.1","port":4408},
+    "ui":{"enabled":false}
+  }
+}

@@ -1,0 +1,18 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {PHOTO_KEYS} from './core.mjs';
+import {readVerifiedPhoto} from './photo-proof.mjs';
+import {sha256Blob} from './photo-upload.mjs';
+const blob=new Blob(['synthetic jpeg'],{type:'image/jpeg'}),hash=await sha256Blob(blob);
+const expected={uid:'synthetic',sessionId:'s_'+'a'.repeat(32),stage:'in',paths:Object.fromEntries(PHOTO_KEYS.map(k=>[k,'attendance/synthetic/s_'+'a'.repeat(32)+'/in/'+k+'.jpg']))};
+const objects=Object.fromEntries(PHOTO_KEYS.map(k=>[k,{bucket:'imile-management-staging.firebasestorage.app',name:expected.paths[k],generation:'12345678901234567890',metageneration:'1',size:blob.size,contentType:blob.type,width:20,height:20,sha256:hash}]));
+const proof={...expected,objects,source:'storage-verifier-v1',verified:true,verifiedAt:{toMillis:()=>Date.now()-1000},manifestVersion:1};
+const meta={...objects.front,fullPath:objects.front.name};
+const args={proof,expected,key:'front',metadata:async()=>meta,download:async()=>blob};
+test('viewer receives only exact verified original blob',async()=>assert.equal(await readVerifiedPhoto(args),blob));
+test('missing receipt fails before any download',async()=>assert.rejects(()=>readVerifiedPhoto({...args,proof:null}),/fotóigazolás/));
+test('revoked receipt fails',async()=>assert.rejects(()=>readVerifiedPhoto({...args,proof:{...proof,verified:false}}),/fotóigazolás/));
+test('new generation under same path is not displayed',async()=>assert.rejects(()=>readVerifiedPhoto({...args,metadata:async()=>({...meta,generation:'2'})}),/verzió/));
+test('same length replaced bytes are not displayed',async()=>assert.rejects(()=>readVerifiedPhoto({...args,download:async()=>new Blob(['SYNTHETIC JPEG'],{type:'image/jpeg'})}),/tartalma/));
+test('replacement during download is not displayed',async()=>{let calls=0;await assert.rejects(()=>readVerifiedPhoto({...args,metadata:async()=>({...meta,generation:++calls===1?meta.generation:'2'})}),/tartalma/);});
+test('unknown slot cannot be displayed',async()=>assert.rejects(()=>readVerifiedPhoto({...args,key:'fake'}),/fotóigazolás/));
