@@ -11,6 +11,9 @@ const plans=[{date:'2026-11-02',driverId:'DA1001',status:'confirmed'},{date:'202
 let result=planCapacity({date:'2026-11-02',vehicles,locks:[{plate:'ABC123',state:'awaiting_review'}],plans,accesses});
 assert.equal(result.operationalCars,2);assert.equal(result.physicallyReady,1);assert.equal(result.unverifiedCars,1);
 assert.equal(result.plannedCouriers,2);assert.equal(result.confirmedCouriers,1);assert.equal(result.missingConfirmed,1);
+assert.equal(result.inUseCars,0);assert.equal(result.awaitingReviewCars,1);
+const used=planCapacity({date:'2026-11-02',vehicles,locks:[{plate:'ABC123',state:'active'}],plans,accesses});
+assert.equal(used.inUseCars,1);assert.equal(used.awaitingReviewCars,0);assert.equal(used.physicallyReady,1);
 assert.equal(result.missingPlanned,0);assert.equal(result.potentialUtilization,1);
 result=planCapacity({date:'2026-11-02',vehicles:[],locks:[],plans:[],accesses:[]});
 assert.equal(result.missingConfirmed,0);

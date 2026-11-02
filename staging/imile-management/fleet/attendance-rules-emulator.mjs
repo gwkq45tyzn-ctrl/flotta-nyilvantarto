@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
 import {doc,setDoc,getDoc,getDocs,collection,writeBatch,serverTimestamp,updateDoc,deleteDoc} from 'firebase/firestore';
+import {initialVehicleDetails} from './operations-data.mjs';
 const rules=await fs.readFile(new URL('../../../depokapacitas/firestore.rules',import.meta.url),'utf8');
 const env=await initializeTestEnvironment({projectId:'demo-attendance-own',firestore:{host:'127.0.0.1',port:8787,rules}});
 const uid='courier_123',otherUid='courier_456',sameCodeUid='courier_789',driver='DAX001',otherDriver='DAX002',plate='CAR00001',plate2='CAR00002';
@@ -11,21 +12,24 @@ const db={courier:env.authenticatedContext(uid).firestore(),other:env.authentica
  editor:env.authenticatedContext('editor').firestore(),viewer:env.authenticatedContext('viewer').firestore(),
  admin:env.authenticatedContext('admin').firestore(),anonymous:env.unauthenticatedContext().firestore()};
 const photos=(user,id,stage)=>Object.fromEntries(['front','left','right','back','cabinFront','cabinRear','cargo'].map(k=>[k,'attendance/'+user+'/'+id+'/'+stage+'/'+k+'.jpg']));
-const session=(user,id,driverId,car)=>({uid:user,driverId,plate:car,status:'active',startKm:100,endKm:null,inPhotos:photos(user,id,'in'),outPhotos:{},damageNote:'',startedAt:serverTimestamp(),endedAt:null,reviewedAt:null,reviewedBy:''});
+const session=(user,id,driverId,car)=>({uid:user,driverId,plate:car,status:'active',startKm:100,endKm:null,inPhotos:photos(user,id,'in'),outPhotos:{},damageNote:'',cleanlinessNote:'',keyDropped:false,reviewChecks:{},startedAt:serverTimestamp(),endedAt:null,reviewedAt:null,reviewedBy:''});
 const create=(database,user,id,driverId,car,s={})=>{const batch=writeBatch(database);
 batch.set(doc(database,'vehicleSessions',id),{...session(user,id,driverId,car),...s});
 batch.set(doc(database,'vehicleLocks',car),{plate:car,uid:user,driverId,sessionId:id,state:'active'});
 batch.set(doc(database,'courierLocks',user),{plate:car,sessionId:id,state:'active'});
 batch.set(doc(database,'driverLocks',driverId),{driverId,plate:car,uid:user,sessionId:id,state:'active'});
 return batch.commit();};
-const checkout=(database,user,id,car)=>{const batch=writeBatch(database);
-batch.update(doc(database,'vehicleSessions',id),{status:'awaiting_review',endKm:150,outPhotos:photos(user,id,'out'),damageNote:'',endedAt:serverTimestamp()});
+const checkout=(database,user,id,car,extra={})=>{const batch=writeBatch(database);
+batch.update(doc(database,'vehicleSessions',id),{status:'awaiting_review',endKm:150,outPhotos:photos(user,id,'out'),damageNote:'',cleanlinessNote:'',keyDropped:true,endedAt:serverTimestamp(),...extra});
 batch.update(doc(database,'vehicleLocks',car),{state:'awaiting_review'});
 batch.update(doc(database,'courierLocks',user),{state:'awaiting_review'});
 batch.update(doc(database,'driverLocks',user===sameCodeUid?driver: user===otherUid?otherDriver:driver),{state:'awaiting_review'});
 return batch.commit();};
-const review=(database,user,id,car)=>{const batch=writeBatch(database);
-batch.update(doc(database,'vehicleSessions',id),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'editor'});
+const review=async(database,user,id,car,checks={})=>{const batch=writeBatch(database);
+const detailRef=doc(database,'fleetRecords','vehicle__'+car),detail=await getDoc(detailRef);
+const evidence={carPresent:true,keyPresent:true,clean:true,damageReviewed:false,cleanlinessReviewed:false,...checks};
+batch.update(doc(database,'vehicleSessions',id),{status:'reviewed',reviewChecks:evidence,reviewedAt:serverTimestamp(),reviewedBy:'editor'});
+batch.update(detailRef,{'data.mileage':Math.max(detail.data().data.mileage,150),revision:detail.data().revision+1,updatedAt:serverTimestamp(),updatedBy:'editor'});
 batch.delete(doc(database,'vehicleLocks',car));batch.delete(doc(database,'courierLocks',user));
 batch.delete(doc(database,'driverLocks',user===sameCodeUid?driver:user===otherUid?otherDriver:driver));
 return batch.commit();};
@@ -40,15 +44,32 @@ try{
    await setDoc(doc(d,'courierAccess',id),{uid:id,driverId:code,active:true});
    await setDoc(doc(d,'drivers',code),{name:'Synthetic',daCode:code,vendor:'QA',capacity:50,active:true});
   }
-  for(const p of [plate,plate2])await setDoc(doc(d,'vehicles',p),{plate:p,model:'Synthetic',status:'Elérhető'});
+  for(const p of [plate,plate2]){await setDoc(doc(d,'vehicles',p),{plate:p,model:'Synthetic',status:'Elérhető'});
+   await setDoc(doc(d,'fleetRecords','vehicle__'+p),{kind:'vehicle',data:initialVehicleDetails(p,100),revision:1,createdAt:serverTimestamp(),createdBy:'admin',updatedAt:serverTimestamp(),updatedBy:'admin'});}
  });
  await test('courier read own access',true,()=>getDoc(doc(db.courier,'courierAccess',uid)));
+ await test('courier may read absent ID for checkin transaction',true,()=>getDoc(doc(db.courier,'vehicleSessions',sid)));
  await test('courier cannot read other access',false,()=>getDoc(doc(db.courier,'courierAccess',otherUid)));
  await test('courier read available vehicles',true,()=>getDocs(collection(db.courier,'vehicles')));
  await test('courier blocked from internal driver data',false,()=>getDocs(collection(db.courier,'drivers')));
  await test('anonymous cannot read vehicles',false,()=>getDocs(collection(db.anonymous,'vehicles')));
  await test('unauthorized fleet edit denied',false,()=>setDoc(doc(db.courier,'vehicles',plate),{plate,model:'Fake',status:'Elérhető'}));
  await test('incomplete 7 photos denied',false,()=>create(db.courier,uid,sid,driver,plate,{inPhotos:{front:'fake'}}));
+ await test('seven invented Storage paths without trusted receipt denied',false,()=>create(db.courier,uid,sid,driver,plate));
+ const receipt=(user,id,stage)=>({uid:user,sessionId:id,stage,paths:photos(user,id,stage),source:'storage-verifier-v1',verified:true,verifiedAt:serverTimestamp()});
+ const receiptRef=(database,user,id,stage)=>doc(database,'photoReceipts',user,'sessions',id,'stages',stage);
+ await test('courier cannot forge verification',false,()=>setDoc(receiptRef(db.courier,uid,sid,'in'),receipt(uid,sid,'in')));
+ await test('internal admin cannot forge verification',false,()=>setDoc(receiptRef(db.admin,uid,sid,'in'),receipt(uid,sid,'in')));
+ await env.withSecurityRulesDisabled(async ctx=>{
+  const d=ctx.firestore();
+  for(const [user,id] of [[uid,sid],[uid,sid2],[uid,sid3],[otherUid,sid2],[sameCodeUid,sid4]])
+   for(const stage of ['in','out'])await setDoc(receiptRef(d,user,id,stage),receipt(user,id,stage));
+  await updateDoc(doc(d,'drivers',driver),{active:false});
+ });
+ await test('inactive canonical driver denied despite active access',false,()=>create(db.courier,uid,sid,driver,plate));
+ await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'drivers',driver),{active:true}));
+ await test('other courier cannot read verification',false,()=>getDoc(receiptRef(db.other,uid,sid,'in')));
+ await test('starting mileage below canonical Fleet reading denied',false,()=>create(db.courier,uid,sid,driver,plate,{startKm:99}));
  await env.withSecurityRulesDisabled(async ctx=>{
   const d=ctx.firestore();
   await setDoc(doc(d,'fleetAssignments',plate2),{vehicleId:plate2,driverId:driver,active:true,mileage:100,operationId:'SYNTHETICFLEETISSUE'});
@@ -77,21 +98,25 @@ try{
 
  await test('viewer cannot checkout courier vehicle',false,()=>checkout(db.viewer,uid,sid,plate));
  await test('courier cannot fake review',false,()=>review(db.courier,uid,sid,plate));
- await test('courier can atomically check out',true,()=>checkout(db.courier,uid,sid,plate));
+ await test('key drop cannot be omitted or false',false,()=>checkout(db.courier,uid,sid,plate,{keyDropped:false}));
+ await test('courier can atomically check out',true,()=>checkout(db.courier,uid,sid,plate,{cleanlinessNote:'SYNTHETIC_DIRT'}));
  await test('checkout does not release car',false,()=>create(db.other,otherUid,sid2,otherDriver,plate));
  await test('checkout does not release DA code',false,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2));
  await test('courier cannot check out twice',false,()=>checkout(db.courier,uid,sid,plate));
  await test('editor cannot return without releasing locks',false,()=>updateDoc(doc(db.editor,'vehicleSessions',sid),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'editor'}));
  await test('viewer cannot approve return',false,()=>{const batch=writeBatch(db.viewer);batch.update(doc(db.viewer,'vehicleSessions',sid),{status:'reviewed',reviewedAt:serverTimestamp(),reviewedBy:'viewer'});batch.delete(doc(db.viewer,'vehicleLocks',plate));batch.delete(doc(db.viewer,'courierLocks',uid));return batch.commit();});
- await test('editor can atomically confirm physical return',true,()=>review(db.editor,uid,sid,plate));
- await test('returned car available for next authenticated courier',true,()=>create(db.other,otherUid,sid2,otherDriver,plate));
+ await test('unchecked cleanliness problem prevents return',false,()=>review(db.editor,uid,sid,plate));
+ await test('missing physical car prevents return',false,()=>review(db.editor,uid,sid,plate,{carPresent:false,cleanlinessReviewed:true}));
+ await test('missing physical key prevents return',false,()=>review(db.editor,uid,sid,plate,{keyPresent:false,cleanlinessReviewed:true}));
+ await test('editor can atomically confirm physical return',true,()=>review(db.editor,uid,sid,plate,{cleanlinessReviewed:true}));
+ await test('returned car available for next authenticated courier',true,()=>create(db.other,otherUid,sid2,otherDriver,plate,{startKm:150}));
  await test('reviewed session history cannot be deleted',false,()=>deleteDoc(doc(db.admin,'vehicleSessions',sid)));
  await test('courier cannot overwrite last history',false,()=>updateDoc(doc(db.courier,'vehicleSessions',sid),{startKm:0}));
  await test('another car can be checked out only after previous review',true,()=>create(db.courier,uid,sid3,driver,plate2));
  await test('DA code remains occupied by current live owner',false,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate));
  await test('original DA can check out new session',true,()=>checkout(db.courier,uid,sid3,plate2));
  await test('original DA can complete morning return',true,()=>review(db.editor,uid,sid3,plate2));
- await test('same DA code account can acquire car only after actual release',true,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2));
+ await test('same DA code account can acquire car only after actual release',true,()=>create(db.sameCode,sameCodeUid,sid4,driver,plate2,{startKm:150}));
  assert.equal((await getDoc(doc(db.editor,'vehicleSessions',sid))).data().status,'reviewed');
  console.log('PASS: '+passed+' self-service courier and manager check-out security scenarios');
 }finally{await env.cleanup();}

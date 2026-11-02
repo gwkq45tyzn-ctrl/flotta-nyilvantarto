@@ -101,8 +101,10 @@ function ownCompanyCarPanel(){
   kpi('Attendance alapján nem zárolt',report.physicallyReady,'Fizikai jelenlét külön ellenőrizendő')+
   kpi('Megerősített futárok',report.confirmedCouriers,'Kizárólag cégesautós futárterv')+
   kpi('Hiányzó futárok',report.missingConfirmed,'Megerősített létszám alapján')+
+  kpi('Használatban',report.inUseCars,'Aktív saját Attendance-kiadás')+
+  kpi('Visszavételre vár',report.awaitingReviewCars,'Külön fizikai ellenőrzés szükséges')+
   '</div><p class="inline-note">Tervezett futárok: '+fmt(report.plannedCouriers)+
-  ' · Még ellenőrizetlen járművek: '+fmt(report.unverifiedCars)+
+  ' · Kiadás vagy ellenőrzés miatt nem szabad: '+fmt(report.unverifiedCars)+
   '. Nem előzetes rendszámfoglalás. <a href="../staging/imile-management/attendance/index.html">Saját Attendance megnyitása</a></p>';
  return section('Önálló futárlétszám és cégesautó-kapacitás · '+esc(state.date),content);
 }

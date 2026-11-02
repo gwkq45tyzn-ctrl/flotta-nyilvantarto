@@ -28,10 +28,14 @@ export function planCapacity({date,vehicles=[],locks=[],plans=[],accesses=[]}={}
  const locked=new Set(lockPlates);
  // Historical API field name retained; NOT proof of physical presence.
  const physicallyReady=working.filter(x=>!locked.has(PLATE(x.plate||x.id))).length;
+ const workingIds=new Set(working.map(x=>PLATE(x.plate||x.id)));
+ const inUseCars=new Set(locks.filter(x=>x.state==='active'&&workingIds.has(PLATE(x.plate))).map(x=>PLATE(x.plate))).size;
+ const awaitingReviewCars=new Set(locks.filter(x=>x.state==='awaiting_review'&&workingIds.has(PLATE(x.plate))).map(x=>PLATE(x.plate))).size;
  return {ready:true,date,operationalCars:working.length,physicallyReady,
   plannedCouriers:planned.size,confirmedCouriers:confirmed.size,
   missingConfirmed:Math.max(0,working.length-confirmed.size),
   missingPlanned:Math.max(0,working.length-planned.size),
   unverifiedCars:working.length-physicallyReady,
+  inUseCars,awaitingReviewCars,
   potentialUtilization:Math.min(working.length,confirmed.size)};
 }

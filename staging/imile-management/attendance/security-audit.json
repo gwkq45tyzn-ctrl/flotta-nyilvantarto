@@ -1,0 +1,10 @@
+{
+ "score": 3,
+ "summary": "Draft-only candidate: photo-path forgery, retry, inactive access and review evidence hardened in source. Real Storage, private verifier, deployment and physical mobile QA remain release blockers.",
+ "findings": [
+  {"check":"Business Logic vs. Rules","severity":"major","issue":"Browser-provided photo paths previously passed without uploaded objects; source now requires server-only receipt. No production verifier exists yet.","recommendation":"Approve and independently verify private image-verification service before deploying these rules."},
+  {"check":"Authority Source","severity":"major","issue":"IAM/Admin SDK writers can bypass Firestore and Storage Rules, including object modification after receipt issuance.","recommendation":"Restrict and audit privileged writers; bind real verifier receipts to immutable object generations."},
+  {"check":"Storage Abuse","severity":"moderate","issue":"An active courier can create abandoned immutable upload prefixes; lifecycle, per-user quota and retention are not approved.","recommendation":"Approve session-bound upload allocation, rate limits and a recoverable retention/cleanup policy before live use."},
+  {"check":"Business Logic vs. Rules","severity":"moderate","issue":"Synthetic emulators cannot prove iPhone/Android camera, real HEIC decoding, PWA installation or live mobile network behavior.","recommendation":"Complete physical-device and real staging tests after cost and access approvals."}
+ ]
+}
