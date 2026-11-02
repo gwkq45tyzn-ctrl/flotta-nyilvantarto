@@ -68,3 +68,22 @@ export function attendanceDailyReport({date,sessions}={}){
  return {ready:true,date,checkins,checkouts,activeNow,awaitingReviewNow,reviewedToday,
   reportedKm,reviewedKm,issues,couriers};
 }
+
+/** Excel-compatible UTF-8 semicolon CSV; never execute spreadsheet formulas. */
+export function attendanceReportCsv(report){
+ if(!report?.ready||!validDay(report.date)||!Array.isArray(report.couriers))
+  throw Error('Csak ellenőrzött napi riport exportálható.');
+ const field=value=>{
+  let str=String(value??'');
+  // Keep untrusted identifiers from becoming Excel/Sheets formulas.
+  if(/^[=+@\-\t\r]/.test(str))str="'"+str;
+  return '"'+str.replace(/"/g,'""').replace(/[\r\n]/g,' ')+'"';
+ };
+ const rows=[
+  ['Nap','Futár DA','Kicsekkolások','Reggel ellenőrzött','Bejelentett km','Visszaigazolt km','Rendszámok'],
+  ...report.couriers.map(x=>[
+   report.date,x.driverId,x.checkouts,x.reviewed,x.reportedKm,x.reviewedKm,(x.plates||[]).join(', ')
+  ])
+ ];
+ return '\uFEFF'+rows.map(row=>row.map(field).join(';')).join('\r\n')+'\r\n';
+}
