@@ -7,12 +7,12 @@ const s=(id,driverId,status,startKm,endKm,startedAt,endedAt,plate='ABC123')=>({
 });
 const today='2026-11-02';
 const sessions=[
- s('a','DA001','reviewed',1200,1275,'2026-11-01T23:30:00Z','2026-11-02T07:15:00Z'),
+ s('a','DA001','reviewed',1200,1275,'2026-11-01T19:30:00Z','2026-11-02T07:15:00Z'),
  s('b','DA001','awaiting_review',1275,1310,'2026-11-02T07:30:00Z','2026-11-02T16:30:00Z'),
  s('c','DA002','active',1400,null,'2026-11-02T05:30:00Z',null,'XYZ789'),
  s('d','DA002','reviewed',100,140,'2026-11-01T18:00:00Z','2026-11-01T23:30:00Z','XYZ789'),
  s('e','DA003','reviewed',400,300,'2026-11-02T04:00:00Z','2026-11-02T13:00:00Z'),
- s('a','DA001','reviewed',1200,1275,'2026-11-01T23:30:00Z','2026-11-02T07:15:00Z')
+ s('a','DA001','reviewed',1200,1275,'2026-11-01T19:30:00Z','2026-11-02T07:15:00Z')
 ];
 let r=attendanceDailyReport({date:today,sessions});
 assert.equal(r.ready,true);
