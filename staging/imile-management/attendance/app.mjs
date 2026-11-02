@@ -1,7 +1,7 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,onSnapshot,query,where,runTransaction,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
-import {getStorage,ref as storageRef,uploadBytes,getBlob} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
+import {getStorage,ref as storageRef,uploadBytes,getBlob,getMetadata} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {PHOTO_KEYS,PHOTO_LABELS,PLATE,planCheckIn,planCheckOut,planReview,bulkReviewEligible,fleetSummary} from './core.mjs';
 import {planCourierDay,planCapacity} from './roster.mjs';
@@ -11,7 +11,7 @@ import {auditCourierAccess} from './access-audit.mjs';
 import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 import {encodeJpeg,validPhotoFile} from './photo-codec.mjs';
-import {photoProofMatches} from './photo-proof.mjs';
+import {photoProofMatches,readVerifiedPhoto} from './photo-proof.mjs';
 import {initialVehicleDetails} from '../fleet/operations-data.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -459,13 +459,17 @@ async function openPhotos(sessionId){
  for(const stage of ['in','out']){
   const paths=stage==='in'?s.inPhotos:s.outPhotos;
   if(!paths||!PHOTO_KEYS.every(k=>typeof paths[k]==='string'))continue;
+  let proof;
+  try{proof=(await getDocFromServer(doc(db,'photoReceipts',s.uid,'sessions',sessionId,'stages',stage))).data();}
+  catch{const p=document.createElement('p');p.textContent='A szerveres fotóigazolás nem érhető el.';root.append(p);continue;}
   for(const key of PHOTO_KEYS){
    const cell=document.createElement('div');cell.className='photo';
    const name=document.createElement('strong');name.textContent=(stage==='in'?'Átvétel: ':'Visszaadás: ')+PHOTO_LABELS[key];
    const p=document.createElement('p');p.textContent='Betöltés…';
    cell.append(name,p);root.append(cell);
    try{
-    const blob=await getBlob(storageRef(storage,paths[key]));
+    const blob=await readVerifiedPhoto({proof,expected:{uid:s.uid,sessionId,stage,paths},key,
+     metadata:p=>getMetadata(storageRef(storage,p)),download:p=>getBlob(storageRef(storage,p))});
     if(!dialog.open)break;
     const img=document.createElement('img'),url=URL.createObjectURL(blob);shownPhotoUrls.push(url);
     img.src=url;img.alt=name.textContent;

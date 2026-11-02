@@ -1,0 +1,8 @@
+{
+  "score": 4,
+  "summary": "A meglévő Rules böngészőből tiltja a receipt írását és az eredeti képek módosítását/törlését. A szerver teljes JPEG-dekódolást, verziókötést és create-only receipt tranzakciót használ. Felhős deploy, IAM és megőrzés még nincs jóváhagyva; korlátlan üzleti bevezetés nem engedhető.",
+  "findings": [
+    {"check":"Resource Exhaustion/DoS","severity":"moderate","issue":"Az aktív futár új Storage session-prefixeinek száma nincs keményen korlátozva; maxInstances és budget nem számlakorlát.","recommendation":"Csak zárt szintetikus pilot; üzleti rollout előtt szerveroldali feltöltési keret és operatív költségvédelmi kapu szükséges."},
+    {"check":"Authority Source","severity":"minor","issue":"Az Admin SDK IAM alapján megkerüli a Rules-t; Storage és Firestore nem közös tranzakció. Túl széles IAM-író a végső objektumellenőrzés után is módosíthat.","recommendation":"Dedikált kulcs nélküli SA, minimális olvasási/receipt-írási jog, privát Eventarc invoker, jóváhagyott bucketmegőrzés, audit és valós IAM QA. Lecserélt képet a kliens hash/generáció ellenőrzése nem jelenít meg."}
+  ]
+}

@@ -50,6 +50,7 @@ jobs:
           node --test staging/imile-management/attendance/staff-role.integration.test.mjs
           node --test staging/imile-management/attendance/photo-codec.test.mjs
           node --test staging/imile-management/attendance/photo-proof.test.mjs
+          node --test staging/imile-management/attendance/photo-integrity.test.mjs
           node --test staging/imile-management/attendance/daily-report.test.mjs
           node --test staging/imile-management/attendance/review-ui.integration.test.mjs
           node --check staging/imile-management/attendance/core.mjs
@@ -144,6 +145,11 @@ jobs:
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-attendance-own --config firebase.staging-emulator.json "node staging/imile-management/fleet/attendance-rules-emulator.mjs"
       - name: 'Saját Attendance – fotók Storage + Firestore jogosultsági emulátor'
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only firestore,storage --project demo-attendance-storage --config firebase.attendance-storage-qa.json "node staging/imile-management/fleet/attendance-storage-rules-emulator.mjs"
+      - name: 'Privát fotóhitelesítő – teljes JPEG dekódolás és valódi Functions/Auth/Storage/Firestore emulátor'
+        run: |
+          npm ci --prefix staging/imile-management/photo-verifier --no-audit --no-fund
+          node --test staging/imile-management/photo-verifier/verifier.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore,storage,functions --project demo-imile-photo --config firebase.photo-verifier-emulator.json "node staging/imile-management/photo-verifier/emulator.test.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
