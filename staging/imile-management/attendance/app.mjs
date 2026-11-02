@@ -8,6 +8,7 @@ import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {buildFleetOverview} from './fleet-overview.mjs';
 import {auditCourierAccess} from './access-audit.mjs';
+import {attendanceDailyReport} from './daily-report.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
@@ -189,6 +190,7 @@ function renderStaff(){
  if(!sourcesTrusted(STAFF_SOURCES)){
   resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
+  $('dailyReport').textContent='A napi kilométeradatok szerveres megerősítésre várnak.';
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -205,6 +207,27 @@ function renderStaff(){
  // confirmation; the manager must physically check the UPDATED list.
  const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
  if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
+ const daily=attendanceDailyReport({date:day(),sessions:data.sessions});
+ if(!daily.ready){
+  $('dailyReport').textContent='A napi riport nem számítható: '+daily.reason;
+ }else{
+  const overview='<div class="stats">'+[
+   ['Ma indult',daily.checkins],['Ma kicsekkolt',daily.checkouts],
+   ['Bejelentett km',daily.reportedKm],['Visszaigazolt km',daily.reviewedKm],
+   ['Visszaadásra vár (összes)',daily.awaitingReviewNow],
+   ['Adateltérések',daily.issues.length]
+  ].map(([label,value])=>'<div class="stat"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>').join('')+'</div>';
+  const drivers=daily.couriers.map(row=>'<article class="vehicle"><strong>'+esc(row.driverId)
+   +'</strong><div class="meta">Kicsekkolás: '+esc(row.checkouts)
+   +' · Bejelentett km: '+esc(row.reportedKm)
+   +' · Visszaigazolt km: '+esc(row.reviewedKm)
+   +' · Autó(k): '+esc(row.plates.join(', ')||'—')+'</div></article>').join('')
+   ||'<p class="empty">Ma még nincs kilométerrel lezárt cégesautó-használat.</p>';
+  const problems=daily.issues.length?'<p class="hint">Ellenőrzendő események: '
+   +daily.issues.map(x=>esc(x.id)+' ('+esc(x.reason)+')').join('; ')+'</p>':'';
+  $('dailyReport').innerHTML=overview+'<div class="stack">'+drivers+'</div>'+problems;
+ }
+
  const accessReport=auditCourierAccess(data.accesses);
  const warnings=[
   ...accessReport.duplicates.map(x=>x.driverId+': '+x.activeAccounts+' aktív hozzáférés ugyanahhoz a DA-kódhoz.'),
