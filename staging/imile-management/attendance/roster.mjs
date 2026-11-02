@@ -8,11 +8,25 @@ export function planCourierDay({date,driverId,status}={}){
   return {ok:false,reason:'Érvénytelen jelenléti státusz.'};
  return {ok:true,id:date+'__'+driverId,date,driverId,status};
 }
-export function planCapacity({date,vehicles=[],locks=[],driverLocks,plans=[],accesses=[]}={}){
+export function planCapacity({date,vehicles=[],locks=[],driverLocks,plans=[],accesses=[],drivers}={}){
  if(!validDay(date))return {ready:false,reason:'Érvénytelen tervezési dátum.'};
- if(![vehicles,locks,driverLocks,plans,accesses].every(Array.isArray))return {ready:false,reason:'Hiányzó megbízható adatforrás, DA-kódos autózár is kötelező.'};
- const companyDrivers=new Set(accesses.filter(x=>x.active===true&&typeof x.driverId==='string').map(x=>x.driverId));
+ if(![vehicles,locks,driverLocks,plans,accesses,drivers].every(Array.isArray))
+  return {ready:false,reason:'Hiányzó hiteles futár-, autó- vagy DA-zár adatforrás.'};
+ // A courierAccess alone is NOT evidence that the driver is still employed.
+ // Both the driver's own master record and unique active account are required.
+ const activeDrivers=new Set(drivers.filter(x=>x?.active===true)
+  .map(x=>String(x.id||x.driverId||'')));
+ const accessCounts=new Map();
+ for(const access of accesses.filter(x=>x?.active===true)){
+  const id=String(access.driverId||'');
+  accessCounts.set(id,(accessCounts.get(id)||0)+1);
+ }
+ if([...accessCounts].some(([id,count])=>count>1&&activeDrivers.has(id)))
+  return {ready:false,reason:'Egy aktív futár DA-kódjához több bejelentkezési hozzáférés tartozik.'};
+ const companyDrivers=new Set([...accessCounts].filter(([id,count])=>count===1&&activeDrivers.has(id)).map(([id])=>id));
  const dayPlans=plans.filter(p=>p.date===date&&companyDrivers.has(p.driverId));
+ if(new Set(dayPlans.map(p=>p.driverId)).size!==dayPlans.length)
+  return {ready:false,reason:'Egy futárhoz több ellentmondó napi terv tartozik.'};
  const planned=new Set(dayPlans.filter(x=>x.status==='planned'||x.status==='confirmed').map(x=>x.driverId));
  const confirmed=new Set(dayPlans.filter(x=>x.status==='confirmed').map(x=>x.driverId));
  // Normalize all plates identically to the real check-in/vehicle lock flow:
