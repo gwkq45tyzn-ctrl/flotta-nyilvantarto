@@ -129,6 +129,12 @@ try{
  await check('real delete trigger revokes missing original',async()=>{await bucket.file(paths(other,sid2,'in').front).delete();await waitRevoked(other,sid2,'in','OBJECT_MISSING');});
  await check('malformed JPEG never produces receipt despite allowed MIME',async()=>{await upload(c,uid,sid3,'in',KEYS,Buffer.from([255,216,255,217]));assert.equal((await direct(uid,sid3,'in')).code,'INVALID_JPEG');assert.equal((await receipt(uid,sid3,'in').get()).exists,false);});
  await check('inactive access cannot obtain proof',async()=>{await db.doc('courierAccess/'+uid).update({active:false});assert.equal((await direct(uid,sid3,'in')).code,'COURIER_DENIED');await db.doc('courierAccess/'+uid).update({active:true});});
+ await check('invalid short DA code cannot mint a server receipt',async()=>{
+  await db.doc('courierAccess/'+uid).update({driverId:'X'});
+  assert.equal((await direct(uid,sid3,'in')).code,'COURIER_DENIED');
+  assert.equal((await receipt(uid,sid3,'in').get()).exists,false);
+  await db.doc('courierAccess/'+uid).update({driverId:driver});
+ });
  await check('disabled real Auth account cannot obtain proof',async()=>{await auth.updateUser(uid,{disabled:true});assert.equal((await direct(uid,sid3,'in')).code,'ACCOUNT_DISABLED');await auth.updateUser(uid,{disabled:false});});
  const bulk=[{u:uid,d:driver,p:plate,s:'s_'+'d'.repeat(32),c},{u:other,d:driver2,p:plate2,s:'s_'+'e'.repeat(32),c:o}];
  await check('two distinct couriers can issue two free cars after reviewed return',async()=>{for(const x of bulk){await upload(x.c,x.u,x.s,'in');await waitProof(x.u,x.s,'in');await create(x.c,x.u,x.s,x.d,x.p,150);}});
