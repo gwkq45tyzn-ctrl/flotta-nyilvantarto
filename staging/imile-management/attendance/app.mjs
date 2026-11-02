@@ -9,7 +9,7 @@ import {uploadOrVerifyImmutable} from './photo-upload.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 const $=id=>document.getElementById(id);
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app),storage=getStorage(app);
-let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={};
+let user=null,access=null,isStaff=false,staffRole='',unsubs=[],data={vehicles:[],locks:[],sessions:[],drivers:[],accesses:[],plans:[],courierClaim:null},busy=false,sourceMeta={},lastWaitingSignature='';
 const COURIER_SOURCES=['vehicles','locks','courierClaim','sessions'];
 const STAFF_SOURCES=['vehicles','locks','sessions','drivers','accesses','plans'];
 const sourceHealth=required=>assessSources(sourceMeta,{required,online:navigator.onLine});
@@ -35,7 +35,7 @@ function subscribe(path,onData,sourceName){
   onData(snapshot);render();
  },error=>{
   sourceMeta[sourceName]={...(sourceMeta[sourceName]||{}),loaded:false,error:true};
-  toast('Nincs hiteles adatkapcsolat: '+error.message,true);setBusy(true);render();
+  toast('Nincs hiteles adatkapcsolat: '+error.message,true);render();
  });
  unsubs.push(unsubscribe);
 }
@@ -117,6 +117,7 @@ async function refreshAttendanceSources(){
  if(!user||user.uid!==principal||isStaff!==principalIsStaff)throw Error('A belépett felhasználó időközben megváltozott.');
  // All server reads must succeed before committing any UI state or trust.
  const receivedAt=Date.now();
+ if(isStaff)resetBulkApproval();
  for(let i=0;i<targets.length;i++){
   const [name,,onData]=targets[i];
   onData(snapshots[i]);
@@ -176,8 +177,12 @@ function renderRoster(){
  }).join(''):'<p class="empty">Még nincs futár-előrejelzés erre a napra.</p>';
  $('rosterForm').querySelectorAll('input,select,button').forEach(el=>{if(el.id!=='rosterDate')el.disabled=!['admin','editor'].includes(staffRole);});
 }
+function resetBulkApproval(){
+ for(const key of ['bulkCars','bulkKeys','bulkClean'])$(key).checked=false;
+}
 function renderStaff(){
  if(!sourcesTrusted(STAFF_SOURCES)){
+  resetBulkApproval();
   $('stats').innerHTML='<p class="hint">A reggeli autóállapotok még nem hitelesek. '+esc(sourceHealth(STAFF_SOURCES).message)+'</p>';
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -188,6 +193,10 @@ function renderStaff(){
   return;
  }
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
+ // Any newly checked-out/removed vehicle invalidates the earlier bulk
+ // confirmation; the manager must physically check the UPDATED list.
+ const signature=waiting.map(x=>[x.id,x.plate,x.uid,x.endKm,x.damageNote].join(':')).sort().join('|');
+ if(lastWaitingSignature!==signature){resetBulkApproval();lastWaitingSignature=signature;}
  const capacity=fleetSummary({vehicles:data.vehicles,locks:locked,confirmedDrivers:0});
  $('stats').innerHTML=[['Használatban',active.length],['Reggeli ellenőrzésre vár',waiting.length],['Ellenőrzött szabad autó',capacity.physicallyReady],['Ügyintézést igényel',sessions.filter(x=>x.status==='exception').length]].map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  $('activeList').innerHTML=active.length?active.map(s=>'<article class="vehicle">'+adminSession(s)+'</article>').join(''):'<p class="empty">Nincs aktív kiadás.</p>';
@@ -347,8 +356,10 @@ $('bulkReview').addEventListener('click',async ()=>{
  }catch(err){toast('Részleges visszavétel: '+ok+'/'+selected.length+'. A többi autó zárolva marad. '+err.message,true);}
  finally{setBusy(false);}
 });
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&user)render();});
+setInterval(()=>{if(user&&!document.hidden)render();},60000);
 onAuthStateChanged(auth,async u=>{
- clearSubscriptions();user=u;access=null;isStaff=false;staffRole='';
+ clearSubscriptions();user=u;access=null;isStaff=false;staffRole='';lastWaitingSignature='';resetBulkApproval();
  show('loginPanel',!u);show('loadingPanel',!!u);show('courierPanel',false);show('adminPanel',false);show('deniedPanel',false);show('logout',!!u);show('refreshAttendanceData',!!u);
  if(!u)return;
  try{
