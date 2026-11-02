@@ -67,6 +67,9 @@ service cloud.firestore {
     function courierLockPath(uid) {
       return /databases/$(database)/documents/courierLocks/$(uid);
     }
+    function driverLockPath(driverId) {
+      return /databases/$(database)/documents/driverLocks/$(driverId);
+    }
     function checkPhotos(paths,uid,sid,stage) {
       return paths is map
         && paths.keys().hasAll(['front','left','right','back','cabinFront','cabinRear','cargo'])
@@ -171,7 +174,10 @@ service cloud.firestore {
         && existsAfter(vehicleLockPath(request.resource.data.plate))
         && getAfter(vehicleLockPath(request.resource.data.plate)).data.sessionId == sid
         && existsAfter(courierLockPath(request.auth.uid))
-        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == sid;
+        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == sid
+        && existsAfter(driverLockPath(request.resource.data.driverId))
+        && getAfter(driverLockPath(request.resource.data.driverId)).data.sessionId == sid
+        && getAfter(driverLockPath(request.resource.data.driverId)).data.uid == request.auth.uid;
       allow update: if (
         // Courier's once-only checkout; cannot change original issue or identity.
         courier() && resource.data.uid == request.auth.uid
@@ -188,9 +194,10 @@ service cloud.firestore {
         && request.resource.data.endedAt == request.time
         && getAfter(vehicleLockPath(resource.data.plate)).data.state == 'awaiting_review'
         && getAfter(courierLockPath(resource.data.uid)).data.state == 'awaiting_review'
+        && getAfter(driverLockPath(resource.data.driverId)).data.state == 'awaiting_review'
       ) || (
         // Depot manager returns only a checked-out car; never free without
-        // co-transactional deletion of BOTH physical possession locks.
+        // co-transactional deletion of ALL three possession locks.
         editor() && resource.data.status == 'awaiting_review'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status','reviewChecks','reviewedAt','reviewedBy'])
@@ -201,6 +208,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/fleetRecords/$('vehicle__' + resource.data.plate)).data.data.mileage >= resource.data.endKm
         && !existsAfter(vehicleLockPath(resource.data.plate))
         && !existsAfter(courierLockPath(resource.data.uid))
+        && !existsAfter(driverLockPath(resource.data.driverId))
       );
       allow delete: if false;
     }
@@ -219,6 +227,36 @@ service cloud.firestore {
         && getAfter(courierLockPath(request.auth.uid)).data.sessionId == request.resource.data.sessionId;
       allow update: if courier() && resource.data.uid == request.auth.uid
         && resource.data.state == 'active' && request.resource.data.state == 'awaiting_review'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state'])
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'awaiting_review';
+      allow delete: if editor()
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'reviewed'
+        && !existsAfter(courierLockPath(resource.data.uid));
+    }
+    // An authenticated UID alone is not a unique human. Two accounts may
+    // accidentally be provisioned with the same DA code. A canonical DA lock
+    // prevents the same driver from taking two different vehicles.
+    match /driverLocks/{driverId} {
+      allow get: if member() || (courier()
+        && driverId == get(courierPath()).data.driverId);
+      allow list: if member();
+      allow create: if courier() && validDriverCode(driverId)
+        && driverId == get(courierPath()).data.driverId
+        && exactFields(request.resource.data,['driverId','plate','uid','sessionId','state'])
+        && request.resource.data.driverId == driverId
+        && request.resource.data.uid == request.auth.uid
+        && validVehiclePlate(request.resource.data.plate)
+        && request.resource.data.state == 'active'
+        && existsAfter(sessionPath(request.resource.data.sessionId))
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.uid == request.auth.uid
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.driverId == driverId
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.plate == request.resource.data.plate
+        && existsAfter(courierLockPath(request.auth.uid))
+        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == request.resource.data.sessionId;
+      allow update: if courier() && resource.data.uid == request.auth.uid
+        && driverId == get(courierPath()).data.driverId
+        && resource.data.state == 'active'
+        && request.resource.data.state == 'awaiting_review'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state'])
         && getAfter(sessionPath(resource.data.sessionId)).data.status == 'awaiting_review';
       allow delete: if editor()

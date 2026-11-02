@@ -9,7 +9,7 @@ assert.equal(validatePhotos({...paths('in'),cargo:''},uid,sessionId,'in').ok,fal
 assert.equal(validatePhotos({...paths('in'),front:'attendance/other/session_123456789/in/front.jpg'},uid,sessionId,'in').ok,false);
 const checkIn=args=>planCheckIn({uid,access,vehicle,sessionId,mileage:12345,photos:paths('in'),...args});
 assert.deepEqual({ok:checkIn().ok,plate:checkIn().plate},{ok:true,plate:'ABC123'});
-for(const patch of [{lock:{}},{claim:{}},{mileage:-1},{mileage:123.4},{access:{...access,active:false}},
+for(const patch of [{lock:{}},{claim:{}},{driverLock:{driverId:'DA1234'}},{mileage:-1},{mileage:123.4},{access:{...access,active:false}},
  {vehicle:{...vehicle,status:'Szerviz'}},{photos:{...paths('in'),cargo:''}}])
  assert.equal(checkIn(patch).ok,false);
 const session={id:sessionId,uid,plate:'ABC123',status:'active',startKm:12345,damageNote:''};

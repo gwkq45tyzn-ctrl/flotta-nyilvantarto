@@ -1,6 +1,8 @@
 # Saját Attendance PWA – QA kiadási kapu, 2026-11-02
 
-Alap: #37 `6845fa3c9b3dc93c4b68173184f1fc662c9fae9e`. Külön javító ág;
+Eredeti alap: #37 `6845fa3c9b3dc93c4b68173184f1fc662c9fae9e`. Az időközben elkészült
+#39–#46 változásokkal összevont jelölt; rögzített #46 alap:
+`c6933ac5467ee9378af97f8d30e00bc7581c81cf`. Külön javító ág;
 a staging ág, main, régi Flotta, felhős adatok és IAM nem változtak.
 A két kizárt Google-táblát nem olvastuk, nem futtattunk hozzájuk szinkront.
 
@@ -45,8 +47,9 @@ A két kizárt Google-táblát nem olvastuk, nem futtattunk hozzájuk szinkront.
 
 ## Ellenőrzések és határuk
 
-- 10 új immutable-upload és 10 új photo-proof eset; kibővített állapotgép/kapacitás tesztek.
-- 43 Firestore own-PWA és 21 Storage saját/idegen/inaktív/staff próbát céloz a CI.
+- A #39 meglévő immutable-upload modulja és tesztjei újrahasználva; nincs második
+  feltöltő. 4 képfájl-előellenőrzési és 10 photo-proof eset, kibővített állapotgép/kapacitás.
+- 49 Firestore own-PWA és 21 Storage saját/idegen/inaktív/staff próbát céloz a CI.
   A teljes CI kötelező a pontos PR-headre; a régi sikeres futás nem helyettesíti ezt.
 - Valódi Chromium böngészőben, helyi Auth/Firestore/Storage-emulátorokkal,
   390×844 mobilméret és asztali nézet. Csak SYNTHETIC szereplők és generált PNG/JPEG.

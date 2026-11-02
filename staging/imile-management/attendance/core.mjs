@@ -25,11 +25,11 @@ export function validatePhotos(paths,uid,sessionId,stage){
  }
  return Object.freeze({ok:true});
 }
-export function planCheckIn({uid,access,vehicle,lock,claim,sessionId,mileage,photos}={}){
+export function planCheckIn({uid,access,vehicle,lock,claim,driverLock,sessionId,mileage,photos}={}){
  if(!access?.active||access?.uid!==uid||!access?.driverId)return deny('Nincs aktív futárjogosultság.');
  if(!vehicle||!validPlate(vehicle.plate||vehicle.id)||vehicle.status!=='Elérhető')
   return deny('Az autó nem kiadható.');
- if(lock||claim)return deny('Az autó vagy a futár már aktív kiadással rendelkezik.');
+ if(lock||claim||driverLock)return deny('Az autó vagy a DA-kód már aktív kiadással rendelkezik.');
  if(!validKm(mileage))return deny('Érvénytelen kilométeróra-állás.');
  const checked=validatePhotos(photos,uid,sessionId,'in');
  if(!checked.ok)return checked;

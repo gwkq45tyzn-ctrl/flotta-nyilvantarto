@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.mjs"></script>
 </head><body>
-<header class="topbar"><div class="logo">i<span>Mile</span></div><div><strong>Attendance</strong><small>AKE · céges járművek</small></div><button id="logout" hidden>Kilépés</button></header>
+<header class="topbar"><div class="logo">i<span>Mile</span></div><div><strong>Attendance</strong><small>AKE · céges járművek</small></div><button id="refreshAttendanceData" type="button" hidden>Adatok frissítése</button><button id="logout" hidden>Kilépés</button></header>
 <main>
 <section id="loginPanel" class="panel" hidden>
   <h1>Bejelentkezés</h1><p>Csak jogosult cégesautó-futárok és belső munkatársak.</p>
@@ -45,6 +45,7 @@
 <section id="adminPanel" hidden>
  <div class="hero"><span class="eyebrow">BELSŐ ELLENŐRZÉS</span><h1>Járműátadások és reggeli visszavétel</h1><p>A futárok önállóan választanak autót. Itt látod, ki melyikkel ment el és mi vár ellenőrzésre.</p></div>
  <div class="stats" id="stats"></div>
+ <section class="panel"><h2>Futárhozzáférések ellenőrzése</h2><div id="accessAlerts" role="status" aria-live="polite">Ellenőrzés folyamatban…</div></section>
  <section class="panel">
   <h2>Másnapi futár- és autókapacitás</h2>
   <p>Csak a várható létszámot tervezzük, előre nem kötünk rendszámot futárhoz. Az üzemképes és a ténylegesen szabad autókat külön mutatjuk.</p>
@@ -67,6 +68,7 @@
   </div>
  </section>
  <section class="panel"><h2>Jelenleg kiadott autók</h2><div id="activeList" class="stack"></div></section>
+ <section class="panel"><h2>Teljes céges autólista</h2><p>Az alábbi állapotok a nyilvántartásból származnak. A hiányzó aktív bejelentkezés önmagában <strong>nem bizonyítja, hogy az autó vagy a kulcs a depóban van.</strong></p><div id="allVehicleList" class="stack"></div></section>
 </section>
 <dialog id="photosDialog" class="photos-dialog"><div class="dialog-head"><h2 id="photosTitle">Autófotók</h2><button id="closePhotos" type="button">Bezárás</button></div><div id="photosContent" class="photos"></div></dialog>
 <div id="notice" role="status" aria-live="polite" class="notice" hidden></div>

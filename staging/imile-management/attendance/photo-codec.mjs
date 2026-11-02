@@ -1,29 +1,3 @@
-/** Immutable photo uploads: retries must reuse identical bytes, never overwrite. */
-export async function sha256(blob){
- const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
- return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-export async function uploadImmutablePhoto({path,blob,read,upload}){
- const expected=await sha256(blob);
- const reuse=async()=>{
-  const existing=await read(path);
-  if(existing.size!==blob.size||await sha256(existing)!==expected)
-   throw Error('Ezen a helyen már másik fotó van. A mentett kép nem írható felül; az eredeti fotóval próbáld újra.');
-  return path;
- };
- try{return await reuse();}
- catch(error){if(error.code!=='storage/object-not-found')throw error;}
- try{await upload(path,blob);return path;}
- catch(error){
-  // A lost response may hide a successful create. Read and compare actual bytes.
-  // No metadata flag is treated as proof; incompatible bytes always fail closed.
-  try{return await reuse();}catch(recovery){
-   if(recovery.code==='storage/object-not-found')throw error;
-   throw recovery;
-  }
- }
-}
-
 export function validPhotoFile(file){
  return !!file&&file.size>0&&file.size<=8*1024*1024&&
   (/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)||

@@ -18,4 +18,23 @@ assert.equal(result.missingPlanned,0);assert.equal(result.potentialUtilization,1
 result=planCapacity({date:'2026-11-02',vehicles:[],locks:[],plans:[],accesses:[]});
 assert.equal(result.missingConfirmed,0);
 assert.equal(planCapacity({date:'x',vehicles,locks:[],plans,accesses}).ready,false);
+
+const mixedFormat=planCapacity({date:'2026-11-02',
+ vehicles:[{plate:'ABC-123',status:'Elérhető'},{plate:'XYZ-789',status:'Elérhető'}],
+ locks:[{plate:'ABC123',state:'awaiting_review'}],plans:[],accesses:[]});
+assert.equal(mixedFormat.ready,true);
+assert.equal(mixedFormat.operationalCars,2);
+assert.equal(mixedFormat.physicallyReady,1,
+ 'A hyphenated vehicle plate must match the normalized immutable lock plate');
+const duplicateCar=planCapacity({date:'2026-11-02',vehicles:[
+ {plate:'ABC-123',status:'Elérhető'},{plate:'ABC123',status:'Elérhető'}],locks:[],plans:[],accesses:[]});
+assert.equal(duplicateCar.ready,false,'Alias vehicle plates must never inflate capacity');
+assert.match(duplicateCar.reason,/ismétlődő rendszám/);
+const unknownLock=planCapacity({date:'2026-11-02',vehicles:[
+ {plate:'ABC-123',status:'Elérhető'}],locks:[{plate:'NONEXISTENT'}],plans:[],accesses:[]});
+assert.equal(unknownLock.ready,false,'Unknown locked car requires operator investigation');
+const duplicateLocks=planCapacity({date:'2026-11-02',vehicles:[
+ {plate:'ABC-123',status:'Elérhető'}],locks:[{plate:'ABC-123'},{plate:'ABC123'}],plans:[],accesses:[]});
+assert.equal(duplicateLocks.ready,false,'Duplicate lock aliases cannot imply a free car');
+
 console.log('PASS: own daily company-car roster, future headcount, unverified vehicles and no sheet imports');
