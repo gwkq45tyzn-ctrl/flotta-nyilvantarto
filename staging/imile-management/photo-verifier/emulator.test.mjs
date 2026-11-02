@@ -125,9 +125,12 @@ try{
   const m=proof.objects.front;
   const blob=await readVerifiedPhoto({proof,expected:{uid,sessionId:sid,stage:'in',paths:paths(uid,sid,'in')},key:'front',metadata:async()=>({...m,fullPath:m.name}),download:async()=>new Blob([jpeg],{type:'image/jpeg'})});assert.equal(blob.size,jpeg.length);
  });
- await check('IAM-side replacement revokes proof via real finalize trigger',async()=>{
-  await bucket.file(paths(uid,sid,'in').front).save(jpeg,{metadata:{contentType:'image/jpeg'}});
-  await waitRevoked(uid,sid,'in','ORIGINAL_CHANGED');
+ await check('IAM-side replacement revokes original proof even with disabled Auth account',async()=>{
+  await auth.updateUser(uid,{disabled:true});
+  try{
+   await bucket.file(paths(uid,sid,'in').front).save(jpeg,{metadata:{contentType:'image/jpeg'}});
+   await waitRevoked(uid,sid,'in','ORIGINAL_CHANGED');
+  }finally{await auth.updateUser(uid,{disabled:false});}
  });
  await check('real metadata-update trigger revokes edited original',async()=>{await bucket.file(paths(uid,sid,'out').cargo).setMetadata({metadata:{syntheticAudit:'changed'}});await waitRevoked(uid,sid,'out','ORIGINAL_CHANGED');});
  await check('real delete trigger revokes missing original',async()=>{await bucket.file(paths(other,sid2,'in').front).delete();await waitRevoked(other,sid2,'in','OBJECT_MISSING');});
