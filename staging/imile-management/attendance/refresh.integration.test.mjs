@@ -22,7 +22,7 @@ assert.ok(checkin.indexOf('await ensureAttendanceSources(')<checkin.indexOf('upl
 assert.ok(checkout.indexOf('await ensureAttendanceSources(')<checkout.indexOf('uploadPhotos('));
 assert.match(html,/id="refreshAttendanceData"/);
 assert.match(script,/if\(isStaff\)resetBulkApproval\(\)/);
-assert.match(script,/lastWaitingSignature!==signature/);
+assert.match(script,/const sameWaitingList=lastWaitingSignature===signature/);
 assert.match(script,/if\(!sourcesTrusted\(STAFF_SOURCES\)\)\{\s*resetBulkApproval\(\)/);
 assert.match(script,/document\.addEventListener\('visibilitychange'/);
 assert.ok(!script.includes("setBusy(true);render();}"),
