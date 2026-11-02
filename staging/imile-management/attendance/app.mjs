@@ -8,7 +8,7 @@ import {planCourierDay,planCapacity} from './roster.mjs';
 import {uploadOrVerifyImmutable,sha256Blob as sha256} from './photo-upload.mjs';
 import {buildFleetOverview} from './fleet-overview.mjs';
 import {auditCourierAccess} from './access-audit.mjs';
-import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
+import {attendanceDailyReport,attendanceReportCsv,attendanceConditionCsv} from './daily-report.mjs';
 import {assessSources} from '../../../depokapacitas/source-health.mjs';
 import {encodeJpeg,validPhotoFile} from './photo-codec.mjs';
 import {photoProofMatches,readVerifiedPhoto} from './photo-proof.mjs';
@@ -209,6 +209,7 @@ function renderStaff(){
   $('dailyReport').textContent='A napi kilométeradatok szerveres megerősítésre várnak.';
   $('dailyDate').disabled=true;
   $('exportDailyCsv').disabled=true;
+  $('exportConditionCsv').disabled=true;
   $('activeList').textContent='Szerveres ellenőrzés folyamatban.';
   $('allVehicleList').textContent='Az autólista szerveres visszaigazolásra vár.';
   $('reviewList').textContent='A visszavétel a szerveres adatkapcsolat megerősítéséig nem engedélyezett.';
@@ -221,6 +222,7 @@ function renderStaff(){
  }
  $('dailyDate').disabled=false;
  $('exportDailyCsv').disabled=false;
+ $('exportConditionCsv').disabled=false;
  const canReview=canReviewVehicles();
  const sessions=data.sessions,active=sessions.filter(x=>x.status==='active'),waiting=sessions.filter(x=>x.status==='awaiting_review'),locked=data.locks.filter(x=>x.state!=='reviewed');
  // Any newly checked-out/removed vehicle invalidates the earlier bulk
@@ -446,6 +448,18 @@ $('exportDailyCsv').addEventListener('click',()=>{
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 
+$('exportConditionCsv').addEventListener('click',()=>{
+ if(!user||!isStaff||!sourcesTrusted(STAFF_SOURCES))
+  return toast('A járműállapot-riporthoz hiteles szerveres adatok szükségesek.',true);
+ const report=attendanceDailyReport({date:dailyReportDate||day(),sessions:data.sessions});
+ if(!report.ready)return toast('A járműállapot-riport nem exportálható: '+report.reason,true);
+ const bytes=attendanceConditionCsv(report);
+ const url=URL.createObjectURL(new Blob([bytes],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');
+ link.href=url;link.download='imile-autok-allapota-'+report.date+'.csv';
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
 $('checkoutForm').addEventListener('submit',checkout);
 let shownPhotoUrls=[];
 async function openPhotos(sessionId){
