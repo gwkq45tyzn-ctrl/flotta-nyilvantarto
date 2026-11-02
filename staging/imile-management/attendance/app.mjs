@@ -169,11 +169,11 @@ function renderRoster(){
  const drivers=data.drivers.filter(x=>x.active===true&&allowed.has(x.id));
  driverSelect.innerHTML='<option value="">Válassz futárt…</option>'+drivers.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.id)+'</option>').join('');
  if(drivers.some(x=>x.id===previous))driverSelect.value=previous;
- const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,plans:data.plans,accesses:data.accesses});
- if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv.';return;}
+ const report=planCapacity({date,vehicles:data.vehicles,locks:data.locks,driverLocks:data.driverLocks,plans:data.plans,accesses:data.accesses});
+ if(!report.ready){$('rosterStats').textContent='Nem ellenőrizhető a terv: '+report.reason;return;}
  const kpis=[['Üzemképes autók',report.operationalCars],['Aktív Attendance nélkül',report.physicallyReady],
   ['Tervezett futárok',report.plannedCouriers],['Megerősített futárok',report.confirmedCouriers],
-  ['Hiányzó megerősített futárok',report.missingConfirmed],['Visszavételre váró autók',report.unverifiedCars]];
+  ['Hiányzó megerősített futárok',report.missingConfirmed],['Digitálisan zárolt autók',report.unverifiedCars]];
  $('rosterStats').innerHTML=kpis.map(([label,n])=>'<div class="stat"><b>'+n+'</b><span>'+esc(label)+'</span></div>').join('');
  const allowedPlans=data.plans.filter(x=>x.date===date&&allowed.has(x.driverId));
  $('rosterList').innerHTML=allowedPlans.length?allowedPlans.map(x=>{
