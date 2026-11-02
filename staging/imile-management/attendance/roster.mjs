@@ -1,4 +1,5 @@
 /** Company-car courier availability, independent of vehicle assignments and Sheets. */
+import {PLATE,validPlate} from './core.mjs';
 const validDay=v=>{if(!/^20\d\d-\d\d-\d\d$/.test(String(v??'')))return false;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.valueOf())&&d.toISOString().slice(0,10)===v;};
 export function planCourierDay({date,driverId,status}={}){
  if(!validDay(date)||typeof driverId!=='string'||!/^[A-Z0-9_-]{4,40}$/.test(driverId))
@@ -14,9 +15,19 @@ export function planCapacity({date,vehicles=[],locks=[],plans=[],accesses=[]}={}
  const dayPlans=plans.filter(p=>p.date===date&&companyDrivers.has(p.driverId));
  const planned=new Set(dayPlans.filter(x=>x.status==='planned'||x.status==='confirmed').map(x=>x.driverId));
  const confirmed=new Set(dayPlans.filter(x=>x.status==='confirmed').map(x=>x.driverId));
+ // Normalize all plates identically to the real check-in/vehicle lock flow:
+ // ABC-123 and ABC123 are the SAME car. Do not silently overcount either.
+ const carPlates=vehicles.map(x=>PLATE(x?.plate||x?.id));
+ if(carPlates.some(x=>!validPlate(x))||new Set(carPlates).size!==carPlates.length)
+  return {ready:false,reason:'Az autótörzsben érvénytelen vagy ismétlődő rendszám szerepel.'};
+ const lockPlates=locks.map(x=>PLATE(x?.plate||x?.id));
+ if(lockPlates.some(x=>!validPlate(x)||!carPlates.includes(x))
+    ||new Set(lockPlates).size!==lockPlates.length)
+  return {ready:false,reason:'Az autózárak között ismeretlen vagy ütköző rendszám található.'};
  const working=vehicles.filter(x=>x.status==='Elérhető');
- const locked=new Set(locks.map(x=>x.plate));
- const physicallyReady=working.filter(x=>!locked.has(x.plate||x.id)).length;
+ const locked=new Set(lockPlates);
+ // Historical API field name retained; NOT proof of physical presence.
+ const physicallyReady=working.filter(x=>!locked.has(PLATE(x.plate||x.id))).length;
  return {ready:true,date,operationalCars:working.length,physicallyReady,
   plannedCouriers:planned.size,confirmedCouriers:confirmed.size,
   missingConfirmed:Math.max(0,working.length-confirmed.size),
