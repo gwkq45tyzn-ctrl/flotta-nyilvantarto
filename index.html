@@ -2434,6 +2434,7 @@
         gumicsere: document.getElementById('gumicsere').value || '',
         berbeado: document.getElementById('berbeado').value.trim(),
         berletiSzerzodesLejarat: document.getElementById('berletiSzerzodesLejarat').value || null,
+        vehicleCategory: document.getElementById('vehicleCategory')?.value || vehicles.find(v=>v.id===id)?.vehicleCategory || 'courier',
         currentDriver: document.getElementById('currentDriver').value.trim() || null,
         megjegyzes: document.getElementById('megjegyzes').value.trim(),
         statusSince: null
@@ -2441,6 +2442,8 @@
 
       // Track status change date and log history
       const existing = vehicles.find(v => v.id === id);
+      // Preserve older attributes (e.g. handover dates) when editing a vehicle.
+      if (existing) Object.entries(existing).forEach(([key,value])=>{if(!(key in data))data[key]=value;});
       data.utolsoLezartSzervizIdopont=existing?.utolsoLezartSzervizIdopont||null;
       if(existing && existing.kovetkezoSzervizDatum!==data.kovetkezoSzervizDatum) data.utolsoLezartSzervizIdopont=null;
       if(existing?.status==='szerviz' && data.status==='aktiv') data.utolsoLezartSzervizIdopont=data.kovetkezoSzervizDatum||null;
@@ -2596,5 +2599,6 @@
   <script src="features/in-use-vehicles-v23.js"></script>
   <script src="features/active-driver-assignment-v25.js"></script>
   <script src="features/wide-layout-v24.js"></script>
+  <script src="features/vehicle-groups-v27.js"></script>
 </body>
 </html>
