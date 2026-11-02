@@ -14,11 +14,11 @@ service firebase.storage {
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.active == true
       && firestore.get(/databases/(default)/documents/courierAccess/$(request.auth.uid)).data.uid == request.auth.uid;
   }
-  // Storage Rules permit at most TWO distinct Firestore documents per
-  // request. courier() already reads courierAccess; in reads courierLocks
-  // OR out reads vehicleSessions. All three possession locks are validated
-  // later by the private verifier and the Firestore transaction.
-  // No daily upload quota is enforced here.
+  // Cloud Storage Rules may read at most two distinct Firestore documents.
+  // courier() reads courierAccess; a stage-specific rule reads one other
+  // document: courierLocks (in) or vehicleSessions (out). The server verifier
+  // and Firestore transaction handle all three possession locks.
+  // This is NOT a per-day upload quota.
   function allowedPhotoStage(uid,sid,stage) {
     let access = /databases/(default)/documents/courierAccess/$(uid);
     let s = /databases/(default)/documents/vehicleSessions/$(sid);
@@ -29,26 +29,7 @@ service firebase.storage {
         && firestore.get(s).data.status == 'active'
         && firestore.get(s).data.driverId == firestore.get(access).data.driverId
         && firestore.get(s).data.plate is string
-        && firestore.get(s).data.plate.matches('^[A-Z0-9]{4,12}
-  match /attendance/{uid}/{sid}/{stage}/{photo} {
-    // Only a signed-in courier can CREATE original images under their own
-    // immutable event prefix. No overwrites, deletes, or public access.
-    allow read: if (courier() && request.auth.uid == uid) || staff();
-    allow create: if resource == null && courier() && request.auth.uid == uid
-      && sid.matches('^s_[a-f0-9]{32}$')
-      && stage in ['in','out']
-      && photo in ['front.jpg','left.jpg','right.jpg','back.jpg',
-                   'cabinFront.jpg','cabinRear.jpg','cargo.jpg']
-      && request.resource.size > 0
-      && request.resource.size <= 8 * 1024 * 1024
-      && request.resource.contentType == 'image/jpeg'
-      && allowedPhotoStage(uid,sid,stage);
-    allow update, delete: if false;
-  }
-  match /{allPaths=**} { allow read, write: if false; }
- }
-}
-);
+        && firestore.get(s).data.plate.matches('^[A-Z0-9]{4,12}$');
   }
   match /attendance/{uid}/{sid}/{stage}/{photo} {
     // Only a signed-in courier can CREATE original images under their own
