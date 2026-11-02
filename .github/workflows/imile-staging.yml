@@ -153,8 +153,8 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore,storage,functions --project demo-imile-photo --config firebase.photo-verifier-emulator.json "node staging/imile-management/photo-verifier/emulator.test.mjs"
       - name: 'Szerveres fotókvóta és engedélyek – párhuzamos UID/DA és jogosultság-visszaélés'
         run: |
-          node --test staging/imile-management/photo-verifier/quota-policy.test.mjs
-          npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore,storage,functions --project demo-imile-quota --config firebase.photo-quota-emulator.json "node staging/imile-management/photo-verifier/quota-qa.mjs"
+          node --test staging/imile-management/photo-verifier/quota-policy.test.mjs staging/imile-management/photo-verifier/app-check.test.mjs staging/imile-management/photo-verifier/call-limits.test.mjs staging/imile-management/photo-verifier/pilot-preflight.test.mjs
+          node staging/imile-management/photo-verifier/app-check-qa.mjs emulators:exec --only auth,firestore,storage,functions --project demo-imile-quota --config firebase.photo-quota-emulator.json "node staging/imile-management/photo-verifier/quota-qa.mjs"
       - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"

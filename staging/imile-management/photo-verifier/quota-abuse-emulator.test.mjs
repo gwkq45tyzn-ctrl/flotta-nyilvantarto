@@ -1,3 +1,4 @@
+import {attachQaAppCheck} from './app-check-client-qa.mjs';
 // Targeted follow-on tests. quota-emulator.test.mjs establishes the isolated demo
 // policy and fixtures first. No prior successful workflows are rerun locally.
 import assert from 'node:assert/strict';
@@ -21,7 +22,7 @@ const env=await initializeTestEnvironment({projectId:project,firestore:{host:'12
 const uid='qa_access',driver='SYNDA04',plate='SYN8003',id=()=>randomBytes(16).toString('hex'),reason='SYNTHETIC_TEST jogosultság és visszaélés ellenőrzése';let passed=0;
 const check=async(n,fn)=>{await fn();passed++;console.log('PASS '+n);};
 const err=(fn,code)=>assert.rejects(fn,e=>e.message?.includes(code));
-async function client(u){const app=initializeApp({projectId:project,apiKey:'synthetic-api-key',storageBucket:BUCKET},u);apps.push(app);const auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9398',{disableWarnings:true});await signInWithEmailAndPassword(auth,u+'@example.invalid','SYNTHETIC-QUOTA-LOCAL-2026');const firestore=getFirestore(app);connectFirestoreEmulator(firestore,'127.0.0.1',8888);const storage=getStorage(app);connectStorageEmulator(storage,'127.0.0.1',9297);const functions=getFunctions(app,'europe-west3');connectFunctionsEmulator(functions,'127.0.0.1',5108);return {auth,db:firestore,storage,call:async p=>(await httpsCallable(functions,'attendancePhotoPermit')(p)).data};}
+async function client(u){const app=initializeApp({projectId:project,apiKey:'synthetic-api-key',storageBucket:BUCKET},u);apps.push(app);attachQaAppCheck(app);const auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9398',{disableWarnings:true});await signInWithEmailAndPassword(auth,u+'@example.invalid','SYNTHETIC-QUOTA-LOCAL-2026');const firestore=getFirestore(app);connectFirestoreEmulator(firestore,'127.0.0.1',8888);const storage=getStorage(app);connectStorageEmulator(storage,'127.0.0.1',9297);const functions=getFunctions(app,'europe-west3');connectFunctionsEmulator(functions,'127.0.0.1',5108);return {auth,db:firestore,storage,call:async p=>(await httpsCallable(functions,'attendancePhotoPermit')(p)).data};}
 const begin=(c,key=id())=>c.call({action:'begin',requestId:key});
 const accessRef=db.doc('courierAccess/'+uid);
 const used=async()=>(await db.doc('photoUploadQuotas/'+counterKeys(dayKey(Date.now()),uid,driver)[0]).get()).data().used;

@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-02T12:44:15.302Z",
+  "project": "imile-management-staging",
+  "region": "europe-west3",
+  "decision": "NO-GO",
+  "blockers": [
+    "BILLING_DISABLED_OR_UNKNOWN",
+    "PHOTO_BUCKET_MISSING",
+    "PRIVATE_BUCKET_NOT_PROVEN",
+    "FUNCTIONS_ACCESS_UNKNOWN",
+    "EVENTARC_IDENTITY_NOT_IDENTIFIED",
+    "RUNTIME_IDENTITIES_NOT_READY",
+    "REQUIRED_APIS_NOT_PROVEN",
+    "RUN_BOUNDARIES_NOT_PROVEN",
+    "EFFECTIVE_IAM_OWNER_REVIEW_REQUIRED",
+    "APPCHECK_END_TO_END_PROOF_REQUIRED",
+    "DEPLOYED_SOURCE_HASH_AND_RULES_MATCH_REQUIRED",
+    "UNAPPROVED_BILLING",
+    "UNAPPROVED_DEPLOYMENT",
+    "UNAPPROVED_IAM",
+    "UNAPPROVED_APPCHECK",
+    "UNAPPROVED_RETENTION",
+    "UNAPPROVED_POLICY",
+    "UNAPPROVED_PILOTPEOPLE",
+    "UNAPPROVED_STOPOWNER"
+  ],
+  "billingEnabled": false,
+  "bucketCount": 0,
+  "bucketPublic": "UNKNOWN",
+  "firestoreRegion": "europe-west3",
+  "functionsKnown": false,
+  "accounts": [
+    {
+      "identity": "attendance-photo-verifier@imile-management-staging.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "attendance-photo-quota@imile-management-staging.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-eventarc.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-cloudfunctions.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gs-project-accounts.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-firebasestorage.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-firebaseappcheck.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-pubsub.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-cloudbuild.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@gcp-sa-artifactregistry.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    },
+    {
+      "identity": "service-91967139054@firebase-rules.iam.gserviceaccount.com",
+      "status": "NOT_FOUND",
+      "disabled": null,
+      "projectRoles": [
+        {
+          "role": "roles/firebaserules.system",
+          "conditional": false
+        }
+      ],
+      "effectivePermissions": "UNKNOWN: inherited IAM, deny policies and resource conditions require owner review"
+    }
+  ],
+  "triggers": [],
+  "apiStates": [
+    {
+      "name": "firestore.googleapis.com",
+      "state": "ENABLED"
+    },
+    {
+      "name": "firebasestorage.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "storage.googleapis.com",
+      "state": "ENABLED"
+    },
+    {
+      "name": "cloudfunctions.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "run.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "eventarc.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "pubsub.googleapis.com",
+      "state": "ENABLED"
+    },
+    {
+      "name": "cloudbuild.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "artifactregistry.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "firebaseappcheck.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "recaptchaenterprise.googleapis.com",
+      "state": "DISABLED"
+    },
+    {
+      "name": "identitytoolkit.googleapis.com",
+      "state": "ENABLED"
+    }
+  ],
+  "permissionChecks": [
+    {
+      "identity": "attendance-photo-verifier@imile-management-staging.iam.gserviceaccount.com",
+      "required": [
+        "storage.objects.get",
+        "firebaseauth.users.get",
+        "datastore.entities.get",
+        "datastore.entities.create",
+        "datastore.entities.update",
+        "datastore.databases.get",
+        "datastore.databases.getMetadata",
+        "logging.logEntries.create"
+      ],
+      "notObservedAtProject": [
+        "storage.objects.get",
+        "firebaseauth.users.get",
+        "datastore.entities.get",
+        "datastore.entities.create",
+        "datastore.entities.update",
+        "datastore.databases.get",
+        "datastore.databases.getMetadata",
+        "logging.logEntries.create"
+      ],
+      "effective": "UNKNOWN"
+    },
+    {
+      "identity": "attendance-photo-quota@imile-management-staging.iam.gserviceaccount.com",
+      "required": [
+        "firebaseauth.users.get",
+        "datastore.entities.get",
+        "datastore.entities.create",
+        "datastore.entities.update",
+        "datastore.databases.get",
+        "datastore.databases.getMetadata",
+        "logging.logEntries.create"
+      ],
+      "notObservedAtProject": [
+        "firebaseauth.users.get",
+        "datastore.entities.get",
+        "datastore.entities.create",
+        "datastore.entities.update",
+        "datastore.databases.get",
+        "datastore.databases.getMetadata",
+        "logging.logEntries.create"
+      ],
+      "effective": "UNKNOWN"
+    }
+  ],
+  "runIAM": [],
+  "appCheck": "PROVIDER_NOT_CONFIGURED",
+  "releases": [
+    {
+      "name": "projects/imile-management-staging/releases/cloud.firestore",
+      "updatedAt": "2026-11-01T18:06:59.282610Z",
+      "sha256": [
+        "9cdb22ab1b5de03f5a04348464302c2d26a60dc4e51af6e19c866cdc9e12dd98"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "name": "project",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "functions",
+      "http": 403,
+      "status": "UNKNOWN",
+      "error": "PERMISSION_DENIED"
+    },
+    {
+      "name": "buckets",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "firestore",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "billing",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "rules",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "projectIAM",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-pubsub.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:attendance-photo-quota@imile-management-staging.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-artifactregistry.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gs-project-accounts.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-eventarc.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@firebase-rules.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:attendance-photo-verifier@imile-management-staging.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-firebaseappcheck.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-firebasestorage.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-cloudbuild.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "identity:service-91967139054@gcp-sa-cloudfunctions.iam.gserviceaccount.com",
+      "http": 404,
+      "status": "NOT_FOUND",
+      "error": "NOT_FOUND"
+    },
+    {
+      "name": "api:firebaseappcheck.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:firebasestorage.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:storage.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:artifactregistry.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:firestore.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:run.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:cloudbuild.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:identitytoolkit.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:cloudfunctions.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:eventarc.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:recaptchaenterprise.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "api:pubsub.googleapis.com",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "role:roles/firebaserules.system",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "appCheck",
+      "http": 200,
+      "status": "OBSERVED"
+    },
+    {
+      "name": "ruleset",
+      "http": 200,
+      "status": "OBSERVED"
+    }
+  ]
+}

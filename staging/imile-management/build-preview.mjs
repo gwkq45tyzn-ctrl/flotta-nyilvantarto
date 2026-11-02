@@ -21,6 +21,8 @@ const allowed=[
   'staging/imile-management/attendance/photo-codec.mjs',
   'staging/imile-management/attendance/photo-proof.mjs',
   'staging/imile-management/attendance/photo-permit.mjs',
+  'staging/imile-management/attendance/app-check.mjs',
+  'staging/imile-management/attendance/app-check-config.mjs',
   'staging/imile-management/attendance/daily-report.mjs',
   'staging/imile-management/attendance/core.mjs',
   'staging/imile-management/attendance/photo-upload.mjs',

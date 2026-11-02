@@ -17,11 +17,15 @@ export async function requestPhotoPermit(call,{uid,stage,sessionId,store=browser
  const payload=stage==='in'?{action:'begin',requestId:requestId(uid,store)}:{action:'checkout',sessionId};
  let result;
  try{result=await call(payload);}catch(e){
+  if(e.code==='app-check/not-configured')throw e;
   const messages={DAILY_QUOTA_EXHAUSTED:'A napi fotófeltöltési keret elfogyott. Kérj indokolt adminisztrátori feloldást.',
    DA_UPLOAD_IN_PROGRESS:'Ehhez a DA-kódhoz már folyamatban van egy másik fiók feltöltése. Kérj vezetői ellenőrzést.',
    PERMIT_EXPIRED_OR_FINISHED:'A korábbi feltöltési engedély lejárt vagy lezárult.',REQUEST_ALREADY_FINISHED:'A korábbi feltöltési engedély már lezárult.',
    POLICY_NOT_CONFIGURED:'A szerveres fotófeltöltési szabályzat még nincs beállítva.',UPLOADS_DISABLED:'A fotófeltöltés átmenetileg szünetel.',
-   PERMIT_MISSING:'Nincs érvényes feltöltési engedély. Kérj adminisztrátori segítséget.',TOO_MANY_REQUEST_ALIASES:'Túl sok külön feltöltési kérés indult. Folytasd az eredeti lapon.'};
+   PERMIT_MISSING:'Nincs érvényes feltöltési engedély. Kérj adminisztrátori segítséget.',TOO_MANY_REQUEST_ALIASES:'Túl sok külön feltöltési kérés indult. Folytasd az eredeti lapon.',
+   CALL_RATE_LIMITED:'Túl sok kérés érkezett. Várj egy percet, majd folytasd ugyanazt a feltöltést.',
+   CALL_POLICY_NOT_CONFIGURED:'A szerveres híváskorlátozás még nincs jóváhagyva és beállítva.',
+   APP_CHECK_REQUIRED:'Az alkalmazáshitelesítés sikertelen. Frissítsd az oldalt, majd próbáld újra.'};
   const code=Object.keys(messages).find(k=>String(e.message||'').includes(k));
   const error=Error(messages[code]||'A feltöltési engedély nem érhető el. Próbáld újra; új napi keretet nem kérünk.');
   error.restartAllowed=['PERMIT_EXPIRED_OR_FINISHED','REQUEST_ALREADY_FINISHED'].includes(code);throw error;
