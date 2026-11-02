@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {attendanceDailyReport,attendanceReportCsv} from './daily-report.mjs';
+import {attendanceDailyReport,attendanceReportCsv,attendanceConditionCsv} from './daily-report.mjs';
 const moment=s=>({toDate:()=>new Date(s)});
 const s=(id,driverId,status,startKm,endKm,startedAt,endedAt,plate='ABC123')=>({
  id,driverId,status,startKm,endKm,startedAt:moment(startedAt),
@@ -86,5 +86,26 @@ assert.deepEqual(flaggedWithBadKm.couriers.map(x=>({
 })),[{driverId:'DA0901',km:0,damage:1}]);
 assert.ok(attendanceReportCsv(flaggedWithBadKm).includes('"0";"0";"1";"0"'),
  'Per-driver CSV must include damage even when the odometer is rejected');
+
+
+const unsafeConditionReport=attendanceDailyReport({date:today,sessions:[
+ {...s('bad-meter','DA0899','awaiting_review',200,150,
+   '2026-11-02T06:00:00Z','2026-11-02T16:00:00Z','ABC899'),
+   damageNote:'  =HYPERLINK("http://example.invalid";"unsafe")\nFollow up'},
+ {...s('unknown-driver','?','reviewed',120,130,
+   '2026-11-02T06:00:00Z','2026-11-02T16:00:00Z','XYZ899'),
+   cleanlinessNote:'"Piszkos"; új sor'}
+]});
+const conditionCsv=attendanceConditionCsv(unsafeConditionReport);
+assert.ok(conditionCsv.startsWith('\uFEFF'));
+assert.ok(conditionCsv.includes('"Sérülés megjegyzés"')&&conditionCsv.includes('"Tisztaság megjegyzés"'));
+assert.ok(conditionCsv.includes('"bad-meter"')&&conditionCsv.includes('"unknown-driver"'),
+ 'All incidents must be retained even if mileage or courier code is invalid');
+assert.ok(conditionCsv.includes("'=HYPERLINK"),'Courier-entered formulas must be inert after note trimming in Excel');
+assert.ok(conditionCsv.includes('""http://example.invalid""'),'Quoted comments must be escaped');
+assert.ok(conditionCsv.includes('"ABC899"')&&conditionCsv.includes('"XYZ899"'),
+ 'Both flagged plates must be included');
+assert.ok(!conditionCsv.includes('unsafe")\nFollow up'),'Newline must not inject an extra CSV row');
+assert.throws(()=>attendanceConditionCsv({ready:false}),/ellenőrzött/);
 
 console.log('PASS: Budapest-time courier daily km reporting, unverified mileage and anomaly reporting');
