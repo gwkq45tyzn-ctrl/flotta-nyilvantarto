@@ -131,7 +131,10 @@
     unsub = ref.onSnapshot({ includeMetadataChanges: true }, (snap) => {
       const meta = snap.metadata;
       const confirmed = !meta.fromCache && !meta.hasPendingWrites;
-      if (!snap.exists()) {
+      // Firestore compat DocumentSnapshot.exists is a BOOLEAN property;
+      // the modular SDK exposes exists() as a method. Support both safely.
+      const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists === true;
+      if (!exists) {
         status(confirmed ? 'Firestore üres – ellenőrzött import szükséges a primary módhoz' : 'Offline / cache – Firestore állapot ismeretlen');
         return;
       }
