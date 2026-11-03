@@ -3,7 +3,7 @@
  * Never package the legacy Fleet index.html, Google Apps Script or live fleet data.
  * Usage (Node 22): node staging/imile-management/build-preview.mjs
  */
-import {cpSync,existsSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve,join} from 'node:path';
 
@@ -51,6 +51,8 @@ const allowed=[
   'depokapacitas/capacity-eligibility.mjs',
   'depokapacitas/district-capacity.mjs',
   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
+  'depokapacitas/flotta-master-readonly.mjs',
+  'features/shared-master-adapter.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
   'depokapacitas/parcel-preview.mjs',
@@ -65,6 +67,16 @@ try {
     mkdirSync(dirname(output),{recursive:true});
     cpSync(join(root,p),output);
   }
+  // The isolated hosted QA preview does NOT package the legacy Fleet app.
+  // Reroute the unified Fleet card to the safe, read-only cutover screen,
+  // instead of sending users into the placeholder root index redirect loop.
+  const menuFile=join(target,'staging/imile-management/index.html');
+  const menu=readFileSync(menuFile,'utf8');
+  if(!menu.includes('href="../../index.html" id="fleetLink"'))
+    throw Error('Unified Fleet link changed; preview safety rewrite must be reviewed');
+  writeFileSync(menuFile,menu
+    .replace('href="../../index.html" id="fleetLink"','href="./cutover.html" id="fleetLink"')
+    .replace('Eredeti Flotta megnyitása','Flotta adatellenőrzés (izolált előnézet)'));
   writeFileSync(join(target,'index.html'),
     '<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>iMile staging</title><meta http-equiv="refresh" content="0;url=./staging/imile-management/index.html"><a href="./staging/imile-management/index.html">Közös bejelentkezés</a></html>\n');
   writeFileSync(join(target,'firebase.json'),JSON.stringify({
@@ -75,7 +87,7 @@ try {
     }
   },null,2)+'\n');
   console.log('Safe preview generated: '+target);
-  console.log('Only shared menu, staging Fleet master management and DepoKapacitas copied: '+allowed.length+' files');
+  console.log('Safe isolated preview: shared hub, advanced Depot, In-Hub/OFD reports and pure original Fleet projection; no legacy Fleet application: '+allowed.length+' files');
   console.log('No legacy production Fleet application, no customer data, no Apps Script credentials.');
 } catch(error) {
   rmSync(target,{recursive:true,force:true});
