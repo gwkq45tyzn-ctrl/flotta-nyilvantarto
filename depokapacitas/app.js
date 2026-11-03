@@ -12,7 +12,7 @@ import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-
 import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs';
 import {decodeCsv} from './import-encoding.mjs';
 import {previewGoogleDemoExport,MAX_GOOGLE_DEMO_BYTES} from './google-demo-preview.mjs';
-import {assessSources} from './source-health.mjs';
+import {assessSources,liveIndicatorPresentation} from './source-health.mjs';
 import {bookingSourcesTrusted} from './booking-physical-guard.mjs';
 import {assessOccupancy,occupancyMessage} from './booking-occupancy.mjs';
 import {vehicleDisplayStatus} from './vehicle-display-status.mjs';
@@ -277,20 +277,37 @@ function googleDemoPanel(){
 function imports(){const list=get('sourceRows').filter(x=>!state.search||JSON.stringify(x).toLowerCase().includes(state.search));return '<p class="inline-note"><a href="./parcel-preview.html">Csomagazonosítós import-előnézet megnyitása (csak olvasás)</a></p>'+googleDemoPanel()+(canWrite()?section('Táblázat betöltése','<form id="importForm" class="form-grid"><label>Adattípus<select name="type"><option value="demand">Kerületi csomagigény</option><option value="result">Futáreredmény</option><option value="generic">Egyéb operatív adattábla</option></select></label><label>CSV vagy Excel (.xlsx, .xls)<input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><button class="primary" type="submit">Feldolgozás és feltöltés</button></form><p class="small">A fájlt a böngésző dolgozza fel; a kiválasztott sorokat a központi adatbázisba mentjük. Ismételt import nem duplázza az azonos azonosítójú rekordokat. Hibás vagy ismétlődő sor esetén az import nem indul el.</p><div id="importFeedback" role="alert" aria-live="polite" class="small"></div>'):'')+section('Operatív adatbázis',table(['Forrás','Adatok előnézete','Betöltve'],list.slice(0,100).map(x=>td(esc(x.source||'Egyéb'),esc((x.content||'').slice(0,180)),esc(x.importedAt||'')))));}
 function admin(){if(state.role!=='admin')return '';const legacyCompare=section('Közös törzsadatok ellenőrzése – csak olvasás','<p class="inline-note">Töltsd be a jelenlegi Flotta Nyilvántartó JSON-mentését. A fájl csak a böngésződben kerül feldolgozásra; az összehasonlítás nem módosít sem a Firebase-ben, sem a Flottában adatot.</p><form id="masterCompareForm" class="form-grid"><label>Flotta JSON-biztonsági mentés<input type="file" name="fleetBackup" accept=".json,application/json" required></label><button class="secondary" type="submit">Összehasonlítás</button></form><div id="masterCompareOutput"></div>');return legacyCompare+section('Belső felhasználók','<p class="inline-note">Új e-mail/jelszó fiókot a Firebase Console → Authentication → Users részen hozhatsz létre. Az ott kapott UID-hez itt tudsz szerepkört rendelni. Így külső személy nem regisztrálhat önállóan.</p>'+frm('user',field('uid','Firebase-felhasználó UID-ja')+field('name','Név')+'<label>Szerepkör<select name="role"><option value="viewer">Megtekintő</option><option value="editor">Szerkesztő</option><option value="admin">Adminisztrátor</option></select></label>','Jogosultság mentése'))+section('Jogosultságok',table(['Név','UID','Szerepkör','Aktív'],get('users').map(x=>td(esc(x.name||'—'),esc(x.id),esc(x.role),x.active===true?'Igen':'Nem'))));}
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,alerts:alertsView,planning,drivers,vehicles,demands,results,attendance,import:imports,admin}[state.view];const tools=['overview','alerts'].includes(state.view)?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
+let watchedCollections=[];
+function updateLiveIndicator(){
+ if(!watchedCollections.length)return;
+ const health=assessSources(state.sourceMeta,{online:navigator.onLine,required:watchedCollections});
+ const label=liveIndicatorPresentation(health);
+ $('liveIndicator').textContent=label.text;
+ $('liveIndicator').classList.toggle('off',!label.trusted);
+ if(label.trusted&&Number.isFinite(health.confirmedAt)){
+  $('dataStamp').textContent='Minden forrás szerver által megerősítve: '+new Date(health.confirmedAt).toLocaleTimeString('hu-HU');
+ }else{
+  $('dataStamp').textContent='Az adatok nem teljesen igazoltak: '+health.message;
+ }
+}
+window.addEventListener('offline',updateLiveIndicator);
+window.addEventListener('online',updateLiveIndicator);
+// Metadata may remain unchanged while a tab is open; re-evaluate stale server age locally.
+setInterval(()=>{if(!$('shell').hidden)updateLiveIndicator();},60*1000);
 function listen(){
  for(const un of state.unsubscribe)un();state.unsubscribe=[];state.loaded=new Set();state.errors=new Set();state.sourceMeta={};
- for(const name of ['drivers','vehicles','driverCapacities','bookings','demands','results','sourceRows','fleetRecords','fleetAssignments','attendanceVehicleGuards','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess',...(state.role==='admin'?['users']:[])]){
+ watchedCollections=['drivers','vehicles','driverCapacities','bookings','demands','results','sourceRows','fleetRecords','fleetAssignments','attendanceVehicleGuards','vehicleSessions','vehicleLocks','driverLocks','courierDayPlans','courierAccess',...(state.role==='admin'?['users']:[])];
+ updateLiveIndicator();
+ for(const name of watchedCollections){
   const unsub=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
    state.data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));state.loaded.add(name);state.errors.delete(name);
    const meta=snap.metadata,confirmed=!meta.fromCache&&!meta.hasPendingWrites;
    state.sourceMeta[name]={loaded:true,fromCache:meta.fromCache,pending:meta.hasPendingWrites,error:false,serverAt:confirmed?Date.now():state.sourceMeta[name]?.serverAt};
-   $('liveIndicator').textContent=state.errors.size?'● Részleges adatkapcsolat':meta.fromCache?'● Gyorsítótárazott kapcsolat':'● Élő Firestore kapcsolat';
-   $('liveIndicator').classList.toggle('off',state.errors.size>0||meta.fromCache);
-   if(confirmed)$('dataStamp').textContent='Utolsó szerveri visszaigazolás: '+new Date().toLocaleTimeString('hu-HU');
+   updateLiveIndicator();
    render();
   },err=>{
    console.error(name,err);state.errors.add(name);state.loaded.delete(name);state.sourceMeta[name]={...state.sourceMeta[name],loaded:false,error:true};
-   $('liveIndicator').textContent='● Adatkapcsolati hiba';$('liveIndicator').classList.add('off');
+   updateLiveIndicator();
    toast('Nem érhető el a(z) '+name+' adatbázis. Ellenőrizd a jogosultságokat.',true);render();
   });state.unsubscribe.push(unsub);
  }
