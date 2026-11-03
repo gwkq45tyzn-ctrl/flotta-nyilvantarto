@@ -13,3 +13,17 @@ export function assessSources(meta={}, {online=true,now=Date.now(),maxAge=15*60*
  else if(!Number.isFinite(now)||keys.some(x=>meta[x]?.serverAt>now)||now-confirmedAt>maxAge){status='stale';message='Régen vagy hibás időponttal ellenőrzött pillanatkép; frissítés szükséges.';}
  return {status,trusted:status==='ready',message,confirmedAt};
 }
+
+/** One aggregated connection label for all collections used by the Depó UI. */
+export function liveIndicatorPresentation(health){
+ const labels={
+  ready:'● Élő Firestore kapcsolat · minden forrás megerősítve',
+  offline:'● Offline · nem hiteles, korábbi adatok',
+  error:'● Adatkapcsolati hiba · hiányos források',
+  loading:'● Adatforrások betöltése…',
+  pending:'● Mentés szerveri visszaigazolásra vár',
+  cached:'● Gyorsítótárazott adatok · nem minden forrás élő',
+  stale:'● Régi szerveradatok · frissítés szükséges'
+ };
+ return {text:labels[health?.status]||'● Kapcsolat ellenőrzése…',trusted:health?.trusted===true};
+}
