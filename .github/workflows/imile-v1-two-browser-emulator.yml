@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   browser-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Two independent Chromium contexts against local Auth and Firestore
     timeout-minutes: 14
     steps:
