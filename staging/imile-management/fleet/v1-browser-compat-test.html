@@ -24,11 +24,31 @@
       const script=document.createElement('script');script.src=src;
       script.onload=resolve;script.onerror=reject;document.head.append(script);
     });
-    let login,subscribe,increment;
+    let login,subscribe,increment,readServer;
     const ready=()=>{
-      $('state').textContent='connected-server';
+      // A listener must not hide a pending write or an explicit failure.
+      if(!['writing','retrying-conflict'].includes($('state').textContent))
+        $('state').textContent='connected-server';
       $('save').disabled=false;
     };
+    const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function boundedConfirmedRetry(writeOnce) {
+      const initial=Number($('revision').textContent);
+      for(let attempt=0;attempt<4;attempt++){
+        try{return await writeOnce();}
+        catch(error){
+          if(!['permission-denied','aborted'].includes(error?.code)||attempt===3)
+            throw error;
+          // Do not retry an actual authorization rejection. Only a CONFIRMED
+          // concurrent revision bump can justify rebasing the synthetic edit.
+          const serverRevision=await readServer();
+          if(serverRevision<=initial)throw error;
+          $('state').textContent='retrying-conflict';
+          await sleep(50*(attempt+1));
+        }
+      }
+      throw Error('No acknowledged transaction after bounded retries');
+    }
     try{
       if(mode==='compat'){
         for(const f of ['firebase-app-compat.js','firebase-auth-compat.js','firebase-firestore-compat.js'])
@@ -42,13 +62,18 @@
           if(!snap.exists||snap.metadata.fromCache||snap.metadata.hasPendingWrites)return;
           $('revision').textContent=String(snap.data().revision);ready();
         });
-        increment=()=>db.runTransaction(async tx=>{
+        readServer=async()=>{
+          const snap=await ref.get({source:'server'});
+          if(!snap.exists)throw Error('Missing Fleet');
+          return Number(snap.data().revision);
+        };
+        increment=()=>boundedConfirmedRetry(()=>db.runTransaction(async tx=>{
           const snap=await tx.get(ref);
           if(!snap.exists)throw Error('Missing Fleet');
           const current=snap.data(),next=Number(current.revision)+1;
           tx.set(ref,{...current,revision:next});
           return next;
-        });
+        }));
       } else {
         const appModule=await import(endpoint+'firebase-app.js');
         const authModule=await import(endpoint+'firebase-auth.js');
@@ -63,13 +88,18 @@
           if(!snap.exists()||snap.metadata.fromCache||snap.metadata.hasPendingWrites)return;
           $('revision').textContent=String(snap.data().revision);ready();
         });
-        increment=()=>fire.runTransaction(db,async tx=>{
+        readServer=async()=>{
+          const snap=await fire.getDocFromServer(ref);
+          if(!snap.exists())throw Error('Missing Fleet');
+          return Number(snap.data().revision);
+        };
+        increment=()=>boundedConfirmedRetry(()=>fire.runTransaction(db,async tx=>{
           const snap=await tx.get(ref);
           if(!snap.exists())throw Error('Missing Fleet');
           const current=snap.data(),next=Number(current.revision)+1;
           tx.set(ref,{...current,revision:next});
           return next;
-        });
+        }));
       }
       $('state').textContent='login-needed';
       $('login').onclick=async()=>{
