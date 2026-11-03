@@ -52,6 +52,7 @@ const allowed=[
   'depokapacitas/district-capacity.mjs',
   'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs',
   'depokapacitas/flotta-master-readonly.mjs',
+  'depokapacitas/master-reconciliation.mjs',
   'features/shared-master-adapter.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
