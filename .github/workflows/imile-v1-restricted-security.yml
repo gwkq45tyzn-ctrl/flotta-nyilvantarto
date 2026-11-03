@@ -44,4 +44,5 @@ jobs:
             "node staging/imile-management/fleet/v1-restricted-rules-emulator.mjs"
       - name: Protect active staging Rules and actual original Fleet
         run: |
-          git diff --exit-code a74edec4bca8cc89d04ea3abf2cc0cb9b3aae55e -- depokapacitas/firestore.rules index.html
+          test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
