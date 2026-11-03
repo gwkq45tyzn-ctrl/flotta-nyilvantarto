@@ -11,7 +11,10 @@ var IMILE_DEMO_MAX_DAYS=365;
 function imileOwner_(){
   var a=Session.getActiveUser().getEmail();
   var b=Session.getEffectiveUser().getEmail();
-  if(!a||!b||a.toLowerCase()!==b.toLowerCase())throw Error('OWNER_ONLY');
+  var doc=SpreadsheetApp.getActiveSpreadsheet();
+  var owner=doc&&doc.getOwner();
+  var c=owner&&owner.getEmail();
+  if(!a||!b||!c||a.toLowerCase()!==b.toLowerCase()||a.toLowerCase()!==c.toLowerCase())throw Error('OWNER_ONLY');
 }
 function imileDay_(v){
   if(typeof v!=='string'||!/^20\d{2}-\d{2}-\d{2}$/.test(v))throw Error('INVALID_DAY');
