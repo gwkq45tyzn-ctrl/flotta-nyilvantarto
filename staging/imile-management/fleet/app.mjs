@@ -1,8 +1,8 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDoc,getDocFromServer,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
-import {allowedProfile} from '../session-policy.mjs';
+import {allowedProfile,isSharedFirebaseUser} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
 import {deriveAttendanceHandovers} from '../attendance-handover.mjs';
 import {fleetAvailability} from './availability.mjs';
@@ -161,8 +161,9 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
     const rev=++generation;
     clear();
     if(!user){toMenu();return;}
+    if(!isSharedFirebaseUser(user)){status('Csak a közös iMile-fiók jogosult.',true);return;}
     try{
-      const record=await getDoc(doc(db,'users',user.uid));
+      const record=await getDocFromServer(doc(db,'users',user.uid));
       if(rev!==generation)return;
       const profile=record.exists()?record.data():null;
       if(!allowedProfile(profile)){
