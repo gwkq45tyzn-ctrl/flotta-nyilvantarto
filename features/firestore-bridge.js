@@ -229,9 +229,14 @@
     const originalSave = save;
     window.save = function () {
       if (typeof fleetGateSession !== 'function' || !fleetGateSession()) return;
+      // Pre-import: strictly read-only. Do not call original save or stage pending.
+      if (!isPrimary()) {
+        status('Import ellenőrzés előtt csak olvasás – mentés letiltva', true);
+        return;
+      }
       localDirty = true;
       originalSave.apply(this, arguments);
-      if (isPrimary() && auth && auth.currentUser) {
+      if (auth && auth.currentUser) {
         pushTransactional();
       }
     };

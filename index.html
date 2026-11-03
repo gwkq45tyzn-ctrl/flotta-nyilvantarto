@@ -2582,6 +2582,9 @@
 
     // Init: never fetch fleet data before a login session exists.
     setLang(currentLang);
+  </script>
+  <script src="features/firestore-bridge.js"></script>
+  <script>
     if(fleetGateDisplay()){flottaHasLoaded=true;load();}
     else document.getElementById('flottaUsername').focus();
     // Re-lock an expired session without requiring a page reload.
@@ -2600,6 +2603,5 @@
   <script src="features/active-driver-assignment-v25.js"></script>
   <script src="features/wide-layout-v24.js"></script>
   <script src="features/vehicle-groups-v27.js"></script>
-  <script src="features/firestore-bridge.js"></script>
 </body>
 </html>
