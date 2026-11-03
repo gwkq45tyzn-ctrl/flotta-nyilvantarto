@@ -36,22 +36,20 @@
     };
     const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     async function boundedConfirmedRetry(writeOnce) {
-      // Capture the revision we observed when the user clicked Save.
-      // A remote concurrent write may advance the UI before our transaction
-      // commits. permission-denied from the rules revision check is the
-      // expected conflict signal (SDK does not auto-retry it). Always re-read
-      // the server and retry the transaction; the transaction itself computes
-      // the correct next revision. Stop only after the attempt budget.
+      // Synthetic QA only: distinguish a confirmed concurrent revision change
+      // from an actual Firestore authorization denial. UI revision is not proof
+      // because onSnapshot may have advanced it before Save was clicked.
       for(let attempt=0;attempt<4;attempt++){
+        const before=await readServer();
         try{return await writeOnce();}
         catch(error){
           if(!['permission-denied','aborted'].includes(error?.code)||attempt===3)
             throw error;
-          const serverRevision=await readServer();
-          // If the server has not advanced at all, this is a real auth failure.
-          // If it has advanced (or our local view is stale), rebase and retry.
-          const local=Number($('revision').textContent);
-          if(serverRevision<local && attempt>0)throw error;
+          // A revoked role, invalid auth token or other denied write MUST NOT
+          // be relabeled as an optimistic-lock conflict. Fail closed unless
+          // the server itself demonstrably advanced during this attempt.
+          const after=await readServer();
+          if(after<=before)throw error;
           $('state').textContent='retrying-conflict';
           await sleep(50*(attempt+1));
         }
