@@ -6,12 +6,14 @@ on:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'features/migration-manifest*'
+      - 'features/fleet-migration-dryrun*'
       - '.github/workflows/imile-v1-restricted-security.yml'
   pull_request:
     paths:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'features/migration-manifest*'
+      - 'features/fleet-migration-dryrun*'
       - '.github/workflows/imile-v1-restricted-security.yml'
 permissions:
   contents: read
@@ -30,6 +32,8 @@ jobs:
           java-version: '21'
       - name: Verify offline source manifest nested SHA-256 and size gate
         run: node features/migration-manifest.test.mjs
+      - name: Offline legacy/local/pending/backup reconciliation scenarios
+        run: node features/fleet-migration-dryrun.test.mjs
       - name: Install lockfile-pinned Firestore rule test dependencies
         run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
       - name: Actual Firestore Emulator – allowed single UID and deny all other roles
