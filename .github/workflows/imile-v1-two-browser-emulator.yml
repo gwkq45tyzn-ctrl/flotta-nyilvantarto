@@ -1,0 +1,55 @@
+name: iMile V1 – real two-browser Auth Firestore emulator QA
+on:
+  push:
+    branches: ['integration/v1-security-restricted-20261103']
+    paths:
+      - 'staging/imile-management/fleet/v1-browser-compat-test.html'
+      - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
+      - 'features/firestore-bridge.js'
+      - '.github/workflows/imile-v1-two-browser-emulator.yml'
+  pull_request:
+    paths:
+      - 'staging/imile-management/fleet/v1-browser-compat-test.html'
+      - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
+      - 'features/firestore-bridge.js'
+      - '.github/workflows/imile-v1-two-browser-emulator.yml'
+permissions:
+  contents: read
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-24.04
+    name: Two independent Chromium contexts against local Auth and Firestore
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned Firestore SDK and test libraries
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Add free Playwright Chromium driver – test runner only
+        run: npm install --prefix staging/imile-management/fleet --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.58.0
+      - name: Install local headless Chromium – no paid service
+        run: ./staging/imile-management/fleet/node_modules/.bin/playwright install --with-deps chromium
+      - name: Two actual browsers, local synthetic shared Auth and Firestore only
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only auth,firestore --project demo-imile-qa \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs"
+      - name: Original full Fleet HTML with hostile legacy session – localhost only
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only auth,firestore --project demo-imile-qa \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
+      - name: Staging deployment remains disabled
+        run: |
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          echo "Browser QA used localhost only; no Firebase deploy step exists."

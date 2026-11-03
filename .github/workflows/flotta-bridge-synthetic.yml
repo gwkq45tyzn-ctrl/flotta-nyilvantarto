@@ -33,5 +33,7 @@ jobs:
         run: node --test features/firestore-bridge.preimport-protect.test.cjs
       - name: New two-browser and snapshot metadata regression tests
         run: node --test features/firestore-bridge.two-browser-synthetic.test.cjs
+      - name: Server-verified Fleet role and pre-DOM legacy-session lockdown
+        run: node --test features/firestore-bridge.strict-auth.test.cjs
       - name: Shared master mapping
         run: node features/shared-master-adapter.test.mjs
