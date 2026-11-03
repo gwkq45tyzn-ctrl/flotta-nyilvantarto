@@ -1,19 +1,24 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDocFromServer,collection,onSnapshot,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile} from '../session-policy.mjs';
 import {saveFleetMaster} from './master-editor.mjs';
+import {fleetSourcesTrusted} from './operations-store.mjs';
 import {fleetAvailability} from './availability.mjs';
 
 const $=id=>document.getElementById(id);
 const toMenu=()=>window.location.replace('../index.html');
 let unsubs=[],generation=0;
-const state={admin:false,uid:null,drivers:[],vehicles:[],vehicleSessions:[],vehicleLocks:[],bookings:[],fleetAssignments:[]};
+const state={admin:false,uid:null,liveReady:false,drivers:[],vehicles:[],vehicleSessions:[],vehicleLocks:[],bookings:[],fleetAssignments:[]};
+const sources=['drivers','vehicles','vehicleSessions','vehicleLocks','bookings','fleetAssignments'];
+const sourceHealth={};
+const canEdit=()=>state.admin&&state.liveReady&&navigator.onLine!==false;
 function clear() {
   for(const un of unsubs)un();
   unsubs=[];
-  state.admin=false;state.uid=null;state.drivers=[];state.vehicles=[];state.vehicleSessions=[];state.vehicleLocks=[];state.bookings=[];state.fleetAssignments=[];
+  state.admin=false;state.uid=null;state.liveReady=false;
+  for(const name of sources){state[name]=[];delete sourceHealth[name];}
   $('fleetContent').hidden=true;
   $('adminVehiclePanel').hidden=true;
   $('adminDriverPanel').hidden=true;
@@ -35,7 +40,7 @@ function resetEdit(kind){
     kind==='driver'?'Új futár létrehozása':'Új autó létrehozása';
 }
 function startEdit(kind,row){
-  if(!state.admin)return;
+  if(!canEdit())return;
   const form=$(kind+'Form');
   for(const [key,value] of Object.entries(row)){
     if(form.elements[key])form.elements[key].value=String(value);
@@ -52,7 +57,7 @@ function renderRows(target,rows,columns,kind){
   body.replaceChildren();
   if(!rows.length){
     const tr=document.createElement('tr'),cell=document.createElement('td');
-    cell.colSpan=columns.length+(state.admin?1:0);
+    cell.colSpan=columns.length+(canEdit()?1:0);
     cell.textContent='Még nincsenek rekordok a staging adatbázisban.';
     tr.append(cell);body.append(tr);return;
   }
@@ -63,7 +68,7 @@ function renderRows(target,rows,columns,kind){
       cell.textContent=String(fn(x)??'');
       tr.append(cell);
     }
-    if(state.admin){
+    if(canEdit()){
       const td=document.createElement('td'),edit=document.createElement('button');
       edit.type='button';edit.className='edit';
       edit.textContent='Szerkesztés';
@@ -120,6 +125,50 @@ function render(){
       x=>x.plate||x.id,x=>x.model,x=>x.status
     ],'vehicle');
 }
+function applyEditAccess(){
+ const allowed=canEdit();
+ $('adminDriverPanel').hidden=!allowed;
+ $('adminVehiclePanel').hidden=!allowed;
+ $('driversActions').hidden=!allowed;
+ $('vehiclesActions').hidden=!allowed;
+ for(const kind of ['driver','vehicle']){
+  const form=$(kind+'Form');
+  for(const control of form.elements)control.disabled=!allowed;
+ }
+}
+function updateLiveView(){
+ const count=sources.filter(name=>sourceHealth[name]?.loaded===true).length;
+ const ready=fleetSourcesTrusted(sourceHealth,sources,{online:navigator.onLine!==false});
+ if(ready!==state.liveReady){
+  state.liveReady=ready;
+  if(!ready){for(const kind of ['driver','vehicle'])resetEdit(kind);}
+  applyEditAccess();
+ }
+ if(count!==sources.length){
+  $('fleetContent').hidden=true;
+  status('Flotta-adatok betöltése: '+count+'/'+sources.length+' szerverforrás…',true);
+  return;
+ }
+ try{
+  render();$('fleetContent').hidden=false;
+  status(ready?'● Élő staging Firestore kapcsolat · minden alapforrás szerver által megerősítve · '+
+   (state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság'):
+   '● Nem hiteles élő állapot (offline / cache / függő írás) – kizárólag olvasás, mentés tiltva.',!ready);
+ }catch(error){
+  state.liveReady=false;applyEditAccess();$('fleetContent').hidden=true;
+  status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);
+ }
+}
+window.addEventListener('offline',()=>{
+ if(!state.uid)return;
+ state.liveReady=false;applyEditAccess();
+ status('● Offline: a Flotta szerkesztése letiltva, az adatok nem hitelesen élők.',true);
+});
+window.addEventListener('online',()=>{
+ if(!state.uid)return;
+ state.liveReady=false;applyEditAccess();
+ status('● Kapcsolat helyreállt; szerveradatok újraellenőrzése szükséges.',true);
+});
 const configured=Boolean(firebaseConfig.apiKey&&firebaseConfig.projectId&&firebaseConfig.appId);
 if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
   status('A Firebase staging projekt nincs konfigurálva, vagy nem a jóváhagyott tesztprojekt.',true);
@@ -135,7 +184,7 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
     $(kind==='driver'?'cancelDriverEdit':'cancelVehicleEdit').addEventListener('click',()=>resetEdit(kind));
     $(kind+'Form').addEventListener('submit',async event=>{
       event.preventDefault();
-      if(!state.admin||!state.uid){
+      if(!canEdit()||!state.uid){
         status('A törzsszerkesztéshez aktív adminjogosultság szükséges.',true);
         return;
       }
@@ -166,7 +215,7 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
     clear();
     if(!user){toMenu();return;}
     try{
-      const record=await getDoc(doc(db,'users',user.uid));
+      const record=await getDocFromServer(doc(db,'users',user.uid));
       if(rev!==generation)return;
       const profile=record.exists()?record.data():null;
       if(!allowedProfile(profile)){
@@ -175,27 +224,20 @@ if(!configured||firebaseConfig.projectId!=='imile-management-staging'){
       state.uid=user.uid;
       state.admin=profile.role==='admin';
       $('userInfo').textContent=(profile.name||user.email||'Felhasználó')+' · '+profile.role;
-      $('adminDriverPanel').hidden=!state.admin;
-      $('adminVehiclePanel').hidden=!state.admin;
-      $('driversActions').hidden=!state.admin;
-      $('vehiclesActions').hidden=!state.admin;
-      const loaded=new Set();
-      for(const name of ['drivers','vehicles','vehicleSessions','vehicleLocks','bookings','fleetAssignments']){
-        const unsubscribe=onSnapshot(collection(db,name),snap=>{
+      applyEditAccess();
+      for(const name of sources){
+        const unsubscribe=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
           if(rev!==generation)return;
           state[name]=snap.docs.map(d=>({id:d.id,...d.data()}));
-          loaded.add(name);
-          if(loaded.size===6){
-            try{render();$('fleetContent').hidden=false;
-              status('● Élő staging Firestore kapcsolat · minden alapforrás betöltve · '+
-               (state.admin?'admin törzsszerkesztés engedélyezett':'olvasási jogosultság'));
-            }catch(error){$('fleetContent').hidden=true;status('Nem ellenőrizhető a teljes Flotta-állapot: '+error.message,true);}
-          }else{$('fleetContent').hidden=true;status('Flotta-adatok betöltése: '+loaded.size+'/6 forrás…');}
+          sourceHealth[name]={loaded:true,fromCache:snap.metadata.fromCache,pending:snap.metadata.hasPendingWrites,error:false};
+          updateLiveView();
         },error=>{
           if(rev!==generation)return;
           console.error('Staging fleet read failed:',name,error);
+          sourceHealth[name]={loaded:false,fromCache:true,pending:false,error:true};
+          state.liveReady=false;applyEditAccess();
           $('fleetContent').hidden=true;
-          status('Az egyik kötelező Flotta-forrás ('+name+') nem érhető el. Az elérhetőség nem tekinthető ellenőrzöttnek.',true);
+          status('A kötelező Flotta-forrás ('+name+') nem érhető el; a szerkesztés zárolva.',true);
         });
         unsubs.push(unsubscribe);
       }
