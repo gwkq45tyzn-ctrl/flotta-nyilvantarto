@@ -6,7 +6,7 @@ import {summarizeDistrictCapacity} from '../../../depokapacitas/district-capacit
 const source=readFileSync(new URL('./Code.gs',import.meta.url),'utf8');
 const id=n=>String(n).padStart(32,'0');
 const row=(district='XIII',more={})=>({district,newCount:80,retryCount:20,plannedCapacity:120,confirmedCapacity:100,...more});
-function createHarness({active='owner@example.test',effective='owner@example.test'}={}){
+function createHarness({active='owner@example.test',effective='owner@example.test',owner='owner@example.test'}={}){
  let locked=false,flushes=0,created=0;
  class Sheet{
   constructor(){this.grid=[];this.formats=[];this.name='IMILE_DEMO_CAPACITY_V1';}
@@ -24,7 +24,7 @@ function createHarness({active='owner@example.test',effective='owner@example.tes
   }
   setFrozenRows(n){assert.equal(n,1);}
  }
- const spreadsheet={sheets:new Map(),getSheetByName(n){return this.sheets.get(n)||null;},insertSheet(n){created++;const s=new Sheet();this.sheets.set(n,s);return s;}};
+ const spreadsheet={sheets:new Map(),getOwner(){return owner?{getEmail:()=>owner}:null;},getSheetByName(n){return this.sheets.get(n)||null;},insertSheet(n){created++;const s=new Sheet();this.sheets.set(n,s);return s;}};
  const context=vm.createContext({
   Session:{getActiveUser:()=>({getEmail:()=>active}),getEffectiveUser:()=>({getEmail:()=>effective})},
   SpreadsheetApp:{getActiveSpreadsheet:()=>spreadsheet,flush:()=>{flushes++;},getUi:()=>{throw Error('UI_NOT_NEEDED');}},
@@ -88,6 +88,16 @@ test('Other Google account cannot read or write even if it sees the demo file',(
  assert.throws(()=>h.api.getDemoCapacityDay('2026-11-05'),/OWNER_ONLY/);
  assert.throws(()=>save(h),/OWNER_ONLY/);
  assert.equal(h.created,0);
+});
+test('Shared sheet editor is not treated as owner, even if active equals effective',()=>{
+ const h=createHarness({active:'editor@example.test',effective:'editor@example.test',owner:'owner@example.test'});
+ assert.throws(()=>h.api.getDemoCapacityDay('2026-11-05'),/OWNER_ONLY/);
+ assert.throws(()=>save(h),/OWNER_ONLY/);
+ assert.equal(h.created,0);
+});
+test('Shared Drive spreadsheet without identifiable owner fails closed',()=>{
+ const h=createHarness({owner:''});
+ assert.throws(()=>save(h),/OWNER_ONLY/);
 });
 test('Blank identity fails closed',()=>{
  const h=createHarness({active:''});
