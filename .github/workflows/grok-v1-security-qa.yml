@@ -26,6 +26,12 @@ jobs:
         run: node features/migration-manifest.test.mjs
       - name: Static UID contract (NOT an emulator authorization test)
         run: node depokapacitas/tests/rules-single-uid.test.mjs
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install existing, lockfile-pinned emulator test dependencies
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
       - name: Emulator – existing Fleet and Depo positive/negative Rules tests
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
