@@ -32,6 +32,9 @@
   const IMPORT_VERIFIED = 'flotta_import_verified';
 
   let app, auth, db, unsub = null;
+  let memberVerified = false;
+  let savePatched = false;
+  let legacySyncGated = false;
   let applyingRemote = false;
   let currentRevision = 0;
   let writeInFlight = false;
@@ -217,28 +220,26 @@
   }
 
   function gateOldSync() {
-    if (typeof window.pushRemote === 'function') {
-      const orig = window.pushRemote;
+    // The integrated V1 browser must never fall back to legacy JSONP sync,
+    // including before sign-in or on cached/expired sessions. The old central
+    // export is obtained privately before cutover and the original deployed
+    // Fleet remains untouched until that migration is approved.
+    if (legacySyncGated) return;
+    legacySyncGated = true;
+    if (typeof window.pushRemote === 'function')
       window.pushRemote = function () {
-        if (isAuthenticated()) {
-          status('Apps Script szinkron letiltva – Firestore Auth aktív');
-          return;
-        }
-        return orig.apply(this, arguments);
+        status('Régi Apps Script írás letiltva – csak ellenőrzött Firebase-átállás');
       };
-    }
-    if (typeof window.pullRemote === 'function') {
-      const orig = window.pullRemote;
+    if (typeof window.pullRemote === 'function')
       window.pullRemote = function () {
-        if (isAuthenticated()) return;
-        return orig.apply(this, arguments);
+        status('Régi Apps Script olvasás letiltva ezen az integrált V1 felületen');
       };
-    }
   }
 
   function patchSave() {
-    if (typeof save !== 'function') return;
+    if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
+    savePatched = true;
     window.save = function () {
       if (typeof fleetGateSession !== 'function' || !fleetGateSession()) return;
       // Pre-import: strictly read-only. Do not call original save or stage pending.
@@ -256,7 +257,7 @@
 
   async function verifyMember(uid) {
     try {
-      const userDoc = await db.doc('users/' + uid).get();
+      const userDoc = await db.doc('users/' + uid).get({ source: 'server' });
       return userDoc.exists && userDoc.data().active === true &&
         ['admin', 'editor'].includes(userDoc.data().role);
     } catch (e) {
@@ -270,21 +271,17 @@
   }
 
   function isAuthenticated() {
-    return !!(auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL);
+    return !!(memberVerified && auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL);
   }
 
   function patchSessionGate() {
     if (typeof fleetGateSession !== 'function') return;
-    const original = fleetGateSession;
     window.fleetGateSession = function () {
-      // Auth success unlocks UI even before import verification (read-only until primary)
-      if (isAuthenticated()) {
-        return { user: 'imilemanagement', at: Date.now() };
-      }
-      // Old fleetmanager session alone is not sufficient
-      const entry = original.apply(this, arguments);
-      if (entry && entry.user === 'fleetmanager' && !isAuthenticated()) return null;
-      return entry;
+      // FAIL CLOSED: any legacy sessionStorage user (including forged
+      // imilemanagement) is irrelevant without fresh SERVER-verified role.
+      return isAuthenticated()
+        ? { user: 'imilemanagement', at: Date.now() }
+        : null;
     };
   }
 
@@ -309,7 +306,9 @@
           await auth.signOut();
           throw new Error('Nincs érvényes admin/editor profil a users gyűjteményben.');
         }
-        // Correct order: set primary and verified import flag first, then unlock
+        // Fresh server profile is mandatory even when Firebase Auth has a cached user.
+        memberVerified = true;
+        // Pre-import still remains read-only until independent migration approval.
         setPrimary(true);
         // Primary is only fully active after import verified; for login we allow session but gate writes until import
         gateOldSync();
@@ -330,6 +329,7 @@
     };
 
     window.fleetSimpleLogout = async function () {
+      memberVerified = false;
       if (auth) await auth.signOut();
       if (unsub) { unsub(); unsub = null; }
       setPrimary(false);
@@ -343,9 +343,12 @@
   function resumeIfSession() {
     initFirebase().then(() => {
       auth.onAuthStateChanged(async (user) => {
+        memberVerified = false;
+        if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
         if (user && user.email === SHARED_EMAIL) {
           const ok = await verifyMember(user.uid);
           if (ok) {
+            memberVerified = true;
             setPrimary(true);
             gateOldSync();
             patchSave();
@@ -353,9 +356,13 @@
             startListener();
             status('Munkamenet folytatva – Firebase Auth érvényes');
           } else {
+            memberVerified = false;
             await auth.signOut();
             status('Érvénytelen profil – kijelentkeztetve', true);
           }
+        } else {
+          setPrimary(false);
+          if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
         }
       });
     }).catch(console.error);
@@ -372,7 +379,12 @@
         setTimeout(tryPatch, 40);
       }
     };
-    if (document.readyState === 'loading') {
+    // Script loads after all original Fleet function definitions. Patch NOW,
+    // before the subsequent inline legacy gate evaluates sessionStorage.
+    // Waiting for DOMContentLoaded created a pre-Auth legacy unlock window.
+    if (typeof fleetSimpleLogin === 'function' && typeof save === 'function') {
+      tryPatch();
+    } else if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', tryPatch);
     } else {
       tryPatch();
