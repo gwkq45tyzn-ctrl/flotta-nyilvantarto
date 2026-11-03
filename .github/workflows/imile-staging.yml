@@ -60,7 +60,9 @@ jobs:
           node --check staging/imile-management/reports/report-statistics.mjs
           node --check staging/imile-management/reports/inventory-statistics.mjs
       - name: Eredeti Flotta-törzs – csak olvasható szerveri előnézet
-        run: node depokapacitas/flotta-master-readonly.test.mjs
+        run: |
+          node depokapacitas/flotta-master-readonly.test.mjs
+          node depokapacitas/master-reconciliation.test.mjs
       - name: Magyar, amerikai és Excel-dátumok tesztelése
         run: node depokapacitas/import-dates.test.mjs
       - name: Magyar CSV karakterkódolások ellenőrzése
