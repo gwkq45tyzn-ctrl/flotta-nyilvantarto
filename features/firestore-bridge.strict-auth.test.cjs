@@ -11,10 +11,10 @@ const vm=require('node:vm');
 const source=fs.readFileSync(path.join(__dirname,'firestore-bridge.js'),'utf8');
 const SHARED='imilemanagement@imile-management-staging.firebaseapp.com';
 
-function harness({active=true}={}){
+function harness({active=true,partialSdk=false}={}){
  const store=new Map(),session=new Map();
  session.set('flotta_simple_session_v23',JSON.stringify({user:'fleetmanager',at:Date.now()}));
- const state={legacyGet:0,legacyPut:0,originalSave:0,serverReads:[],unlocked:false};
+ const state={legacyGet:0,legacyPut:0,originalSave:0,serverReads:[],unlocked:false,sdkScripts:[]};
  const inputs={
   flottaUsername:{value:'imilemanagement'},
   flottaPassword:{value:'test-password'},
@@ -38,16 +38,28 @@ function harness({active=true}={}){
   }}
  };
  const fire=()=>db;fire.FieldValue={serverTimestamp:()=>null};
+ const sdk={initializeApp:()=>({})};
+ if(!partialSdk){sdk.auth=()=>auth;sdk.firestore=fire;}
  const localStorage={getItem:k=>store.get(k)??null,
   setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)};
  const sessionStorage={getItem:k=>session.get(k)??null,
   setItem:(k,v)=>session.set(k,String(v)),removeItem:k=>session.delete(k)};
  const ctx={
   console:{error(){}},
-  document:{readyState:'loading',getElementById:k=>inputs[k]??null},
+  document:{readyState:'loading',getElementById:k=>inputs[k]??null,
+   createElement:tag=>({tagName:tag,src:'',onload:null,onerror:null}),
+   head:{appendChild(script){
+    state.sdkScripts.push(script.src);
+    Promise.resolve().then(()=>{
+     if(script.src.includes('firebase-auth-compat.js')) sdk.auth=()=>auth;
+     if(script.src.includes('firebase-firestore-compat.js')) sdk.firestore=fire;
+     script.onload?.();
+    });
+   }}
+  },
   localStorage,sessionStorage,
   addEventListener(){},
-  firebase:{initializeApp:()=>({}),auth:()=>auth,firestore:fire},
+  firebase:sdk,
   fleetSimpleLogin(){},fleetSimpleLogout(){},
   fleetGateSession(){return JSON.parse(sessionStorage.getItem('flotta_simple_session_v23')||'null');},
   fleetGateDisplay(){
@@ -97,4 +109,16 @@ test('active SERVER profile unlocks original Fleet, but save remains pre-import 
  await h.ctx.fleetSimpleLogout();
  assert.equal(h.state.unlocked,false);
  assert.equal(h.ctx.fleetGateSession(),null);
+});
+
+test('partially loaded Firebase namespace waits for both SDK modules, even with concurrent logins',async()=>{
+ const h=harness({partialSdk:true});
+ await Promise.all([h.login(),h.login()]);
+ assert.equal(h.state.unlocked,true);
+ assert.equal(h.ctx.fleetGateSession().user,'imilemanagement');
+ assert.deepEqual(h.state.sdkScripts.map(s=>s.split('/').pop()),
+   ['firebase-auth-compat.js','firebase-firestore-compat.js'],
+   'Concurrent init must not duplicate or skip required compat modules');
+ assert.equal(typeof h.ctx.firebase.firestore,'function');
+ assert.ok(h.state.serverReads.length>=1,'Auth profile remains server-verified');
 });
