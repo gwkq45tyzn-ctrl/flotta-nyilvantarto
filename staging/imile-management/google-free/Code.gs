@@ -116,10 +116,13 @@ function saveDemoCapacityDay(request){
 function exportDemoDemand(date){
   var snapshot=getDemoCapacityDay(date);
   if(!snapshot.found)throw Error('MISSING_DEMO_DAY');
-  return {schema:'imile.demo-demand.v1',source:snapshot.source,date:snapshot.date,revision:snapshot.revision,
-    verifiedByTrackingId:false,authoritative:false,
+  return {schema:'imile.demo-demand.v2',source:snapshot.source,date:snapshot.date,revision:snapshot.revision,
+    verifiedByTrackingId:false,authoritative:false,estimatedOnly:true,
     demands:snapshot.rows.map(function(r){
       return {id:snapshot.date+'__'+r.district,date:snapshot.date,district:r.district,newCount:r.newCount,retryCount:r.retryCount};
+    }),
+    draftCapacities:snapshot.rows.map(function(r){
+      return {district:r.district,plannedCapacity:r.plannedCapacity,confirmedCapacity:r.confirmedCapacity};
     })};
 }
 function onOpen(){
