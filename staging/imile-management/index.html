@@ -46,7 +46,7 @@
 <body>
   <header><div><h1>iMile Management</h1><p>Közös bejelentkezés és rendszerválasztó · fejlesztői környezet</p></div></header>
   <main>
-    <div class="notice"><strong>STAGING – nem éles.</strong> A Flotta Nyilvántartó jelenlegi éles felülete és adatai változatlanul megmaradnak. A közös flottaadat-kapcsolat fejlesztés alatt áll.</div>
+    <div class="notice"><strong>EGYESÍTETT STAGING – nem éles.</strong> Itt már egy közös kódbázisban található az eredeti Flotta, a fejlett DepóKapacitás és az In-Hub/OFD riportkészítő. A teljes adatmegosztás, a felhős jogosultsági szabályok és az éles import még nincsenek jóváhagyva. Az eredeti Flotta adatai változatlanul megmaradnak.</div>
     <section id="loading" class="card auth" role="status" aria-live="polite">
       <h2>Kapcsolódás…</h2><p>Firebase bejelentkezés ellenőrzése.</p>
     </section>
@@ -79,10 +79,10 @@
         <article class="card module fleet">
           <span class="symbol" aria-hidden="true">🚙</span>
           <h3>Flotta Nyilvántartó</h3>
-          <p>Kezdd itt: autó kiadása vagy visszavétele, szerviz, biztosítások, telefonok és tankolókártyák. A törzsadatok külön gombon érhetők el.</p>
-          <div class="footer">Közös futár- és autótörzs, kiadás és visszavétel, szervizek, biztosítások, telefonok, tankolókártyák és előzmények. Kizárólag staging; az éles flotta nincs átállítva.</div>
-          <div class="actions"><a class="action" href="./fleet/operations.html" id="fleetLink">Flotta megnyitása (staging)</a>
-          <a class="action secondary" href="./fleet/index.html" id="fleetMasterLink">Futár- és autótörzs</a></div>
+          <p>Az eredeti, teljes Flotta Nyilvántartó: járművek, futárok, tankolókártyák, szerviz, biztosítások, előzmények és kiadás-visszavétel.</p>
+          <div class="footer">Ez a meglévő eredeti Flotta, nem a korábbi egyszerűsített staging-helyettesítő. Az élő Firestore-adatátvitel külön ellenőrzésig le van tiltva; a közös Depó-törzsszinkron még előkészítés alatt áll.</div>
+          <div class="actions"><a class="action" href="../../index.html" id="fleetLink">Eredeti Flotta megnyitása</a>
+          <a class="action secondary" href="./fleet/operations.html" id="fleetMasterLink">Kísérleti műveleti QA (külön adatmodell)</a></div>
         </article>
         <article class="card module depo">
           <span class="symbol" aria-hidden="true">📊</span>
