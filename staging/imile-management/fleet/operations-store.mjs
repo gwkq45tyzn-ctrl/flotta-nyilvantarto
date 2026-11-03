@@ -1,3 +1,17 @@
+/**
+ * Fail closed unless every Fleet collection has a current, server-confirmed
+ * snapshot. A cache hit or a pending local write is not proof of live data.
+ * This is a UI readiness gate; Firestore Rules remain the write authority.
+ */
+export function fleetSourcesTrusted(metadata, requiredNames, {online=true}={}) {
+ if(online!==true || !Array.isArray(requiredNames) || requiredNames.length===0)return false;
+ return requiredNames.every(name=>{
+  const source=metadata?.[name];
+  return source?.loaded===true && source.fromCache===false &&
+   source.pending===false && source.error===false;
+ });
+}
+
 import {normalizeFleetRecord,validDate,initialVehicleDetails} from './operations-data.mjs';
 const check=(ok,message)=>{if(!ok)throw Error(message);};
 function syncMileage(tx,reference,snapshot,vehicleId,mileage,uid,serverTimestamp){
