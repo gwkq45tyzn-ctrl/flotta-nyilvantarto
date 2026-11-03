@@ -69,7 +69,8 @@ assert.ok(depotJs.includes("getDocFromServer(doc(db,'users',user.uid))"));
 assert.ok(depotHtml.includes('← Rendszerválasztó'));
 const allowed=read('staging/imile-management/build-preview.mjs');
 assert.doesNotMatch(allowed,/^\s*'index\.html',/m);
-assert.doesNotMatch(allowed,/^\s*'features\/.*',/m);
+assert.ok(allowed.includes("'features/shared-master-adapter.mjs'"));
+assert.doesNotMatch(allowed,/^\s*'features\/(?:firestore|in-use|active-driver|vehicle-groups|wide-layout).*',/m);
 
 const preview=join(root,'preview-imile-staging');
 assert.ok(!existsSync(preview),'Preview output already exists; tests must start from a clean checkout');
@@ -107,11 +108,14 @@ try{
    'depokapacitas/parcel-preview.mjs'
   ];
   for(const p of paths)assert.ok(existsSync(join(preview,p)),'Preview missing '+p);
-  assert.ok(!existsSync(join(preview,'features')),'Live fleet features must not be copied');
+  assert.ok(existsSync(join(preview,'features/shared-master-adapter.mjs')),'Pure read-only projection adapter missing');
+  assert.ok(existsSync(join(preview,'depokapacitas/flotta-master-readonly.mjs')),'Depot projection missing');
+  assert.ok(!existsSync(join(preview,'features/firestore-bridge.js')),'Live fleet backend must not be copied');
   assert.ok(existsSync(join(preview,'staging/imile-management/fleet/index.html')));
   assert.ok(!existsSync(join(preview,'flotta')),'Live Fleet must not be copied');
   assert.ok(!existsSync(join(preview,'depokapacitas/google-sync')),'Apps Script must not be copied');
   assert.ok(readFileSync(join(preview,'index.html'),'utf8').includes('staging/imile-management/index.html'));
+  assert.match(readFileSync(join(preview,'staging/imile-management/index.html'),'utf8'),/href="\.\/cutover\.html" id="fleetLink"/);
   const hosting=JSON.parse(readFileSync(join(preview,'firebase.json'),'utf8')).hosting;
   assert.equal(hosting.public,'.');
   for(const pattern of ['**/*.log','**/*.log.*'])
