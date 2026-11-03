@@ -26,9 +26,12 @@
     });
     let login,subscribe,increment,readServer;
     const ready=()=>{
-      // A listener must not hide a pending write or an explicit failure.
-      if(!['writing','retrying-conflict'].includes($('state').textContent))
-        $('state').textContent='connected-server';
+      // A listener cannot silently turn a failed or in-flight write into
+      // a "connected-server" success state, or re-enable an in-flight button.
+      const state=$('state').textContent;
+      if(['writing','retrying-conflict'].includes(state)||state.startsWith('write-error:'))
+        return;
+      $('state').textContent='connected-server';
       $('save').disabled=false;
     };
     const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
