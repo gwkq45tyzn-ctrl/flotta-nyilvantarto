@@ -110,11 +110,22 @@ service cloud.firestore {
     }
 
     match /flottaSharedState/{docId} {
-      allow read: if member();
-      allow write: if member()
+      // Single shared account only. Member check + email constraint.
+      // Full snapshot must stay under 1 MiB; revision is monotonic.
+      allow read: if member() && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com';
+      allow create, update: if member()
+        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
         && docId == 'current'
-        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','version'])
-        && request.resource.data.version is int;
+        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision'])
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.vehicles is list
+        && request.resource.data.drivers is list
+        && request.resource.data.fuelCards is list
+        && request.resource.data.contacts is list
+        && (!exists(/databases/$(database)/documents/flottaSharedState/current)
+            || request.resource.data.revision == get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1);
+      allow delete: if false;
     }
 
     match /{path=**} { allow read, write: if false; }
