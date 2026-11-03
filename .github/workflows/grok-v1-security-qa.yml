@@ -1,0 +1,32 @@
+name: Grok V1 Security and Migration QA
+on:
+  push:
+    paths:
+      - 'features/migration-manifest*'
+      - 'depokapacitas/firestore.rules'
+      - 'depokapacitas/tests/rules-single-uid.test.mjs'
+      - '.github/workflows/grok-v1-security-qa.yml'
+  pull_request:
+    paths:
+      - 'features/migration-manifest*'
+      - 'depokapacitas/firestore.rules'
+      - 'depokapacitas/tests/rules-single-uid.test.mjs'
+      - '.github/workflows/grok-v1-security-qa.yml'
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run REAL manifest implementation and nested hash regressions
+        run: node features/migration-manifest.test.mjs
+      - name: Static UID contract (NOT an emulator authorization test)
+        run: node depokapacitas/tests/rules-single-uid.test.mjs
+      - name: Emulator – existing Fleet and Depo positive/negative Rules tests
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
+          npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
