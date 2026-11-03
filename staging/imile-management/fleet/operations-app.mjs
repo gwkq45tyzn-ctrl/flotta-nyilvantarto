@@ -1,8 +1,8 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDoc,getDocFromServer,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
-import {allowedProfile} from '../session-policy.mjs';
+import {allowedProfile,isSharedFirebaseUser} from '../session-policy.mjs';
 import {schemas,expiryWarnings} from './operations-data.mjs';
 import {saveFleetRecord,moveFleetVehicle} from './operations-store.mjs';
 const $=id=>document.getElementById(id),el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
@@ -91,7 +91,8 @@ else{
  $('logout').onclick=async()=>{await signOut(auth);window.location.replace('../index.html');};
  onAuthStateChanged(auth,async user=>{
   const rev=++generation;clear();if(!user){window.location.replace('../index.html');return;}
-  try{const snap=await getDoc(doc(db,'users',user.uid)),profile=snap.data();if(rev!==generation)return;
+  if(!isSharedFirebaseUser(user)){setStatus('Csak a közös iMile-fiók jogosult.',true);return;}
+  try{const snap=await getDocFromServer(doc(db,'users',user.uid)),profile=snap.data();if(rev!==generation)return;
    if(!allowedProfile(profile)){setStatus('Nincs aktív hozzáférés.',true);return;}
    uid=user.uid;role=profile.role;$('identity').textContent=(profile.name||'Felhasználó')+' · '+role;
    for(const control of $('movementForm').elements)control.disabled=!writable();
