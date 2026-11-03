@@ -79,3 +79,33 @@ Hivatkozások:
 - https://developers.google.com/apps-script/guides/services/quotas
 - https://developers.google.com/apps-script/guides/services/authorization
 - https://developers.google.com/apps-script/reference/lock/lock-service
+
+
+## 2. lépés – DepóKapacitás JSON-átadás és mobilos csak olvasó előnézet
+
+A külön Draft fejlesztés a meglévő DepóKapacitás **Excel és adatok** nézetében
+egy Google Sheets DEMÓ JSON-fájlt **csak lokálisan** dolgoz fel:
+
+- A Google Sheets owner-only menü az exportot imile.demo-demand.v2 sémával készíti.
+  Az új, kézzel megadott tervezett/megerősített kapacitás a draftCapacities
+  mezőben, estimatedOnly:true jelöléssel szerepel.
+- A Depó önálló google-demo-preview.mjs modulja fájlméret-, schema-, nap-,
+  kerület-, duplikáció-, érték- és kapacitás-ellenőrzés után megmutatja a
+  kerületi hiányt vagy többletet. A korábbi v1 exporttal is működik, de
+  annak ismeretlen kapacitása **nem nulla**, hanem üres/unknown.
+- A művelet nem használ Firestore writeBatch, setDoc, runTransaction, nem
+  ír Google-táblázatba és nem importál semmit a központi adatbázisba.
+  A böngészőmunkamenetben marad; felhasználóváltáskor törlődik a memória.
+- A meglévő Depó mobilbarát felületén is megjeleníthető **ha a meglévő
+  ingyenes Spark/Auth/Firebase belépés már működik**. Ez **nem** nyilvános,
+  önálló Google Web App, és nem bizonyítja az éles mobilos Google-szinkront.
+- A számítás kézzel bevitt, szintetikus tervezés; nem tracking ID-alapú,
+  nem bizonyított aktív futár, jármű- vagy Attendance kapacitás.
+  A megjelenített hiány/többlet nem automatikus üzemi foglalási döntés.
+- A teljes staging preview builder a hozzáadott tiszta parser modult külön,
+  egyetlen új webfájlként csomagolja, a Google Scriptet és a tesztfájlokat
+  nem publikálja. Nincs cloud deploy és nincs valós Google-adat.
+
+A következő ingyenes mérföldkő külön vizsgálandó: működő, jóváhagyás nélkül
+használható és biztonságos többfelhasználós adatkapcsolat. Amíg ez nem igazolt,
+az owner-only Sheets DEMÓ és a Depóban végzett read-only import külön marad.
