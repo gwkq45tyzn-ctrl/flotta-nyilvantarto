@@ -97,3 +97,9 @@
 - `depokapacitas/firestore-v1-restricted.rules` hozzáadva (courier/photo útvonalak deferred).
 - Offline canonical JSON size check (`features/migration-size-check.test.mjs`) – szintetikus adat < 1 MiB.
 - Továbbra is **NO-GO**: nincs élő E2E, nincs rules deploy, nincs server-verified migráció, nincs Attendance CI javítás.
+
+## Frissítés (c9b90e9)
+- Offline migrációs dry-run: `features/migration-dry-run.mjs` (hash + counts + 1 MiB warning, nincs írás).
+- V1-restricted rules contract teszt: single-UID placeholder + catch-all deny.
+- Apps Script hard-stop terv: `docs/APPS_SCRIPT_HARD_STOP.md` (gated megvan, hard disable nincs).
+- Továbbra is **NO-GO**.
