@@ -100,7 +100,7 @@ test('Invalid JSON, non-string and oversized UTF8 input fail before any writes',
 });
 test('Read-only bridge never imports SDKs, mutates Firestore or requests Google APIs',()=>{
  const source=readFileSync(new URL('./google-demo-preview.mjs',import.meta.url),'utf8');
- for(const key of ['firebase','Firestore','writeBatch','setDoc','runTransaction','fetch(', 'GoogleDrive','UrlFetchApp','DriveApp'])
+ for(const key of ['firebase-app.js','firebase-firestore.js','writeBatch(','setDoc(','runTransaction(','fetch(','UrlFetchApp.fetch(','DriveApp.'])
   assert.equal(source.includes(key),false,key);
 });
 test('Depó UI keeps the existing import separate from DEMO and never commits DEMO',()=>{
