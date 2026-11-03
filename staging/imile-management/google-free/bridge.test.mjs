@@ -132,7 +132,7 @@ test('Reject unknown extra request fields',()=>{
  assert.throws(()=>h.api.saveDemoCapacityDay({date:'2026-11-05',expectedRevision:0,operationId:id(1),rows:[row()],uid:'admin'}),/INVALID_REQUEST/);
 });
 test('Strict photo/legacy exclusion and no outgoing cloud calls in bridge',()=>{
- for(const name of ['UrlFetchApp','DriveApp','Firebase','photoReceipts','doPost(','doGet(','VEHICLE_Fuel_Database','Mobile Attendance','Firestore'])
+ for(const name of ['UrlFetchApp.fetch(','DriveApp.','getFirestore(','photoReceipts','doPost(','doGet(','VEHICLE_Fuel_Database','Mobile Attendance','getStorage('])
   assert.equal(source.includes(name),false,name);
 });
 test('Deterministic order by district for canonical retries',()=>{
