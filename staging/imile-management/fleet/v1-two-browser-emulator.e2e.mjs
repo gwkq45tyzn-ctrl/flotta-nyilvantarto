@@ -96,7 +96,8 @@ try{
   await compat.locator('#save').click();
   await wait(modular,()=>document.getElementById('revision')?.textContent==='2',
     'cross-SDK server-confirmed onSnapshot');
-  assert.equal(await compat.locator('#revision').textContent(),'2');
+  await wait(compat,()=>document.getElementById('revision')?.textContent==='2',
+    'compat sender also receives server-confirmed snapshot');
   console.log('PASS [B+E]: compat write propagated to modular browser without reload');
 
   // Both edit nearly simultaneously; the SDK transaction must retry conflicts.
