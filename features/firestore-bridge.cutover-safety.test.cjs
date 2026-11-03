@@ -17,7 +17,7 @@ const originalHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
 
 function mockBridge({importVerified = false, failTransactions = false} = {}) {
-  const storage = new Map(importVerified ? [['flotta_import_verified', '1']] : []);
+  const storage = new Map(importVerified ? [['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']] : []);
   const sessions = new Map();
   const delayedMicrotasks = [];
   const controls = {

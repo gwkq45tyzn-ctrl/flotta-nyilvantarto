@@ -18,7 +18,7 @@ const bridgeSource = fs.readFileSync(path.join(__dirname, 'firestore-bridge.js')
 const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
 
 function makeHarness({ importVerified = false } = {}) {
-  const storage = new Map(importVerified ? [['flotta_import_verified', '1']] : []);
+  const storage = new Map(importVerified ? [['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']] : []);
   const session = new Map();
   const elements = {
     flottaUsername: { value: 'imilemanagement' },

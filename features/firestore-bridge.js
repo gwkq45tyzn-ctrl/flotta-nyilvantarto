@@ -78,7 +78,9 @@
   }
 
   function isPrimary() {
-    return localStorage.getItem(PRIMARY_FLAG) === '1' && localStorage.getItem(IMPORT_VERIFIED) === '1';
+    return localStorage.getItem(PRIMARY_FLAG) === '1' &&
+           localStorage.getItem(IMPORT_VERIFIED) === '1' &&
+           localStorage.getItem('flotta_migration_token') === 'verified-import';
   }
 
   function setPrimary(on) {
@@ -131,7 +133,10 @@
     unsub = ref.onSnapshot({ includeMetadataChanges: true }, (snap) => {
       const meta = snap.metadata;
       const confirmed = !meta.fromCache && !meta.hasPendingWrites;
-      if (!snap.exists()) {
+      // Firestore compat DocumentSnapshot.exists is a BOOLEAN property;
+      // the modular SDK exposes exists() as a method. Support both safely.
+      const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists === true;
+      if (!exists) {
         status(confirmed ? 'Firestore üres – ellenőrzött import szükséges a primary módhoz' : 'Offline / cache – Firestore állapot ismeretlen');
         return;
       }
@@ -383,9 +388,15 @@
     return data;
   };
 
-  window.flottaMarkImportVerified = function () {
+  window.flottaMarkImportVerified = function (token) {
+    if (token !== 'verified-import') {
+      status('Érvénytelen migrációs token – primary mód nem engedélyezve', true);
+      return false;
+    }
     markImportVerified();
-    status('Import ellenőrzöttnek jelölve – Firestore primary mód engedélyezve');
+    localStorage.setItem('flotta_migration_token', 'verified-import');
+    status('Ellenőrzött import token elfogadva – Firestore primary mód engedélyezve');
+    return true;
   };
 
   boot();

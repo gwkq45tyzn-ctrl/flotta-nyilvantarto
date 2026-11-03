@@ -72,3 +72,11 @@ test('old sync gated on auth, not only primary', () => {
   assert.equal(gated(true), 'blocked');
   assert.equal(gated(false), 'allowed');
 });
+
+test('primary requires migration token', () => {
+  const store = { flotta_firestore_primary: '1', flotta_import_verified: '1' };
+  const isPrimary = () => store.flotta_firestore_primary === '1' && store.flotta_import_verified === '1' && store.flotta_migration_token === 'verified-import';
+  assert.equal(isPrimary(), false);
+  store.flotta_migration_token = 'verified-import';
+  assert.equal(isPrimary(), true);
+});
