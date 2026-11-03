@@ -5,11 +5,15 @@ on:
     paths:
       - 'staging/imile-management/fleet/v1-browser-compat-test.html'
       - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
+      - 'features/firestore-bridge.js'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
   pull_request:
     paths:
       - 'staging/imile-management/fleet/v1-browser-compat-test.html'
       - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
+      - 'features/firestore-bridge.js'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
 permissions:
   contents: read
@@ -39,6 +43,12 @@ jobs:
             --only auth,firestore --project demo-imile-qa \
             --config firebase.depo-qa.json \
             "node staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs"
+      - name: Original full Fleet HTML with hostile legacy session – localhost only
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only auth,firestore --project demo-imile-qa \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
       - name: Staging deployment remains disabled
         run: |
           test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
