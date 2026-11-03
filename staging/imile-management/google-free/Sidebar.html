@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="hu">
+<head><base target="_top"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font:14px system-ui,sans-serif;color:#182338;margin:0;padding:14px;background:#f4f7fc}
+h1{font-size:20px;margin:0 0 8px}p{line-height:1.5}strong{color:#173d77}
+.panel{background:white;padding:12px;border-radius:12px;margin:12px 0;border:1px solid #d9e1ed}
+label{display:block;margin:8px 0;font-weight:600}input{box-sizing:border-box;padding:8px;width:100%;border:1px solid #aab6c8;border-radius:6px}
+button{background:#174787;color:#fff;border:0;border-radius:6px;padding:9px 11px;cursor:pointer;margin:4px 4px 4px 0}
+button[disabled]{opacity:.5}button.alt{background:#586779}
+.row{border-top:1px solid #e1e6ed;padding:8px 0}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.small{font-size:12px;color:#536176}
+#message{white-space:pre-wrap;min-height:1.5em}#message.error{color:#9d1925}
+</style></head><body>
+<h1>iMile – kerületi terv</h1>
+<p><strong>KIZÁRÓLAG SZINTETIKUS DEMÓ.</strong> Nem használ vállalati adatforrást. A tervezett kapacitás kézi becslés, nem autó-/futárzárból hitelesített érték.</p>
+<div class="panel">
+<label>Munkanap <input type="date" id="date"></label>
+<button id="load" type="button">Nap betöltése</button>
+<p id="revision" class="small">Revízió: —</p>
+</div>
+<div class="panel">
+<h2>Kerületek</h2>
+<div id="rows"></div>
+<button id="add" type="button" class="alt">Új kerület</button>
+</div>
+<div class="panel">
+<button id="save" type="button">Tesztterv mentése</button>
+<button id="export" type="button" class="alt">JSON export</button>
+<p id="message" role="status" aria-live="polite"></p>
+</div>
+<script>
+'use strict';
+const el=id=>document.getElementById(id);
+const date=el('date'),rows=el('rows'),message=el('message');
+const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+date.value=today;
+let revision=0,pending=null;
+function msg(s,bad=false){message.textContent=s;message.className=bad?'error':'';}
+function newOperation(){const a=new Uint8Array(16);crypto.getRandomValues(a);return Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');}
+function rowView(data={district:'',newCount:0,retryCount:0,plannedCapacity:0,confirmedCapacity:0}){
+ const wrap=document.createElement('div');wrap.className='row';
+ const fields=document.createElement('div');fields.className='fields';
+ for(const [key,label] of [['district','Kerület (pl. XIII)'],['newCount','Új csomag'],['retryCount','Újrapróbálás'],['plannedCapacity','Tervezett kapacitás'],['confirmedCapacity','Megerősített kapacitás']]){
+  const holder=document.createElement('label');holder.textContent=label;
+  const input=document.createElement('input');input.dataset.key=key;input.value=String(data[key]);
+  if(key==='district'){input.maxLength=30;input.autocomplete='off';}else{input.type='number';input.min='0';input.max='10000000';input.step='1';}
+  input.addEventListener('input',()=>{pending=null;});
+  holder.appendChild(input);fields.appendChild(holder);
+ }
+ const remove=document.createElement('button');remove.className='alt';remove.textContent='Sor törlése';remove.type='button';
+ remove.addEventListener('click',()=>{wrap.remove();pending=null;});
+ wrap.append(fields,remove);rows.appendChild(wrap);
+}
+function setRows(data){rows.replaceChildren();for(const row of data)rowView(row);}
+function readRows(){return [...rows.children].map(w=>{
+ const obj={};for(const input of w.querySelectorAll('input'))obj[input.dataset.key]=input.dataset.key==='district'?input.value.trim().toUpperCase():input.value===''?null:Number(input.value);
+ return obj;
+});}
+function rpc(name,args,onSuccess){
+ msg('Feldolgozás…');el('save').disabled=true;
+ google.script.run.withSuccessHandler(value=>{el('save').disabled=false;onSuccess(value);})
+ .withFailureHandler(e=>{el('save').disabled=false;msg('Nem sikerült: '+String(e?.message||'ismeretlen hiba'),true);})[name](...args);
+}
+function load(){
+ pending=null;rpc('getDemoCapacityDay',[date.value],s=>{
+ revision=s.revision;el('revision').textContent='Revízió: '+revision;
+ setRows(s.rows);msg(s.found?'A szintetikus terv betöltve.':'Ehhez a naphoz nincs tesztterv.');});
+}
+el('load').addEventListener('click',load);
+el('add').addEventListener('click',()=>{if(rows.children.length>=30){msg('Legfeljebb 30 kerület.',true);return;}rowView();pending=null;});
+el('save').addEventListener('click',()=>{
+ pending??=newOperation();
+ const request={date:date.value,expectedRevision:revision,operationId:pending,rows:readRows()};
+ rpc('saveDemoCapacityDay',[request],s=>{revision=s.revision;pending=null;setRows(s.rows);
+  el('revision').textContent='Revízió: '+revision;msg('Mentve a saját Google-táblázat DEMÓ munkalapjára.');});
+});
+el('export').addEventListener('click',()=>{
+ rpc('exportDemoDemand',[date.value],data=>{
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download='imile-DEMO-'+date.value+'.json';document.body.appendChild(link);
+  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);msg('Szintetikus JSON export előállítva.');});
+});
+date.addEventListener('input',()=>{pending=null;revision=0;setRows([]);el('revision').textContent='Revízió: —';});
+load();
+</script></body></html>
