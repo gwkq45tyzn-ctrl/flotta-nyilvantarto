@@ -1,0 +1,110 @@
+# iMile Management — Grok / ChatGPT közös projekttudás (átadás)
+**Változat:** 2026-11-03, csak a GitHubban látható és a felhasználó által megerősített projektadatokból.  
+**Cél:** a Grok, a ChatGPT és a később visszatérő Work ugyanazokat a V1 üzleti, technikai, tesztelési és biztonsági követelményeket kövesse, ne kezdjen elölről vagy rossz architektúrával.  
+**Besorolás:** ez a dokumentum **nyilvános GitHub repóba** kerül, ezért nincsenek benne éles személyes/csomagadatok, titkok, belső személynevek, privát táblázat-URL-ek. A privát forrásmintákat és hozzáféréseket a jogosult felhasználó külön, nem nyilvános csatornán adhatja át.
+
+## 0. Hogyan értelmezd az állapotot
+- **DÖNTÉS:** a felhasználó által jóváhagyott, kötelező követelmény. Régi dokumentáció nem írhatja felül.
+- **GITHUBON ELLENŐRZÖTT:** ág/commit/fájl/PR ténylegesen létezik, nem egyenlő sikeres élő működéssel.
+- **JELENTETT:** korábbi Work/Grok/ChatGPT beszámoló, amelynek egy része külön ellenőrzendő.
+- **NYITOTT / NO-GO:** nincs kellő bizonyíték a biztonságos éles működésre.
+
+## 1. Végleges V1 termékdöntések — MINDIG ezeket kövesd
+1. **A meglévő, eredeti webes Flotta Nyilvántartó az alap: `main/index.html`**, teljes kinézettel és minden régi funkcióval. A `staging/imile-management/fleet/index.html` és `fleet/operations.html` **NEM** helyettesítheti. A korábbi félreértést már kijavítottuk; a rossz célú PR #68 lezárva.
+2. **Egyetlen közös belső fiók**: a felhasználó által megadott belépési azonosító `imilemanagement`. Az iMile adminfelületet kizárólag a belső depócsapat használja; vállalkozók, futárok, diákok és egyéb külsők **nem** kapnak hozzáférést. Külön belső fiókok és új eseménynapló V1-ben nem cél; a biztonsághoz szükséges revízió- és adatkonzisztencia-információkat viszont megtartjuk. A közös fiók **nem** személyre visszavezethető audit.
+3. **Desktop-first** böngészős alkalmazás Chrome/Edge alatt; minimálisan 1366×900 és 1920×1080 QA. Külön PWA/mobil/Attendance funkciók V1 kiadást **nem blokkolhatnak**.
+4. **Valódi, azonnali többgépes közös adatkapcsolat** Flotta + Depó + kapcsolódó törzsek és foglalások között, lehetőleg Firestore `onSnapshot` kapcsolattal. A 7 másodperces Apps Script polling, helyi JSON-másolás vagy kézi Sheets import **nem** valós idejű közös adatbázis. Legalább 2 egyidejű, független böngészős szintetikus E2E-teszt kell.
+5. **100% ingyenes megoldások**: Google/Firebase díjmentes szolgáltatásai csak tényleges díjmentes kvótával, számlázás nélkül. **Nincs Blaze, bankkártya, fizetős API, díjköteles Cloud Functions/Storage/Escalation; nincs külön vezetői vagy IT-jóváhagyás megkerülése.** A GitHub repó publikus, nincs jelszó/token/privát kulcs, munkatárs vagy csomagadat a forrásban.
+6. Nem írjuk felül a régi üzemi adatokat: **mentés, visszaállítás, 1:1 funkcióleltár, adatmező- és történeti egyezőségteszt, explicit GO/NO-GO és rollback** minden éles váltás előtt. A régi Flottát a felhasználó szerint jelenleg senki nem használja, de **ettől a régi adat nem törölhető**.
+7. A tervezést és a riportokat automatikusnak szabad készíteni, **de a valós iMile csomagadatforrás élő integrációja nincs igazolva**. A manuális CSV/JSON vagy XLSX export ≠ ellenőrzött élő csomag-előrejelzés. Forrásminőség, dátum és státusz legyen látható.
+
+## 2. Üzemi probléma és napi folyamat — az üzleti logika háttere
+- AKE belső depó, korai, kb. **06:00-kor kezdődő napi működés**, tipikusan **800–1000 csomag/nap** (közelítő operatív adat, nem garantált állandó terhelés).
+- Az előző nap érkező linehaul-állományból irányítószám/kerület alapján szortírozás, az előző napi sikertelen kézbesítések **FIFO/reattempt** visszatervezése, futárhoz/körzethez hozzárendelés, reggeli kiadás és napvégi visszavétel/eltérések kezelése.
+- A visszaküldendő csomagokat ugyanaz a linehaul hozza-viszi; a pontos átadás/szkennelés szerződés még tisztázandó, **nem feltételezhető** automatikusan.
+- Operatív depóvezetői feladatok: futár- és diákbeosztás; vállalkozói létszám-előrejelzés; NDR/Resort/retry; raktárban maradt és futárnál elakadt tételek; long-ageing inventory; napi riport; járműadatok; ticket-kivizsgálás; jelenlét; hiányzó kézbesítési bizonyítékok és eszkaláció.
+- Valós probléma a be nem jelentett/lemondott műszak, kapacitáshiányra hivatkozó sikertelen kézbesítés, elérhetetlen ügyfél, hibás cím, késett visszahozatal és eltérő státusz. A cél az **előrejelzett és megerősített kapacitás elkülönítése**.
+- Diákok/kapcsolattartók részére a heti műszakot legalább **1 héttel előre** szeretnék megadni/megerősíteni; a korábbi WhatsApp/ad-hoc egyeztetés helyett később saját alkalmazás, de külső partnerek nem kapnak belső adminjogot.
+- Működési teljesítménycélok (üzleti elvárások, nem bizonyított aktuális eredmények): **Ascan→Dld P90 kevesebb mint 3 nap; 12H LH pickup legalább 98%; 24H OFD legalább 96%; 36H Dld legalább 92%; pending OFD kevesebb mint 3%**. Státuszmeghatározás és pontos mérés szükséges.
+
+## 3. Eredeti Flotta — forrás és adatmodell
+**Forrás:** `main/index.html` (~121 KB, egylapos eredeti alkalmazás) + eredeti `features/` kiegészítők. Megőrzendők: autók, futárok, tankolókártyák, kapcsolattartók, aktív vezető hozzárendelés, járműcsoportok, használatban státusz, szerviz, kilométeróra, műszaki és biztosítás lejárat, casco, bérlet, dokumentumok, jegyzetek, károk, történeti események, export/JSON backup, teljes UI/üzleti viselkedés.
+
+- Eredeti pillanatkép: `snapshot()` -> `{vehicles,fuelCards,drivers,contacts}`. Nem szabad csak `plate`/`name`/`capacity` minimálmodellre egyszerűsíteni; a beágyazott `history` és további mezők nem veszhetnek el.
+- Helyi kulcsok: `flotta_nyilvantarto_v16`, `flotta_pending_v16`, `flotta_version_v16`; régi kliensoldali session `flotta_simple_session_v23`. A régi `fleetmanager` böngészős hash-kapu **nem szerveroldali Auth**.
+- Régi megosztás: Google Apps Script `/exec`, JSONP `pullRemote`, `pushRemote` POST + requestId/verzió-visszaigazolás, kb. 7 másodperces polling. **Kettős írást/olvasást** meg kell szüntetni a validált Firestore cutover során; az Apps Scriptből és helyi függő mentésekből előbb teljes backup.
+- Az eredeti `let dirty`, `let flottaHasLoaded` lexikális változó **nem egyenlő** `window.dirty` vagy `window.flottaHasLoaded` értékével. A wrapper- és load-patchinget tényleges browser/VM teszttel bizonyítsd.
+- Részletes migrációs kapu: `staging/imile-management/core-cutover-preflight.mjs` és `shared-import-plan.mjs`. Lejárat, kilométeróra, alvázszám, szerviz, fuelCards, contacts, history, currentDriver, biztosítás és bérleti mezők parity-je kötelező. A cutover preflight egy része **csak olvas**, nem importál.
+
+## 4. DepóKapacitás funkciók
+- **Napi/holnapi kerületi** igény: új csomag + retry/reattempt (deduplikáció után). Naptári nap és **normalizált tracking/waybill ID** a csomagazonosítás alapja; vezető nullák, ZIP-kódok szövegként maradjanak.
+- ZIP / kerület / vidéki település mapping; a forrásból hiányzó kerületet **nem szabad kitalálni**.
+- Futárkapacitás **tervezett** vs **megerősített**, vendor/diák manning, hiány/többlet, online/admin státusz, jármű szabad/foglalt, napi vezető-hozzárendelés, dupla foglalás- és DA-ütközésvédelem.
+- Foglalásoknál atomi tranzakció és Firestore Rules; driverClaims és vehicle-booking consistency. Egy DA/nap vagy jármű/nap duplafoglalás tiltása más kérdés, mint a kerületi **többletkapacitás**: a pozitív `capacity - demand` gap elfogadható soft surplus, ezért **ne** tegyél automatikusan `reserved <= demand` tilalmat üzleti döntés nélkül.
+- Az import megköveteli a nap és azonosító normalizálását, forrássémát és hitelességet. Részleges batch siker, idempotencia, versenyhelyzet, duplikáció, import-overwrite mind tesztelendő.
+- Élő forrásjelző: ne az utolsó beérkezett dokumentum alapján mutassa az egész rendszert „élőnek”. Mindegyik szükséges kollekció cache/pending/offline/error/stale állapota számít. A külön ChatGPT-fix **PR #69**, teljes staging és Depó CI sikeres, Draft, **nem deployolt**.
+- Ide tartozó kódok: `depokapacitas/app.js`, `district-capacity.mjs`, `capacity-eligibility.mjs`, `source-health.mjs`, `next-day-forecast.mjs`, `import-validation.mjs`, `parcel-preview*.mjs`, `parcel-source-adapter.mjs`.
+
+## 5. Napi riportok — a kimenet legyen a mintákkal egyező
+Két riport: **In-Hub Inventory** és **DA OFD Monitoring**. Régi üzemi workflow: mindkét Google-munkafüzetben **Sheet1 = nyers export, Sheet2 = jelentés**, napi kb. 10:00 körüli munkafolyamat. V1 kliensoldali `.xlsx` feltöltés -> hitelesített fájlséma -> Sheet2 előállítás -> letölthető Excel, **nem állítjuk**, hogy az iMile API már automatikusan jelen van. Eredeti vizuális minta, fejlécek, képletek, színezés, összevonások **1:1 összevetendők jóváhagyott mintákkal**.
+- **In-Hub:** kötelező forrás: `Waybill Number`, `LM Receive Date`, `Consignee city`, `Consignee zipcode`. Egyedi Waybill, kerület 1–23 budapesti ZIP-ből, különben **eredeti településnév**; napok időrendben, összesítés `Grand Total`, vezető nullák megőrzése, sérült/duplikált waybill blokkoló.
+- **OFD:** kötelező forrás: `OFD Date`, `DA`, `DA Code`, `Vendor`, `Station`, `OFD`, `Delivered`. Egyedi üzleti sorkulcs `date + station + DA code + vendor`; **azonos kulcs több forrássora szándékosan összegződik**, nem automatikus csalás/duplikáció. Az aktuális teszt kifejezetten 5+7=12 összevonást vár. Hiányzó District nem becsülhető, ellenőrzött mapping nélkül sárga `—`.
+- OFD képletek: `Dld% = Delivered/OFD`; `P90 Target = OFD*0.90 - Delivered`; vendor összesítés súlyozott `SUM(Delivered)/SUM(OFD)`; `SPR = vendor Total OFD / egyedi futárok`. Napi 10:00 riport pillanatkép = **provisional**, nem automatikusan végleges napi KPI.
+- Napi/havi statisztika és archiválás csak külön engedélyezett forrásbatch, idempotens verzió, visszaállítási opció és jogosultság után. A browser riport E2E pixel/Excel összehasonlítása még külön QA.
+- Teljes specifikáció (kötelező olvasmány): `staging/imile-management/reports/REPORTS_AND_STATS_SPEC_HU.md`; implementáció: `reports/report-core.mjs`, `report-xlsx.mjs`, `report-statistics.mjs`, `report-integration.test.mjs`. A valódi riportfájlok és céges táblázat-URL-ek **nincsenek ebben a nyilvános handoverben**.
+
+## 6. Eredetileg felmerült, de most nem V1-kötelező modulok
+- Diákok saját heti PWA/beosztás jelzése, sofőr önkiszolgáló Attendance, autóválasztás/check-in, reggeli vezetői visszavétel, kulcsláda, fotóigazolás.
+- Korábbi fotós terv: jármű külső+belső állapot, egyes folyamatokban 7+7 kötelező kép, rendszámfelismerés; 150 m geokerítés **halasztva**.
+- A korábbi Attendance / VEHICLE_Fuel_Database Google táblák **csak read-only/elhagyandó források**, nem módosítandó üzemi backendek. A saját PWA jövőbeli lehetőség, nem desktop V1 akadály.
+- A #60–63 és a kapcsolódó fotó/Storage/Callable stack biztonsági QA-val előkészített, de **díjköteles vagy IAM-jóváhagyást igénylő felhős deployra nincs felhatalmazás**. Ne aktiváld automatikusan. A közös admin felületre a külső futárok továbbra sem kapnak jogot.
+
+## 7. Belépés, Firebase, Rules, megbízhatóság
+- A felhasználó és a Work beszámolója szerint **létezik aktív közös Auth felhasználó és aktív adminprofil** a `imile-management-staging` projektben, és a billing ki van kapcsolva. A bejelentkező név `imilemanagement`, a már használt belső Auth-email alias **`imilemanagement@imile-management-staging.firebaseapp.com`**. **Ne készíts másodikat.**
+- A Work e felhőállapotot böngészőből jelentette, de **a live rules telepítés, egyetlen UID-re korlátozás és 2 böngészős E2E nincs igazolva**. Az UID-t/jelszót ne írd dokumentációba vagy publikusan.
+- Jelszavas Auth és szerveroldali engedélyezett UID / aktív admin profil; nem elég kliensoldali e-mail-string + lokális flag. Browserben cache-ből kapott auth/profile nem írhat server-verifikált adatként. Kijelentkeztetés, session visszavonás és jogosultságcsökkenés minden modulban fail closed.
+- Aktuális staging Rules nem feltétlenül azonos a deployolt Rules-szal. A Grok v3 rules (~31,9 KB) **nem** őrizte meg az összes előrehaladott feature-ág szabályát (egy korábbi staging feature rules ~51,6 KB; pl. `vehicleSessions`, `photoReceipts`, `courierDayPlans`), így **nem szabad automatikusan a Firebase Console-ba publikálni**. Vedd figyelembe az összes szükséges, biztonságos ág rulesait és a felhőben ténylegesen futót. Firestore emulator pozitív+negatív teszt.
+- A teljes `flottaSharedState/current` dokumentum max. 1 MiB Firestore méretkorlát miatt history-val túlnőhet; verziózott, összefésülhető séma/chunkolás szükségességét mérni kell. Az azonos UID nem oldja meg a két gép teljes-document lost-update veszélyét.
+
+## 8. 2026-11-03 GitHub állapot (ellenőrzött hivatkozások)
+**Repo:** https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto  
+**Kötelező döntések és V1 acceptance:** https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/issues/67
+- `main` régi Flotta: `0600d692d0d420967e76b953e2f369b5205d940b`.
+- `staging/imile-management-integration`: `7224d626276a95f7781477cdc243c5f5e40670cf`, nem merge-elt.
+- Grok régi Flotta Firestore-híd: `grok/original-flotta-firestore-bridge`. PR https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/pull/72 **DRAFT**, HEAD `2cada4a7cc83b82c1d36b4bdb201cc50948dfdcd`. Előzmények `4fda4af` → `563dbc9` → `efabc54` → `2cada4a`. Az utolsó commit a két QA hibát célozza (import előtti login és két gyors mentés); a Grok mindkét runtime regressziós tesztet sikeresnek jelenti. A GitHubon a tesztforrás ténylegesen megvan, de élő kétböngészős Firebase-E2E **nem** volt. A commitra listázott Depó CI SUCCESS **nem** bizonyítja a híd éles működését.
+- ChatGPT szintetikus runtime QA: https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/pull/73, commit `e23c1bf2d07fba06ef3605b2cda39e24709f6a93`. A Grok később bevette a tesztfájlt saját ágra; a #73 továbbra is Draft nyitott, ezért az egybevezetést/lezárást ellenőrizni kell, nem vakon merge-elni.
+- Eredeti híd blokkerek és audit: https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/issues/71.
+- Depó összevont live forrásjelző: https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/pull/69, commit `073d5e52c5a403411f92c7e0de7ba5df5579a9ce`, teljes staging CI és Depó CI SUCCESS, **DRAFT / nincs deploy**.
+- #65–66 ingyenes Google Sheets **szintetikus DEMÓ**, nem igazolt üzemi real-time. #63 és régebbi fotós Attendance PR-ek telepítését nem engedélyezték. #68 **CLOSED**, mert tévesen a staging második Fleet UI-t védte.
+- Grok korábbi, szűk audit: https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/issues/70 (feladatleírásban a korábbi feladatlehatárolás **felülírva**: a felhasználó most **teljes projektre** kéri a Grok fejlesztését/ellenőrzését).
+- **Work keretkimerülés 2026-11-03:** bejelentett 8 módosított fájlt (+284/-0), köztük `depokapacitas/desktop-planner.mjs`, `staging/imile-management/desktop-policy.mjs`, `desktop-runtime.mjs`, de ellenőrzéskor **nem volt igazolt GitHub branch/commit** a módosításokkal. Ezek lehetnek csak a Work nem publikált munkakörnyezetében; újrafelhasználás csak a teljes diff/fájl tényleges megőrzése után. A Work a felhasználó kvótája miatt átmenetileg nem használható. Jelenleg Grok + ChatGPT dolgozik.
+
+## 9. Újabb, még célzottan vizsgálandó v4 híd kockázatok
+1. A Grok `pushTransactional()` v4 `finally` blokkja **minden localDirty állapotnál automatikus microtask retry-t ütemez**. Ha a szerver revision eltérés tartós, offline/permission-denied vagy adat túl nagy, ez **korlátlan újrapróbálkozást** és UI/kvóta terhelést okozhat. Teszt: tartós `REVISION_CONFLICT`, unavailable, permission-denied; nem lehet végtelen retry. Különítsd el a „új helyi szerkesztés írás közben” vs „nem menthető állapot” esetét.
+2. A régi `index.html` inline kódja a külső Firestore bridge script előtt hív `fleetGateDisplay()`-t és létező régi session esetén `load()`-ot. **Korábbi `fleetmanager` munkamenetnél az első betöltés a Firebase fail-closed gate megkerülésével történhet**, mielőtt a bridge felülírná a függvényeket. Teszteld a valós script execution ordert, tiltsd a régi gate megnyitását és a régi Apps Script requestet.
+3. Import előtt a híd `setPrimary(true)` állít, de `isPrimary()` csak lokális `flotta_import_verified` mellett igaz; emiatt a régi `pushRemote/pullRemote` fallback visszakapcsolhat és a korai szerkesztés a régi backendnek írhat. Az import előtti felület **read-only** legyen, ne legyen dual-write.
+4. `flottaMarkImportVerified()` egyetlen böngésző lokális tárát írja, nem közös adatbázis-hiteles, nem tartalmaz forrásverzió/hash/rekord- és történeti egyezőséget. Nincs automatikus GO / adatvisszaállítás; ezért jelenleg a validált cutover **nincs készen**.
+5. `verifyMember(uid)` Firestore `get()` hívásából nem következik feltétlenül kizárólag szerverről megerősített profil; cache-visszaesés/offline és jogosultság visszavonás külön tesztelendő. A frontend `isAuthenticated()` csak Auth emailt vizsgál, nem a korábban ellenőrzött role aktuális szerverstátuszát.
+6. Grok Rules továbbra is email + active admin/editor, **nem egyetlen backendben kijelölt UID**. A validált server-side principal és a szabálykészlet kompatibilitása hiányzik.
+7. Riport OFD duplikáció-tiltást és kerületi kapacitás hard capet ne vezess be a felhasználó üzleti jóváhagyása és forrássor-specifikáció nélkül.
+
+Az 1–7. pontok **kódalapú felülvizsgálati hipotézisek**, nem mind külön elvégzett böngészős reprodukciók; teszttel kell igazolni/cáfolni, mielőtt „javítva” állítjuk.
+
+## 10. Elvárt átfogó Grok ellenőrzés / átadás
+1. Olvasd el ezt a dokumentumot, a #67, #70, #71, #72, #73, #69 teljes leírását és minden releváns PR diffet. Járd végig a `main`, `staging/imile-management-integration`, Grok híd és Depó/report feature ágak teljes függőségi hálóját.
+2. **Tételes funkció × forrás × teszt × live státusz mátrix:** eredeti Flotta, Depó, két riport, Auth/Rules, közös törzsek, valós idejű szinkron, import, rollback, üzemeltetés.
+3. Ne keverd össze a teszt típusait: statikus, pure-unit, VM szintetikus, Firestore Rules emulator, valódi kétböngészős staging, valódi üzemi. A zöld CI vagy screenshot önmagában nem más típusú teszt bizonyítéka.
+4. Azonnali prioritás: v4 végtelen retry / régi gate / import előtti dual-write kizárása és ellenőrzése; szabálykészlet összevezetés; migrációs read-only kapu. Javítás saját `grok/*` ágon, nyitott Draft PR-ben, rövid célzott tesztekkel.
+5. Miután a blokkerek zöldek: külön szintetikus E2E két böngészővel, majd közös Flotta ↔ Depó `vehicles/drivers` referenciák, majd napi riport átvezetés, navigáció és egy közös Auth.
+6. **Biztonsági korlát:** nincs Firebase Rules/deploy, éles adat, migration, számlázás, céges IAM, vagy Google-source változtatás kifejezett jóváhagyás és ellenőrzött restore nélkül.
+7. **Részletes CHATGPT ÁTADÁS**: minden fontos megállapításhoz fájl+függvény/tesztparancs+commit SHA+PR URL+CI link; jelezd, hogy [S] statikus, [T] tényleges kódfuttatás, [E] emulator, [B] böngésző, [L] live ellenőrzött, [N] nem ellenőrzött. Záráskor GO/NO-GO, pontos sorrendi backlog és lehetséges független következő fejlesztési feladat.
+8. A párhuzamos munka külön ágakon menjen. A felhasználó szeretné, hogy **a ChatGPT minden munkaszakasz végén készítsen átadható Grok-feladatot**. Worknek addig ne adjunk új feladatot, amíg a kvótája nem áll helyre.
+
+## 11. Régi dokumentáció / konfliktusok feloldása
+- A `depokapacitas/TELEPITES.md` korábbi útmutatója külön Firebase projektet és több felhasználót említ — **nem írja felül** a 2026-11-03-i egy-fiókos közös Firebase döntést.
+- A `staging/imile-management/session-policy.mjs` még több role/user forgatókönyvre készült; V1-ben a backendnek egyetlen engedélyezett közös UID-t kell védenie, nem automatikusan az összes viewer/editor hozzáférést.
+- A `core-cutover-preflight.mjs` egyes korábbi proof mezői több személyes userrel vagy tartós hostinggal számolnak; a tényleges egyfiókos V1 célhoz **nem álcázhatók igaznak**. Változáskor bizonyítani kell az új feltételek egyenértékű biztonságát.
+- A riportok és Attendance későbbi bővítése nem indokolja az eredeti Flotta UX leváltását, a mobil-first irányt vagy a fizetős felhős bekapcsolást.
+
+---
+**Összefoglaló:** A védendő érték a meglévő teljes Flotta és története. Ehhez kerül egy közös, egységes, ingyenes, egy-fiókos, desktopos, valóban többgépes DepóKapacitás és napi riport rendszer. A jelenlegi fejlesztés a GitHubon komolyan előrehaladt, de nincs igazolt, biztonságos teljes V1 live cutover. Minden megállapítás legyen visszakereshető, minden adatírás legyen kontrollált.
