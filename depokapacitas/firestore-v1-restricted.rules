@@ -335,15 +335,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // The initial admin must be provisioned in the Firebase Console.
-      allow get: if signedIn() && (request.auth.uid == uid || admin());
-      allow list: if admin();
-      allow create, update: if admin()
-        && exactFields(request.resource.data,['name','role','active'])
-        && textField(request.resource.data.name,120)
-        && request.resource.data.role in ['admin','editor','viewer']
-        && request.resource.data.active is bool;
-      allow delete: if admin() && uid != request.auth.uid;
+      // V1 deliberately has ONE existing manually provisioned shared account.
+      // No browser can invite extra profiles or change the only account's
+      // role/active status; approved Firebase-console administration only.
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
     }
 
     match /drivers/{driverId} {
