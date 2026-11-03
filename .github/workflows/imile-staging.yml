@@ -37,6 +37,11 @@ jobs:
         run: |
           node --test staging/imile-management/google-free/bridge.test.mjs
           node -e "const m=require('./staging/imile-management/google-free/appsscript.json');if(!m.oauthScopes||m.oauthScopes.some(x=>!['https://www.googleapis.com/auth/spreadsheets.currentonly','https://www.googleapis.com/auth/script.container.ui','https://www.googleapis.com/auth/userinfo.email'].includes(x)))process.exit(1)"
+      - name: Google Sheets DEMÓ export → Depó mobilos csak olvasó előnézet
+        run: |
+          node --test depokapacitas/google-demo-preview.test.mjs
+          node --check depokapacitas/google-demo-preview.mjs
+          node --check depokapacitas/app.js
       - name: Mai fizikai és Attendance járműfoglalási védelem
         run: |
           node depokapacitas/booking-physical-guard.test.mjs
