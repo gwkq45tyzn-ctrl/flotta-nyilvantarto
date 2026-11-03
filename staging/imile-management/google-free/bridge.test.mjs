@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {summarizeDistrictCapacity} from '../../../depokapacitas/district-capacity.mjs';
+import {previewGoogleDemoExport} from '../../../depokapacitas/google-demo-preview.mjs';
 const source=readFileSync(new URL('./Code.gs',import.meta.url),'utf8');
 const id=n=>String(n).padStart(32,'0');
 const row=(district='XIII',more={})=>({district,newCount:80,retryCount:20,plannedCapacity:120,confirmedCapacity:100,...more});
@@ -55,7 +56,12 @@ test('Read roundtrip retains synthetic source and validity flag',()=>{
 test('Sheet export matches existing Depó demand contract',()=>{
  const h=createHarness();save(h);
  const x=h.api.exportDemoDemand('2026-11-05');
- assert.equal(x.schema,'imile.demo-demand.v1');assert.equal(x.demands.length,1);
+ assert.equal(x.schema,'imile.demo-demand.v2');assert.equal(x.demands.length,1);
+ assert.equal(x.estimatedOnly,true);assert.equal(x.draftCapacities.length,1);
+ const preview=previewGoogleDemoExport(JSON.stringify(x));
+ assert.equal(preview.plannedCapacity,120);assert.equal(preview.confirmedCapacity,100);
+ assert.equal(preview.plannedGap,20);assert.equal(preview.confirmedGap,0);
+ assert.equal(preview.canCommit,false);
  const stats=summarizeDistrictCapacity({date:x.date,demands:JSON.parse(JSON.stringify(x.demands)),bookings:[],drivers:[],vehicles:[]});
  assert.equal(stats.totalDemand,100);assert.equal(stats.rows[0].newCount,80);assert.equal(stats.rows[0].retryCount,20);
  assert.equal(stats.parcelsVerified,false);

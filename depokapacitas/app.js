@@ -11,6 +11,7 @@ import {planSharedMasterMigration} from '../staging/imile-management/shared-impo
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
 import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs';
 import {decodeCsv} from './import-encoding.mjs';
+import {previewGoogleDemoExport,MAX_GOOGLE_DEMO_BYTES} from './google-demo-preview.mjs';
 import {assessSources} from './source-health.mjs';
 import {bookingSourcesTrusted} from './booking-physical-guard.mjs';
 import {assessOccupancy,occupancyMessage} from './booking-occupancy.mjs';
@@ -29,7 +30,7 @@ const byId=(name,id)=>get(name).find(x=>x.id===id);
 const canWrite=()=>['admin','editor'].includes(state.role);
 const datestr=d=>new Date(d+'T12:00:00').toLocaleDateString('hu-HU',{year:'numeric',month:'long',day:'numeric'});
 const status=(s)=>'<span class="badge '+(s==='confirmed'||s==='Accepted'?'green':s==='absent'||s==='failed'?'red':'amber')+'">'+esc(s||'—')+'</span>';
-let auth,db,timer;
+let auth,db,timer,googleDemoPreview=null;
 function toast(msg,bad=false){const el=$('toast');el.textContent=msg;el.style.background=bad?'#a43e3e':'#183e73';el.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>el.classList.remove('show'),4000);}
 function showOnly(id){for(const n of ['setup','login','denied','shell'])$(n).hidden=n!==id;}
 function options(items,txt,val='id'){return items.map(x=>'<option value="'+esc(x[val])+'">'+esc(txt(x))+'</option>').join('');}
@@ -245,7 +246,35 @@ function attendanceVehicleSummary(){
   table(['Futár','Autó','Átvétel','Kicsekkolás','Állapot'],rows));
 }
 function attendance(){return datebar()+ownCompanyCarPanel()+attendanceVehicleSummary();}
-function imports(){const list=get('sourceRows').filter(x=>!state.search||JSON.stringify(x).toLowerCase().includes(state.search));return '<p class="inline-note"><a href="./parcel-preview.html">Csomagazonosítós import-előnézet megnyitása (csak olvasás)</a></p>'+(canWrite()?section('Táblázat betöltése','<form id="importForm" class="form-grid"><label>Adattípus<select name="type"><option value="demand">Kerületi csomagigény</option><option value="result">Futáreredmény</option><option value="generic">Egyéb operatív adattábla</option></select></label><label>CSV vagy Excel (.xlsx, .xls)<input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><button class="primary" type="submit">Feldolgozás és feltöltés</button></form><p class="small">A fájlt a böngésző dolgozza fel; a kiválasztott sorokat a központi adatbázisba mentjük. Ismételt import nem duplázza az azonos azonosítójú rekordokat. Hibás vagy ismétlődő sor esetén az import nem indul el.</p><div id="importFeedback" role="alert" aria-live="polite" class="small"></div>'):'')+section('Operatív adatbázis',table(['Forrás','Adatok előnézete','Betöltve'],list.slice(0,100).map(x=>td(esc(x.source||'Egyéb'),esc((x.content||'').slice(0,180)),esc(x.importedAt||'')))));}
+function renderGoogleDemoPreview(plan){
+ if(!plan)return '<p class="small">Még nincs betöltött szintetikus Google-tesztfájl.</p>';
+ const f=n=>n===null?'—':fmt(n);
+ const diff=n=>n===null?'—':label((n>=0?'+':'')+fmt(n),n<0?'red':'green');
+ return '<p class="notice"><strong>CSAK DEMÓ / NEM HITELESÍTETT.</strong> '
+  +esc(plan.warning)+'</p><p class="small">A feltöltött tesztfájl napja: '+esc(plan.date)
+  +' · Export-revízió: '+fmt(plan.revision)+'. Az eredmény csak ebben a böngészőmunkamenetben él.</p>'
+  +'<div class="grid kpis">'
+  +kpi('Új csomag',plan.totalNew,'Kézi szintetikus becslés')
+  +kpi('Újrakézbesítés',plan.totalRetry,'Kézi szintetikus becslés')
+  +kpi('Összes igény',plan.totalDemand,'Nem tracking ID szerint hitelesített')
+  +kpi('Tervezett kapacitás',plan.plannedCapacity,'Csak kézzel megadott érték')
+  +kpi('Megerősített kapacitás',plan.confirmedCapacity,'Nem igazolt jelenlét')
+  +'</div>'
+  +table(['Kerület','Új','Retry','Igény','Tervezett','Megerősített','Tervezett eltérés','Megerősített eltérés'],
+  plan.rows.map(r=>td(esc(r.district),f(r.newCount),f(r.retryCount),f(r.demand),
+    f(r.plannedCapacity),f(r.confirmedCapacity),diff(r.plannedGap),diff(r.confirmedGap))));
+}
+function googleDemoPanel(){
+ return section('Google Sheets – szintetikus export előnézet (csak olvasás)',
+  '<p class="inline-note">A saját teszt-Google-táblázat <strong>iMile DEMÓ</strong> menüjéből exportált JSON-t itt megvizsgálhatod mobilon és számítógépen. '
+  +'Az eredmények nem kerülnek a Firestore adatbázisba és nem helyettesítik a hiteles csomaglistát, a tényleges futárjelenlétet vagy a fizikai autózárakat.</p>'
+  +'<form id="googleDemoPreviewForm" class="form-grid"><label>iMile DEMÓ JSON'
+  +'<input type="file" name="demoJson" accept=".json,application/json" required></label>'
+  +'<button type="submit" class="secondary">Szintetikus terv megtekintése – mentés nélkül</button></form>'
+  +'<p class="small"><a href="./google-demo-preview.html">Belépés nélküli, önálló mobilos DEMÓ előnézet – a fájl csak a böngésződben nyílik meg</a></p>'
+  +'<div id="googleDemoPreviewResult" role="status" aria-live="polite">'+renderGoogleDemoPreview(googleDemoPreview)+'</div>');
+}
+function imports(){const list=get('sourceRows').filter(x=>!state.search||JSON.stringify(x).toLowerCase().includes(state.search));return '<p class="inline-note"><a href="./parcel-preview.html">Csomagazonosítós import-előnézet megnyitása (csak olvasás)</a></p>'+googleDemoPanel()+(canWrite()?section('Táblázat betöltése','<form id="importForm" class="form-grid"><label>Adattípus<select name="type"><option value="demand">Kerületi csomagigény</option><option value="result">Futáreredmény</option><option value="generic">Egyéb operatív adattábla</option></select></label><label>CSV vagy Excel (.xlsx, .xls)<input name="file" type="file" accept=".csv,.xlsx,.xls" required></label><button class="primary" type="submit">Feldolgozás és feltöltés</button></form><p class="small">A fájlt a böngésző dolgozza fel; a kiválasztott sorokat a központi adatbázisba mentjük. Ismételt import nem duplázza az azonos azonosítójú rekordokat. Hibás vagy ismétlődő sor esetén az import nem indul el.</p><div id="importFeedback" role="alert" aria-live="polite" class="small"></div>'):'')+section('Operatív adatbázis',table(['Forrás','Adatok előnézete','Betöltve'],list.slice(0,100).map(x=>td(esc(x.source||'Egyéb'),esc((x.content||'').slice(0,180)),esc(x.importedAt||'')))));}
 function admin(){if(state.role!=='admin')return '';const legacyCompare=section('Közös törzsadatok ellenőrzése – csak olvasás','<p class="inline-note">Töltsd be a jelenlegi Flotta Nyilvántartó JSON-mentését. A fájl csak a böngésződben kerül feldolgozásra; az összehasonlítás nem módosít sem a Firebase-ben, sem a Flottában adatot.</p><form id="masterCompareForm" class="form-grid"><label>Flotta JSON-biztonsági mentés<input type="file" name="fleetBackup" accept=".json,application/json" required></label><button class="secondary" type="submit">Összehasonlítás</button></form><div id="masterCompareOutput"></div>');return legacyCompare+section('Belső felhasználók','<p class="inline-note">Új e-mail/jelszó fiókot a Firebase Console → Authentication → Users részen hozhatsz létre. Az ott kapott UID-hez itt tudsz szerepkört rendelni. Így külső személy nem regisztrálhat önállóan.</p>'+frm('user',field('uid','Firebase-felhasználó UID-ja')+field('name','Név')+'<label>Szerepkör<select name="role"><option value="viewer">Megtekintő</option><option value="editor">Szerkesztő</option><option value="admin">Adminisztrátor</option></select></label>','Jogosultság mentése'))+section('Jogosultságok',table(['Név','UID','Szerepkör','Aktív'],get('users').map(x=>td(esc(x.name||'—'),esc(x.id),esc(x.role),x.active===true?'Igen':'Nem'))));}
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,alerts:alertsView,planning,drivers,vehicles,demands,results,attendance,import:imports,admin}[state.view];const tools=['overview','alerts'].includes(state.view)?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
 function listen(){
@@ -354,6 +383,17 @@ async function importFile(form){
  toast(completed+' sor feldolgozva.');
  form.reset();
 }
+async function previewGoogleDemoFile(form){
+ const file=form.elements.demoJson?.files?.[0];
+ if(!file)throw Error('Válassz szintetikus iMile DEMÓ JSON-fájlt.');
+ if(file.size>MAX_GOOGLE_DEMO_BYTES)throw Error('A szintetikus demófájl túl nagy.');
+ // Only a pure local JSON read and strict parser. No Firebase or Google writes.
+ const plan=previewGoogleDemoExport(await file.text());
+ googleDemoPreview=plan;
+ const target=document.getElementById('googleDemoPreviewResult');
+ if(target)target.innerHTML=renderGoogleDemoPreview(plan);
+ toast('A szintetikus Google-demó előnézete elkészült. Nem történt adatmentés.');
+}
 function navigate(view){if(!names[view])return;state.view=view;state.search='';document.querySelector('.sidebar').classList.remove('open');render();}
 document.addEventListener('click',async e=>{const n=e.target.closest('[data-view]');if(n){navigate(n.dataset.view);return;}const del=e.target.closest('[data-del]'),cancel=e.target.closest('[data-cancel]');try{if(del)await removeRow(del.dataset.del,del.dataset.id);if(cancel)await cancelBooking(cancel.dataset.cancel);}catch(ex){toast(ex.message,true);}});
 document.addEventListener('change',e=>{if(e.target.id==='datePick'){state.date=iso(e.target.value);render();}if(e.target.id==='modePick'){state.mode=e.target.value;render();}});
@@ -388,7 +428,7 @@ async function previewMasterComparison(form){
 document.addEventListener('click',event=>{if(event.target.closest('#refreshSources'))window.location.reload();});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{if(['overview','planning'].includes(state.view))render();});
 setInterval(()=>{if(state.view==='overview'&&!$('shell').hidden)render();else if(state.view==='planning'&&$('nextDayForecast'))$('nextDayForecast').outerHTML=nextDayPanel();},30000);
-document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
+document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='googleDemoPreviewForm'){e.preventDefault();try{await previewGoogleDemoFile(e.target);}catch(ex){googleDemoPreview=null;const out=document.getElementById('googleDemoPreviewResult');if(out)out.textContent='Demófájl elutasítva: '+String(ex.message||ex);toast('A Google DEMÓ előnézete nem tölthető be.',true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
 $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}
 else {
@@ -396,7 +436,7 @@ else {
  $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const f=new FormData(e.target);try{await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(ex){$('loginError').textContent='Hibás belépési adatok, letiltott fiók vagy nem elérhető szolgáltatás.';}});
  $('logout').addEventListener('click',()=>signOut(auth));
  $('signoutDenied').addEventListener('click',()=>signOut(auth));
- onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}try{const r=await getDocFromServer(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
+ onAuthStateChanged(auth,async user=>{googleDemoPreview=null;for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}try{const r=await getDocFromServer(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
 }
 
 document.addEventListener('change',e=>{const f=e.target.closest('form[data-form="booking"]');if(f&&["date","driverId"].includes(e.target.name))refreshBookingVehicles(f);});
