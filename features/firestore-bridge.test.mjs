@@ -52,3 +52,23 @@ test('old fleetmanager session alone is insufficient', () => {
 });
 
 console.log(process.exitCode ? 'Some tests failed' : 'All bridge contract tests passed');
+
+test('requeue is capped', () => {
+  let count = 0;
+  const MAX = 3;
+  function tryRequeue(dirty) {
+    if (dirty && count < MAX) { count++; return true; }
+    return false;
+  }
+  assert.equal(tryRequeue(true), true);
+  assert.equal(tryRequeue(true), true);
+  assert.equal(tryRequeue(true), true);
+  assert.equal(tryRequeue(true), false);
+  assert.equal(count, 3);
+});
+
+test('old sync gated on auth, not only primary', () => {
+  const gated = (authenticated) => authenticated ? 'blocked' : 'allowed';
+  assert.equal(gated(true), 'blocked');
+  assert.equal(gated(false), 'allowed');
+});

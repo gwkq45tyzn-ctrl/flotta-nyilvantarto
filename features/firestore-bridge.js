@@ -36,6 +36,8 @@
   let currentRevision = 0;
   let writeInFlight = false;
   let localDirty = false;
+  let requeueCount = 0;
+  const MAX_REQUEUE = 3;
 
   function loadSdk() {
     return new Promise((resolve, reject) => {
@@ -174,6 +176,7 @@
       const latestKey = JSON.stringify(latest);
       if (latestKey === draftKey) {
         localDirty = false;
+        requeueCount = 0;
         status('Mentés sikeres – rev ' + newRev);
         try { localStorage.removeItem('flotta_pending_v16'); } catch (e) {}
       } else {
@@ -191,8 +194,12 @@
     } finally {
       writeInFlight = false;
       // If a newer edit arrived while we were writing, push the latest snapshot
-      if (localDirty && isPrimary() && auth && auth.currentUser) {
+      if (localDirty && isPrimary() && auth && auth.currentUser && requeueCount < MAX_REQUEUE) {
+        requeueCount++;
         Promise.resolve().then(() => pushTransactional());
+      } else if (requeueCount >= MAX_REQUEUE) {
+        status('Túl sok újrapróbálkozás – exportáld a helyi állapotot és frissítsd az oldalt.', true);
+        requeueCount = 0;
       }
     }
   }
@@ -201,8 +208,8 @@
     if (typeof window.pushRemote === 'function') {
       const orig = window.pushRemote;
       window.pushRemote = function () {
-        if (isPrimary()) {
-          status('Apps Script szinkron letiltva – Firestore az elsődleges forrás');
+        if (isAuthenticated()) {
+          status('Apps Script szinkron letiltva – Firestore Auth aktív');
           return;
         }
         return orig.apply(this, arguments);
@@ -211,7 +218,7 @@
     if (typeof window.pullRemote === 'function') {
       const orig = window.pullRemote;
       window.pullRemote = function () {
-        if (isPrimary()) return;
+        if (isAuthenticated()) return;
         return orig.apply(this, arguments);
       };
     }
