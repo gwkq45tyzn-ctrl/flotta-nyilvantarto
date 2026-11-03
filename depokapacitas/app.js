@@ -1,8 +1,9 @@
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocFromServer,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
+import {isSharedFirebaseUser,SHARED_LOGIN_EMAIL} from '../staging/imile-management/session-policy.mjs';
 import {parseDay,parseTime} from './import-dates.mjs';
 import {readNonNegativeCount,buildImportPlan,formatImportErrors} from './import-validation.mjs';
 import {assessBooking,effectiveCapacity,eligibleDriver} from './capacity-eligibility.mjs';
@@ -373,8 +374,8 @@ $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}
 else {
  const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);
- $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const f=new FormData(e.target);try{await signInWithEmailAndPassword(auth,String(f.get('email')).trim(),String(f.get('password')));}catch(ex){$('loginError').textContent='Hibás belépési adatok, letiltott fiók vagy nem elérhető szolgáltatás.';}});
+ $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const f=new FormData(e.target);try{const loginEmail=String(f.get('email')).trim().toLowerCase();if(loginEmail!==SHARED_LOGIN_EMAIL)throw Error('Shared login only');await signInWithEmailAndPassword(auth,loginEmail,String(f.get('password')));}catch(ex){$('loginError').textContent='Hibás belépési adatok, letiltott fiók vagy nem elérhető szolgáltatás.';}});
  $('logout').addEventListener('click',()=>signOut(auth));
  $('signoutDenied').addEventListener('click',()=>signOut(auth));
- onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}try{const r=await getDoc(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
+ onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}if(!isSharedFirebaseUser(user)){showOnly('denied');return;}try{const r=await getDocFromServer(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
 }
