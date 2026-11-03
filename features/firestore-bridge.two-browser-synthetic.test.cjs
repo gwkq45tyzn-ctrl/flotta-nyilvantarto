@@ -50,7 +50,9 @@ function makeServer(initial) {
 }
 
 function makeClient(server,{verified=true,localKm=0}={}){
-  const stores=new Map(verified?[['flotta_import_verified','1']]:[]);
+  // A synthetic fixture must satisfy BOTH current client-side flags.
+  // This is NOT a production migration authorization; server-side approval is still required.
+  const stores=new Map(verified?[['flotta_import_verified','1'],['flotta_migration_token','verified-import']]:[]);
   const sessions=new Map();
   let fleet={
     vehicles:[{id:'v1',rendszam:'ABC123',km:localKm}],
