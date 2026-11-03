@@ -1,0 +1,37 @@
+name: Flotta Firestore Bridge - synthetic QA
+on:
+  push:
+    paths:
+      - 'features/firestore-bridge*'
+      - 'features/shared-master-adapter*'
+      - 'index.html'
+      - '.github/workflows/flotta-bridge-synthetic.yml'
+  pull_request:
+    paths:
+      - 'features/firestore-bridge*'
+      - 'features/shared-master-adapter*'
+      - 'index.html'
+      - '.github/workflows/flotta-bridge-synthetic.yml'
+permissions:
+  contents: read
+jobs:
+  bridge-qa:
+    name: Node 22 synthetic bridge and mapping tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Existing Flotta contract tests
+        run: node features/firestore-bridge.test.mjs
+      - name: Existing runtime regressions
+        run: node --test features/firestore-bridge.runtime-regressions.test.cjs
+      - name: Existing cutover safety
+        run: node --test features/firestore-bridge.cutover-safety.test.cjs
+      - name: Existing pre-import protection
+        run: node --test features/firestore-bridge.preimport-protect.test.cjs
+      - name: New two-browser and snapshot metadata regression tests
+        run: node --test features/firestore-bridge.two-browser-synthetic.test.cjs
+      - name: Shared master mapping
+        run: node features/shared-master-adapter.test.mjs

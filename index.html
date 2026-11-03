@@ -290,7 +290,7 @@
         <button type="button" id="loginEn" onclick="setLang('en')">EN</button>
       </div>
       <h1 id="flottaLoginTitle">Flotta Nyilvántartó</h1>
-      <p id="flottaLoginSubtitle">Jelentkezz be a folytatáshoz</p>
+      <p id="flottaLoginSubtitle">Jelentkezz be a közös imilemanagement fiókkal a folytatáshoz</p>
       <form id="flottaLoginForm" onsubmit="fleetSimpleLogin(event)">
         <label id="flottaUsernameLabel" for="flottaUsername">Felhasználónév</label>
         <input id="flottaUsername" type="text" spellcheck="false" autocapitalize="none"
@@ -1067,7 +1067,7 @@
       const en=currentLang==='en';
       const tx=(id,hu,english)=>{const el=document.getElementById(id);if(el)el.textContent=en?english:hu;};
       tx('flottaLoginTitle','Flotta Nyilvántartó','Fleet Manager');
-      tx('flottaLoginSubtitle','Jelentkezz be a folytatáshoz','Sign in to continue');
+      tx('flottaLoginSubtitle','Jelentkezz be a közös imilemanagement fiókkal a folytatáshoz','Sign in to continue');
       tx('flottaUsernameLabel','Felhasználónév','Username');
       tx('flottaPasswordLabel','Jelszó','Password');
       tx('flottaLoginSubmit','Bejelentkezés','Sign in');
@@ -2582,6 +2582,9 @@
 
     // Init: never fetch fleet data before a login session exists.
     setLang(currentLang);
+  </script>
+  <script src="features/firestore-bridge.js"></script>
+  <script>
     if(fleetGateDisplay()){flottaHasLoaded=true;load();}
     else document.getElementById('flottaUsername').focus();
     // Re-lock an expired session without requiring a page reload.
