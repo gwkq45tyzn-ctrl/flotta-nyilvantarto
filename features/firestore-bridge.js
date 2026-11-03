@@ -147,6 +147,7 @@
     if (typeof snapshot !== 'function') return;
     writeInFlight = true;
     const draft = snapshot();
+    const draftKey = JSON.stringify(draft);
     try {
       const newRev = await db.runTransaction(async (tx) => {
         const ref = db.doc(SHARED_STATE);
@@ -169,9 +170,16 @@
         return next;
       });
       currentRevision = newRev;
-      localDirty = false;
-      status('Mentés sikeres – rev ' + newRev);
-      try { localStorage.removeItem('flotta_pending_v16'); } catch (e) {}
+      const latest = snapshot();
+      const latestKey = JSON.stringify(latest);
+      if (latestKey === draftKey) {
+        localDirty = false;
+        status('Mentés sikeres – rev ' + newRev);
+        try { localStorage.removeItem('flotta_pending_v16'); } catch (e) {}
+      } else {
+        localDirty = true;
+        status('Mentés folyamatban – újabb helyi módosítás várakozik');
+      }
     } catch (e) {
       localDirty = true;
       if (e.message === 'REVISION_CONFLICT') {
@@ -182,6 +190,10 @@
       }
     } finally {
       writeInFlight = false;
+      // If a newer edit arrived while we were writing, push the latest snapshot
+      if (localDirty && isPrimary() && auth && auth.currentUser) {
+        Promise.resolve().then(() => pushTransactional());
+      }
     }
   }
 
@@ -233,16 +245,21 @@
     if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
   }
 
+  function isAuthenticated() {
+    return !!(auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL);
+  }
+
   function patchSessionGate() {
     if (typeof fleetGateSession !== 'function') return;
     const original = fleetGateSession;
     window.fleetGateSession = function () {
-      if (auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL && isPrimary()) {
+      // Auth success unlocks UI even before import verification (read-only until primary)
+      if (isAuthenticated()) {
         return { user: 'imilemanagement', at: Date.now() };
       }
       // Old fleetmanager session alone is not sufficient
       const entry = original.apply(this, arguments);
-      if (entry && entry.user === 'fleetmanager' && !(auth && auth.currentUser)) return null;
+      if (entry && entry.user === 'fleetmanager' && !isAuthenticated()) return null;
       return entry;
     };
   }
