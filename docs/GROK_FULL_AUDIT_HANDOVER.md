@@ -92,3 +92,8 @@
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
 
 **Felhasználói élesítési engedély:** nincs megadva. Bármely NO-GO = RELEASE STOP.
+
+## Frissítés (bb311d2)
+- `depokapacitas/firestore-v1-restricted.rules` hozzáadva (courier/photo útvonalak deferred).
+- Offline canonical JSON size check (`features/migration-size-check.test.mjs`) – szintetikus adat < 1 MiB.
+- Továbbra is **NO-GO**: nincs élő E2E, nincs rules deploy, nincs server-verified migráció, nincs Attendance CI javítás.
