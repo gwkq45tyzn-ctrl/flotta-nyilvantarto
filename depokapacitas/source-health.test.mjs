@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {assessSources} from './source-health.mjs';
+const now=2000000,meta=Object.fromEntries(['demands','bookings','drivers','vehicles'].map(x=>[x,{loaded:true,error:false,fromCache:false,pending:false,serverAt:now-1000}]));
+assert.equal(assessSources(meta,{now}).trusted,true);
+assert.equal(assessSources(meta,{now,online:false}).status,'offline');
+assert.equal(assessSources({...meta,demands:{...meta.demands,error:true}},{now}).status,'error');
+assert.equal(assessSources({...meta,demands:{loaded:false}},{now}).status,'loading');
+assert.equal(assessSources({...meta,demands:{...meta.demands,fromCache:true}},{now}).status,'cached');
+assert.equal(assessSources({...meta,demands:{...meta.demands,pending:true}},{now}).status,'pending');
+assert.equal(assessSources(meta,{now:now+20*60000}).status,'stale');
+assert.equal(assessSources({}).trusted,false);
+assert.equal(assessSources({...meta,demands:{...meta.demands,serverAt:undefined}},{now}).trusted,false);
+console.log('PASS: 9 source-health states; missing/offline/cache/error never trusted');

@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "purpose": "iMile Management V1 FINAL production release - structural gate only, NOT deployment authorization",
+  "releaseCandidate": {
+    "commitSha": null,
+    "webArtifactSha256": null,
+    "firestoreRulesSha256": null,
+    "migrationPlanSha256": null,
+    "targetFirebaseProject": null,
+    "targetEnvironment": "production",
+    "frozen": false
+  },
+  "auditors": {
+    "grok": {
+      "verdict": "PENDING",
+      "reviewedCandidateSha": null,
+      "reviewedArtifactSha256": null,
+      "reviewedRulesSha256": null,
+      "reviewedMigrationPlanSha256": null,
+      "reviewedAt": null,
+      "independentReportUrl": null,
+      "openCriticalIssues": [],
+      "gates": {
+        "S1": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S2": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S3": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S4": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S5": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S6": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S7": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S8": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S9": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S10": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S11": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S12": {
+          "result": "PENDING",
+          "evidence": []
+        }
+      }
+    },
+    "chatgpt": {
+      "verdict": "PENDING",
+      "reviewedCandidateSha": null,
+      "reviewedArtifactSha256": null,
+      "reviewedRulesSha256": null,
+      "reviewedMigrationPlanSha256": null,
+      "reviewedAt": null,
+      "independentReportUrl": null,
+      "openCriticalIssues": [],
+      "gates": {
+        "S1": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S2": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S3": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S4": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S5": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S6": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S7": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S8": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S9": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S10": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S11": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S12": {
+          "result": "PENDING",
+          "evidence": []
+        }
+      }
+    }
+  },
+  "userAuthorization": {
+    "verdict": "PENDING",
+    "candidateSha": null,
+    "artifactSha256": null,
+    "rulesSha256": null,
+    "migrationPlanSha256": null,
+    "authorizedAt": null,
+    "approvalReference": null
+  },
+  "deployment": {
+    "status": "BLOCKED",
+    "scheduled": false,
+    "performed": false
+  }
+}

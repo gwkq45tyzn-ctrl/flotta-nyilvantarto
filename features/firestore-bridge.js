@@ -142,11 +142,13 @@
       }
       const data = snap.data();
       if (confirmed) {
+        // Firestore cache / pending local writes are not server-confirmed and
+        // must never replace the original Fleet snapshot and localStorage.
         applyRemote(data, true);
-      } else if (meta.hasPendingWrites && !localDirty) {
-        applyRemote(data, false);
-      } else if (meta.fromCache) {
-        status('Gyorsítótárazott kapcsolat – módosítás nem ajánlott');
+      } else {
+        status(meta.fromCache
+          ? 'Offline / gyorsítótár – távoli adat nem alkalmazható'
+          : 'Firestore írás még nem igazolt – helyi adatot nem írjuk felül', true);
       }
     }, (err) => {
       console.error(err);
