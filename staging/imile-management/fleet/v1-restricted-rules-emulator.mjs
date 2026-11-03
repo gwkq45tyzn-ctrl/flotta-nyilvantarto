@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,getDoc,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
+import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
 
 const projectId='demo-imile-restricted-v1';
 const uid='synthetic-imile-v1-admin-0000001';
@@ -127,6 +127,21 @@ try{
     ()=>updateDoc(fleet(shared),{revision:4}));
   await expectPermission('cannot delete Fleet snapshot',false,
     ()=>deleteDoc(fleet(shared)));
+
+  await expectPermission('admin cannot create another user profile',false,
+    ()=>setDoc(user(shared,'synthetic-extra'),{name:'SYNTHETIC EXTRA',active:true,role:'admin'}));
+  await expectPermission('admin cannot downgrade own role in browser',false,
+    ()=>updateDoc(user(shared,uid),{role:'viewer'}));
+  await expectPermission('admin cannot enumerate internal profiles',false,
+    ()=>getDocs(collection(shared,'users')));
+  // Role downgrade from the authorized console still takes effect immediately.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(user(ctx.firestore(),uid),{name:'SYNTHETIC VIEWER',active:true,role:'viewer'}));
+  await expectPermission('shared viewer may read Fleet',true,()=>getDoc(fleet(shared)));
+  await expectPermission('shared viewer cannot write Fleet',false,
+    ()=>updateDoc(fleet(shared),{revision:3}));
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(user(ctx.firestore(),uid),{name:'SYNTHETIC ADMIN',active:true,role:'admin'}));
 
   // Revoke access at source: previously authenticated token must not suffice.
   await env.withSecurityRulesDisabled(ctx=>
