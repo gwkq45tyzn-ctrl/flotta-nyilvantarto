@@ -42,34 +42,64 @@
   let requeueCount = 0;
   const MAX_REQUEUE = 3;
 
+  // Auth-state restoration and the login button can initialize Firebase at
+  // the same time. A global firebase-app object alone does NOT mean auth and
+  // firestore SDK modules have loaded. Share one complete initialization.
+  let sdkLoading = null;
+  let firebaseInitializing = null;
   function loadSdk() {
-    return new Promise((resolve, reject) => {
-      if (window.firebase) return resolve();
-      const scripts = [
-        'https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js',
-        'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js',
-        'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js'
-      ];
+    const modules = [
+      {ready: () => typeof window.firebase?.initializeApp === 'function',
+        src: 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js'},
+      {ready: () => typeof window.firebase?.auth === 'function',
+        src: 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js'},
+      {ready: () => typeof window.firebase?.firestore === 'function',
+        src: 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js'}
+    ];
+    if (modules.every(m => m.ready())) return Promise.resolve();
+    if (sdkLoading) return sdkLoading;
+    sdkLoading = new Promise((resolve, reject) => {
       let i = 0;
       function next() {
-        if (i >= scripts.length) return resolve();
-        const s = document.createElement('script');
-        s.src = scripts[i++];
-        s.onload = next;
-        s.onerror = reject;
-        document.head.appendChild(s);
+        if (i >= modules.length) {
+          if (modules.every(m => m.ready())) resolve();
+          else reject(new Error('Firebase compat modules not fully initialized'));
+          return;
+        }
+        const m = modules[i++];
+        if (m.ready()) { next(); return; }
+        const script = document.createElement('script');
+        script.src = m.src;
+        script.onload = next;
+        script.onerror = () => reject(new Error('Cannot load Firebase compat SDK'));
+        document.head.appendChild(script);
       }
       next();
-    });
+    }).catch(error => { sdkLoading = null; throw error; });
+    return sdkLoading;
   }
 
-  async function initFirebase() {
-    if (app) return;
-    await loadSdk();
-    app = firebase.initializeApp(FIREBASE_CONFIG);
-    auth = firebase.auth();
-    db = firebase.firestore();
-    db.settings({ ignoreUndefinedProperties: true });
+  function initFirebase() {
+    if (app && auth && db) return Promise.resolve();
+    if (firebaseInitializing) return firebaseInitializing;
+    firebaseInitializing = (async () => {
+      await loadSdk();
+      const existing = Array.isArray(firebase.apps) && firebase.apps.length
+        ? firebase.app() : null;
+      if (existing && existing.options.projectId !== FIREBASE_CONFIG.projectId)
+        throw new Error('Unexpected Firebase project in shared Fleet session');
+      const initialized = existing || firebase.initializeApp(FIREBASE_CONFIG);
+      const initializedAuth = firebase.auth();
+      const initializedDb = firebase.firestore();
+      initializedDb.settings({ ignoreUndefinedProperties: true });
+      app = initialized;
+      auth = initializedAuth;
+      db = initializedDb;
+    })().catch(error => {
+      firebaseInitializing = null;
+      throw error;
+    });
+    return firebaseInitializing;
   }
 
   function status(text, error = false) {
