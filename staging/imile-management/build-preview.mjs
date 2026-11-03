@@ -60,6 +60,7 @@ const allowed=[
   'depokapacitas/index.html',
   'depokapacitas/style.css',
   'depokapacitas/app.js',
+  'depokapacitas/google-demo-preview.mjs',
   'depokapacitas/firebase-config.js',
   'depokapacitas/import-dates.mjs',
   'depokapacitas/import-validation.mjs',
