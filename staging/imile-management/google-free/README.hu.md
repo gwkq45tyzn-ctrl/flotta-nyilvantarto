@@ -109,3 +109,24 @@ egy Google Sheets DEMÓ JSON-fájlt **csak lokálisan** dolgoz fel:
 A következő ingyenes mérföldkő külön vizsgálandó: működő, jóváhagyás nélkül
 használható és biztonságos többfelhasználós adatkapcsolat. Amíg ez nem igazolt,
 az owner-only Sheets DEMÓ és a Depóban végzett read-only import külön marad.
+
+
+### Külön belépés nélküli mobilos DEMÓ-megjelenítő
+
+A depokapacitas/google-demo-preview.html teljesen statikus, ingyenes,
+szintetikus JSON-olvasó. Saját Google- vagy Firebase-belépés nélkül is
+elindítható, amennyiben a statikus oldal jogszerűen elérhető / a helyi fájlok
+együtt vannak kiszolgálva. A CSS telefonra optimalizált, a táblázat vízszintesen
+görgethető. Működő statikus host nélkül **nem állítjuk**, hogy élő internetes
+címe van.
+
+- Szintetikus minta egy gombbal kipróbálható fájl feltöltése nélkül.
+- A Google Sheets DEMÓ v1/v2 JSON kizárólag böngészőmemóriában olvasható.
+- Nincs fetch, XMLHttpRequest, Google API, Firestore, Storage, IndexedDB,
+  localStorage, cookie, szinkron vagy automatikus megosztás.
+- A megjelenítés csak DOM textContent-tel történik, nem HTML-értelmezéssel.
+- A nézet törlése és a lap bezárása nem módosít adatot. Mobilböngészőn is
+  továbbra is teljesen **nem hitelesített** a kézi kerületi tervezés.
+- A GitHub staging preview builder a szükséges HTML/CSS/JS modult és a közös
+  szigorú parser-t engedélyezett statikus fájlként csomagolja; az Apps Script
+  szerveroldali Code.gs fájlt **nem** publikálja.
