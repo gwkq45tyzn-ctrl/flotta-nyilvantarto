@@ -43,9 +43,281 @@ service cloud.firestore {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId) {
-      return exists(/databases/$(database)/documents/driverCapacities/$(driverId))
-        ? get(/databases/$(database)/documents/driverCapacities/$(driverId)).data.capacity
+      let capacity = get(/databases/$(database)/documents/driverCapacities/$(driverId));
+      return capacity != null ? capacity.data.capacity
         : get(/databases/$(database)/documents/drivers/$(driverId)).data.capacity;
+    }
+
+    // New independent Attendance PWA. Separate self-service courier principal,
+    // never a member of the internal Depo/Flotta admin roles.
+    function courierPath() {
+      return /databases/$(database)/documents/courierAccess/$(request.auth.uid);
+    }
+    function courier() {
+      return signedIn() && exists(courierPath())
+        && get(courierPath()).data.active == true
+        && get(courierPath()).data.uid == request.auth.uid;
+    }
+    function sessionPath(id) {
+      return /databases/$(database)/documents/vehicleSessions/$(id);
+    }
+    function vehicleLockPath(plate) {
+      return /databases/$(database)/documents/vehicleLocks/$(plate);
+    }
+    function courierLockPath(uid) {
+      return /databases/$(database)/documents/courierLocks/$(uid);
+    }
+    function driverLockPath(driverId) {
+      return /databases/$(database)/documents/driverLocks/$(driverId);
+    }
+    function checkPhotos(paths,uid,sid,stage) {
+      return paths is map
+        && paths.keys().hasAll(['front','left','right','back','cabinFront','cabinRear','cargo'])
+        && paths.keys().hasOnly(['front','left','right','back','cabinFront','cabinRear','cargo'])
+        && paths.front == 'attendance/' + uid + '/' + sid + '/' + stage + '/front.jpg'
+        && paths.left == 'attendance/' + uid + '/' + sid + '/' + stage + '/left.jpg'
+        && paths.right == 'attendance/' + uid + '/' + sid + '/' + stage + '/right.jpg'
+        && paths.back == 'attendance/' + uid + '/' + sid + '/' + stage + '/back.jpg'
+        && paths.cabinFront == 'attendance/' + uid + '/' + sid + '/' + stage + '/cabinFront.jpg'
+        && paths.cabinRear == 'attendance/' + uid + '/' + sid + '/' + stage + '/cabinRear.jpg'
+        && paths.cargo == 'attendance/' + uid + '/' + sid + '/' + stage + '/cargo.jpg';
+    }
+    // A filename map does not prove that Storage objects exist. A separately
+    // approved IAM verifier must inspect all immutable objects before issuing
+    // this receipt. No browser role, including admin, can manufacture it.
+    // One server-issued capability per courier. Browser roles cannot mint,
+    // replace or remove it; quota counters/leases/journals are also server-only.
+    function validPhotoPermit(uid,sid,stage) {
+      let a = get(/databases/$(database)/documents/courierAccess/$(uid)).data;
+      let p = a.photoUploadPermit;
+      return p is map && p.source == 'upload-quota-v1' && p.version == 1
+        && p.status == 'open' && p.uid == uid && p.driverId == a.driverId && p.sessionId == sid
+        && p.createdAt is timestamp && p.createdAt <= request.time
+        && (stage == 'in' ? p.inExpiresAt is timestamp && p.inExpiresAt > request.time
+                            && p.resumeUntil is timestamp && p.resumeUntil > request.time && p.inExpiresAt <= p.resumeUntil
+                          : p.outExpiresAt is timestamp && p.outExpiresAt > request.time);
+    }
+    function trustedPhotos(paths,uid,sid,stage) {
+      let proof = get(/databases/$(database)/documents/photoReceipts/$(uid)/sessions/$(sid)/stages/$(stage));
+      return proof != null && proof.data.uid == uid && proof.data.sessionId == sid
+        && proof.data.stage == stage && proof.data.source == 'storage-verifier-v1'
+        && proof.data.verified == true && proof.data.paths == paths
+        && proof.data.verifiedAt is timestamp && proof.data.verifiedAt <= request.time
+        && validPhotoPermit(uid,sid,stage);
+    }
+    function currentVehicleMileage(plate,km) {
+      let record = get(/databases/$(database)/documents/fleetRecords/$('vehicle__' + plate));
+      return record == null || km >= record.data.data.mileage;
+    }
+    function validReviewChecks(data,session) {
+      return exactFields(data,['carPresent','keyPresent','clean','damageReviewed','cleanlinessReviewed'])
+        && data.carPresent == true && data.keyPresent == true && data.clean == true
+        && data.damageReviewed is bool && data.cleanlinessReviewed is bool
+        && (session.damageNote == '' || data.damageReviewed == true)
+        && (!('cleanlinessNote' in session) || session.cleanlinessNote == '' || data.cleanlinessReviewed == true);
+    }
+    match /photoReceipts/{uid}/sessions/{sid}/stages/{stage} {
+      allow get: if signedIn() && (request.auth.uid == uid || member());
+      allow list: if member();
+      allow create, update, delete: if false;
+    }
+
+    // Company-car headcount planning; no driver/vehicle plate preassignment.
+    match /courierDayPlans/{key} {
+      allow read: if member();
+      allow create, update: if editor()
+        && exactFields(request.resource.data,['date','driverId','status','changedAt','changedBy'])
+        && validDay(request.resource.data.date)
+        && validDriverCode(request.resource.data.driverId)
+        && key == request.resource.data.date + '__' + request.resource.data.driverId
+        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        && request.resource.data.status in ['planned','confirmed','cancelled']
+        && request.resource.data.changedAt == request.time
+        && request.resource.data.changedBy == request.auth.uid
+        && (resource == null
+          || (resource.data.date == request.resource.data.date
+            && resource.data.driverId == request.resource.data.driverId));
+      allow delete: if false;
+    }
+
+    match /courierAccess/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || member());
+      allow list: if member();
+      allow create: if admin()
+        && validCourierAccess(request.resource.data,uid)
+        && exactFields(request.resource.data,['uid','driverId','active'])
+        && request.resource.data.uid == uid
+        && validDriverCode(request.resource.data.driverId)
+        && request.resource.data.active is bool
+        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId));
+      allow update: if admin() && validCourierAccess(request.resource.data,uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid','driverId','active']);
+      allow delete: if false;
+    }
+    function validCourierAccess(data,uid) {
+      return data.keys().hasOnly(['uid','driverId','active','photoUploadPermit'])
+        && data.keys().hasAll(['uid','driverId','active']) && data.uid == uid
+        && validDriverCode(data.driverId) && data.active is bool
+        && exists(/databases/$(database)/documents/drivers/$(data.driverId));
+    }
+    // Permit ledger: immutable session binding, bounded timestamps and server
+    // status; quotas: integer used/extra; leases: canonical DA; requests: hash of
+    // UID+idempotency key; policy: versioned limits; adminOps: reason/actor/time.
+    // Admin SDK validates all schemas. ALL browser writes, including admin,
+    // are denied. No fallback or client-authored privileged control documents.
+    match /photoUploadPermits/{sid} {
+      allow get: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow list: if admin();
+      allow create, update, delete: if false;
+    }
+    match /photoUploadQuotas/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadLeases/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadRequests/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadPolicy/{id} { allow read: if admin(); allow write: if false; }
+    match /photoUploadAdminOps/{id} { allow read: if admin(); allow write: if false; }
+    match /vehicleSessions/{sid} {
+      // The client transaction must read its new (not-yet-existing) ID before
+      // creating it. Missing-document reads disclose no other courier's record.
+      allow get: if member() || (courier() && (resource == null || resource.data.uid == request.auth.uid));
+      allow list: if member() || (courier() && resource.data.uid == request.auth.uid);
+      allow create: if courier()
+        && sid.matches('^s_[a-f0-9]{32}$')
+        && exactFields(request.resource.data,[
+          'uid','driverId','plate','status','startKm','endKm','inPhotos','outPhotos',
+          'damageNote','cleanlinessNote','keyDropped','reviewChecks','startedAt','endedAt','reviewedAt','reviewedBy'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.driverId == get(courierPath()).data.driverId
+        && validVehiclePlate(request.resource.data.plate)
+        && request.resource.data.status == 'active'
+        && nonNegative(request.resource.data.startKm,100000000)
+        && currentVehicleMileage(request.resource.data.plate,request.resource.data.startKm)
+        && request.resource.data.endKm == null && request.resource.data.outPhotos == {}
+        && request.resource.data.damageNote == ''
+        && request.resource.data.cleanlinessNote == '' && request.resource.data.keyDropped == false
+        && request.resource.data.reviewChecks == {}
+        && request.resource.data.startedAt == request.time
+        && request.resource.data.endedAt == null
+        && request.resource.data.reviewedAt == null
+        && request.resource.data.reviewedBy == ''
+        && checkPhotos(request.resource.data.inPhotos,request.auth.uid,sid,'in')
+        && trustedPhotos(request.resource.data.inPhotos,request.auth.uid,sid,'in')
+        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        && get(/databases/$(database)/documents/vehicles/$(request.resource.data.plate)).data.status == 'Elérhető'
+        && (!exists(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.plate))
+          || get(/databases/$(database)/documents/fleetAssignments/$(request.resource.data.plate)).data.active == false)
+        && (!exists(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId))
+          || get(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId)).data.active == false)
+        && existsAfter(vehicleLockPath(request.resource.data.plate))
+        && getAfter(vehicleLockPath(request.resource.data.plate)).data.sessionId == sid
+        && existsAfter(courierLockPath(request.auth.uid))
+        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == sid
+        && existsAfter(driverLockPath(request.resource.data.driverId))
+        && getAfter(driverLockPath(request.resource.data.driverId)).data.sessionId == sid
+        && getAfter(driverLockPath(request.resource.data.driverId)).data.uid == request.auth.uid;
+      allow update: if (
+        // Courier's once-only checkout; cannot change original issue or identity.
+        courier() && resource.data.uid == request.auth.uid
+        && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status','endKm','outPhotos','damageNote','cleanlinessNote','keyDropped','endedAt'])
+        && request.resource.data.status == 'awaiting_review'
+        && nonNegative(request.resource.data.endKm,100000000)
+        && request.resource.data.endKm >= resource.data.startKm
+        && checkPhotos(request.resource.data.outPhotos,resource.data.uid,sid,'out')
+        && trustedPhotos(request.resource.data.outPhotos,resource.data.uid,sid,'out')
+        && optionalText(request.resource.data.damageNote,1000)
+        && optionalText(request.resource.data.cleanlinessNote,1000) && request.resource.data.keyDropped == true
+        && request.resource.data.endedAt == request.time
+        && getAfter(vehicleLockPath(resource.data.plate)).data.state == 'awaiting_review'
+        && getAfter(courierLockPath(resource.data.uid)).data.state == 'awaiting_review'
+        && getAfter(driverLockPath(resource.data.driverId)).data.state == 'awaiting_review'
+      ) || (
+        // Depot manager returns only a checked-out car; never free without
+        // co-transactional deletion of ALL three possession locks.
+        editor() && resource.data.status == 'awaiting_review'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status','reviewChecks','reviewedAt','reviewedBy'])
+        && request.resource.data.status == 'reviewed'
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedBy == request.auth.uid
+        && validReviewChecks(request.resource.data.reviewChecks,resource.data)
+        && getAfter(/databases/$(database)/documents/fleetRecords/$('vehicle__' + resource.data.plate)).data.data.mileage >= resource.data.endKm
+        && !existsAfter(vehicleLockPath(resource.data.plate))
+        && !existsAfter(courierLockPath(resource.data.uid))
+        && !existsAfter(driverLockPath(resource.data.driverId))
+      );
+      allow delete: if false;
+    }
+    match /vehicleLocks/{plate} {
+      allow read: if member() || courier();
+      allow create: if courier() && validVehiclePlate(plate)
+        && exactFields(request.resource.data,['plate','uid','driverId','sessionId','state'])
+        && request.resource.data.plate == plate
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.driverId == get(courierPath()).data.driverId
+        && request.resource.data.state == 'active'
+        && existsAfter(sessionPath(request.resource.data.sessionId))
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.plate == plate
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.uid == request.auth.uid
+        && existsAfter(courierLockPath(request.auth.uid))
+        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == request.resource.data.sessionId;
+      allow update: if courier() && resource.data.uid == request.auth.uid
+        && resource.data.state == 'active' && request.resource.data.state == 'awaiting_review'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state'])
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'awaiting_review';
+      allow delete: if editor()
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'reviewed'
+        && !existsAfter(courierLockPath(resource.data.uid));
+    }
+    // An authenticated UID alone is not a unique human. Two accounts may
+    // accidentally be provisioned with the same DA code. A canonical DA lock
+    // prevents the same driver from taking two different vehicles.
+    match /driverLocks/{driverId} {
+      allow get: if member() || (courier()
+        && driverId == get(courierPath()).data.driverId);
+      allow list: if member();
+      allow create: if courier() && validDriverCode(driverId)
+        && driverId == get(courierPath()).data.driverId
+        && exactFields(request.resource.data,['driverId','plate','uid','sessionId','state'])
+        && request.resource.data.driverId == driverId
+        && request.resource.data.uid == request.auth.uid
+        && validVehiclePlate(request.resource.data.plate)
+        && request.resource.data.state == 'active'
+        && existsAfter(sessionPath(request.resource.data.sessionId))
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.uid == request.auth.uid
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.driverId == driverId
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.plate == request.resource.data.plate
+        && existsAfter(courierLockPath(request.auth.uid))
+        && getAfter(courierLockPath(request.auth.uid)).data.sessionId == request.resource.data.sessionId;
+      allow update: if courier() && resource.data.uid == request.auth.uid
+        && driverId == get(courierPath()).data.driverId
+        && resource.data.state == 'active'
+        && request.resource.data.state == 'awaiting_review'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state'])
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'awaiting_review';
+      allow delete: if editor()
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'reviewed'
+        && !existsAfter(courierLockPath(resource.data.uid));
+    }
+    match /courierLocks/{uid} {
+      allow get: if (signedIn() && uid == request.auth.uid) || member();
+      allow list: if member();
+      allow create: if courier() && uid == request.auth.uid
+        && exactFields(request.resource.data,['plate','sessionId','state'])
+        && request.resource.data.state == 'active'
+        && validVehiclePlate(request.resource.data.plate)
+        && existsAfter(sessionPath(request.resource.data.sessionId))
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.uid == uid
+        && existsAfter(vehicleLockPath(request.resource.data.plate))
+        && getAfter(vehicleLockPath(request.resource.data.plate)).data.sessionId == request.resource.data.sessionId;
+      allow update: if courier() && uid == request.auth.uid
+        && resource.data.state == 'active' && request.resource.data.state == 'awaiting_review'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state'])
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'awaiting_review';
+      allow delete: if editor()
+        && getAfter(sessionPath(resource.data.sessionId)).data.status == 'reviewed'
+        && !existsAfter(vehicleLockPath(resource.data.plate));
     }
 
     match /users/{uid} {
@@ -75,7 +347,7 @@ service cloud.firestore {
     }
 
     match /vehicles/{vehicleId} {
-      allow read: if member();
+      allow read: if member() || courier();
       allow create, update: if admin()
         && exactFields(request.resource.data,['plate','model','status'])
         && validVehiclePlate(vehicleId)
@@ -123,18 +395,69 @@ service cloud.firestore {
       allow delete: if editor();
     }
 
+    // QA26: Europe/Budapest calendar day, using EU DST boundaries at 01:00 UTC.
+    function budapestDayAt(now) {
+      let y = now.year();
+      let march = timestamp.date(y,3,31);
+      let october = timestamp.date(y,10,31);
+      let start = march - duration.value(march.dayOfWeek() % 7,'d') + duration.value(1,'h');
+      let end = october - duration.value(october.dayOfWeek() % 7,'d') + duration.value(1,'h');
+      return (now + duration.value(now >= start && now < end ? 2 : 1,'h')).date();
+    }
+    function bookingDay(d) { return timestamp.date(int(d.date[0:4]),int(d.date[5:7]),int(d.date[8:10])); }
+    function depotDayKey(now) {
+      let d = budapestDayAt(now);
+      return string(d.year()) + '-' + (d.month() < 10 ? '0' : '') + string(d.month())
+        + '-' + (d.day() < 10 ? '0' : '') + string(d.day());
+    }
+    function checkoutBookingCompatible(d) {
+      let day = depotDayKey(request.time);
+      let p = /databases/$(database)/documents/bookings/$(day + '__' + d.vehicleId);
+      let reverse = /databases/$(database)/documents/driverClaims/$(day + '__' + d.driverId);
+      return (!exists(p) || get(p).data.driverId == d.driverId)
+        && (!exists(reverse) || get(reverse).data.bookingId == day + '__' + d.vehicleId);
+    }
+    function bookingDriverOccupancy(d) {
+      let p = /databases/$(database)/documents/fleetDriverAssignments/$(d.driverId);
+      let b = getAfter(/databases/$(database)/documents/bookings/$(d.bookingId)).data;
+      return bookingDay(d) != budapestDayAt(request.time) || !exists(p)
+        || get(p).data.active == false
+        || (get(p).data.active == true && get(p).data.vehicleId == b.vehicleId);
+    }
+    function sameDayOccupancy(d) {
+      let manual = /databases/$(database)/documents/fleetAssignments/$(d.vehicleId);
+      let guard = /databases/$(database)/documents/attendanceVehicleGuards/$(d.date + '__' + d.vehicleId);
+      return bookingDay(d) != budapestDayAt(request.time) || (
+        (!exists(manual) || get(manual).data.active == false
+          || (get(manual).data.active == true && get(manual).data.driverId == d.driverId))
+        && !exists(vehicleLockPath(d.vehicleId))
+        && exists(guard)
+        && get(guard).data.date == d.date && get(guard).data.vehicleId == d.vehicleId
+        && get(guard).data.source == 'trusted-attendance-projection-v1'
+        && get(guard).data.confirmedAt is timestamp
+        && get(guard).data.confirmedAt <= request.time
+        && get(guard).data.confirmedAt >= request.time - duration.value(120,'s')
+        && ((get(guard).data.state == 'clear' && get(guard).data.driverId == '')
+          || (get(guard).data.state == 'assigned' && get(guard).data.driverId == d.driverId))
+      );
+    }
+    match /attendanceVehicleGuards/{id} {
+      // A complete, atomically maintained trusted projection is a RELEASE GATE.
+      // Browser admins/editors cannot forge clearance; no publisher is enabled here.
+      allow read: if member();
+      allow write: if false;
+    }
     match /bookings/{bookingId} {
       allow read: if member();
       allow create: if editor()
         && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity'])
         && validDay(request.resource.data.date)
+        && sameDayOccupancy(request.resource.data)
         && validVehiclePlate(request.resource.data.vehicleId)
         && validDriverCode(request.resource.data.driverId)
         && optionalText(request.resource.data.district,60)
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
-        && exists(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId))
-        && exists(/databases/$(database)/documents/drivers/$(request.resource.data.driverId))
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
         && nonNegative(request.resource.data.capacity,10000)
@@ -154,6 +477,7 @@ service cloud.firestore {
       allow create: if editor()
         && exactFields(request.resource.data,['date','driverId','bookingId'])
         && validDay(request.resource.data.date)
+        && bookingDriverOccupancy(request.resource.data)
         && validDriverCode(request.resource.data.driverId)
         && textField(request.resource.data.bookingId,120)
         && key == request.resource.data.date + '__' + request.resource.data.driverId
@@ -170,6 +494,10 @@ service cloud.firestore {
       allow read: if member();
       // Apps Script uses IAM; manual browser uploads are authorized for editors only.
       allow create, update: if editor()
+        // Vehicle-bearing events must come through the future atomic trusted publisher.
+        // Otherwise an editor could bypass the occupancy guard by modifying its input.
+        && !('vehicleId' in request.resource.data)
+        && (request.method == 'create' || !('vehicleId' in resource.data))
         // Existing 16-column Attendance events remain valid. The optional
         // vehicleId appears only after the Google source adds car selection.
         && (exactFields(request.resource.data,[
@@ -193,7 +521,7 @@ service cloud.firestore {
         && optionalText(request.resource.data.photoRight,2048)
         && optionalText(request.resource.data.photoBack,2048)
         && textField(request.resource.data.source,256);
-      allow delete: if admin();
+      allow delete: if admin() && !('vehicleId' in resource.data);
     }
 
     match /sourceRows/{id} {
@@ -339,10 +667,12 @@ service cloud.firestore {
       allow read: if member();
       allow create: if editor() && assignmentShape(request.resource.data)
         && request.resource.data.vehicleId == id && request.resource.data.active
+        && !exists(vehicleLockPath(id))
         && assignmentEvent(request.resource.data)
         && getAfter(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId)).data == request.resource.data;
       allow update: if editor() && assignmentShape(request.resource.data)
         && request.resource.data.vehicleId == id && assignmentTransition(request.resource.data)
+        && (!request.resource.data.active || !exists(vehicleLockPath(id)))
         && assignmentEvent(request.resource.data)
         && getAfter(/databases/$(database)/documents/fleetDriverAssignments/$(request.resource.data.driverId)).data == request.resource.data;
       allow delete: if false;
@@ -373,12 +703,15 @@ service cloud.firestore {
       return exactFields(d,['vehicleId','driverId','action','date','mileage','note','createdAt','createdBy'])
         && validVehiclePlate(d.vehicleId) && validDriverCode(d.driverId)
         && d.action in ['checkout','return'] && validDay(d.date)
+        && (d.action != 'checkout' || checkoutBookingCompatible(d))
+        && (d.action != 'checkout' || !exists(vehicleLockPath(d.vehicleId)))
         && nonNegative(d.mileage,100000000) && optionalText(d.note,2000)
         && d.createdAt == request.time && d.createdBy == request.auth.uid
         && a == reverse && a.operationId == id && a.vehicleId == d.vehicleId
         && a.driverId == d.driverId && a.mileage == d.mileage
         && fleetMileageMatches(d.vehicleId,d.mileage)
         && a.active == (d.action == 'checkout')
+        && (d.action != 'checkout' || checkoutBookingCompatible(d))
         && (d.action != 'return' || validFleetReturnDate(d))
         && (d.action == 'return' || (driver.active == true && v.status == 'Elérhető'));
     }
@@ -519,22 +852,25 @@ service cloud.firestore {
 
     
     match /flottaSharedState/{docId} {
-      // Single shared account only. Requires active admin/editor member profile.
-      // Email constraint + monotonic revision. Full snapshot must remain under 1 MiB.
-      allow read: if member()
-        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com';
-      allow create, update: if member()
-        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin','editor']
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+      // Single approved account only. Email match + active admin is necessary
+      // but not sufficient; the UID must also match the known shared UID.
+      // Replace SHARED_UID with the real imilemanagement UID before any deploy.
+      function isSharedAccount() {
+        return request.auth != null
+          && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
+          && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID';
+      }
+      allow read: if isSharedAccount() && member();
+      allow create, update: if isSharedAccount()
+        && member()
+        && get(userPath()).data.role in ['admin','editor']
+        && get(userPath()).data.active == true
         && docId == 'current'
         && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision'])
         && request.resource.data.revision is int
         && request.resource.data.revision > 0
         && request.resource.data.vehicles is list
         && request.resource.data.drivers is list
-        && request.resource.data.fuelCards is list
-        && request.resource.data.contacts is list
         && (!exists(/databases/$(database)/documents/flottaSharedState/current)
             || request.resource.data.revision == get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1);
       allow delete: if false;
