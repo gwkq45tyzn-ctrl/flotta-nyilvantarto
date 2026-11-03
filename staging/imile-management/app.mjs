@@ -1,8 +1,8 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDocFromServer} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../depokapacitas/firebase-config.js';
-import {allowedProfile,menuEntries,loginEmailForUsername} from './session-policy.mjs';
+import {allowedProfile,menuEntries,loginEmailForUsername,isSharedFirebaseUser} from './session-policy.mjs';
 
 const $=id=>document.getElementById(id);
 const views=['loading','login','denied','error','menu'];
@@ -24,9 +24,10 @@ if (!ready) {
   onAuthStateChanged(auth,async user=>{
     const revision=++authSequence;
     if(!user) { show('login'); return; }
+    if(!isSharedFirebaseUser(user)) { show('denied'); return; }
     show('loading');
     try {
-      const record=await getDoc(doc(db,'users',user.uid));
+      const record=await getDocFromServer(doc(db,'users',user.uid));
       if(revision!==authSequence)return;
       const profile=record.exists()?record.data():null;
       if(!allowedProfile(profile)){ show('denied'); return; }
