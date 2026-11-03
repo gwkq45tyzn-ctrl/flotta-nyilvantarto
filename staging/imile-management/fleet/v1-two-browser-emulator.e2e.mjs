@@ -100,11 +100,26 @@ try{
   console.log('PASS [B+E]: compat write propagated to modular browser without reload');
 
   // Both edit nearly simultaneously; the SDK transaction must retry conflicts.
+  // Do not race the preceding transaction's local button unlock.
+  await Promise.all([compat,modular].map(page=>page.waitForFunction(()=>
+    !document.getElementById('save')?.disabled)));
   await Promise.all([compat.locator('#save').click(),modular.locator('#save').click()]);
-  await Promise.all([compat,modular].map(page=>wait(page,()=>
-    document.getElementById('revision')?.textContent==='4',
-    'concurrent transaction resolution')));
   const db=env.authenticatedContext(uid,{email}).firestore();
+  try{
+    await Promise.all([compat,modular].map(page=>wait(page,()=>
+      document.getElementById('revision')?.textContent==='4',
+      'concurrent transaction resolution')));
+  }catch(error){
+    const actual=await getDoc(doc(db,'flottaSharedState','current'));
+    const details=await Promise.all([compat,modular].map(async(page)=>({
+      state:await page.locator('#state').textContent(),
+      revision:await page.locator('#revision').textContent(),
+      saveEnabled:await page.locator('#save').isEnabled()
+    })));
+    console.error('CONCURRENT QA DIAGNOSTIC (no private data): '+
+      JSON.stringify({serverRevision:actual.data()?.revision,clients:details}));
+    throw error;
+  }
   const confirmed=await getDoc(doc(db,'flottaSharedState','current'));
   assert.equal(confirmed.data().revision,4);
   console.log('PASS [B+E]: parallel writes converged at revision 4; no lost update');
