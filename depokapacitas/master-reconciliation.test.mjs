@@ -72,9 +72,9 @@ const pending=reconcileSharedMaster(fleet(),records(),{
   ...sources(),bookings:{...trusted,pending:true}
 });
 assert.equal(pending.status,'waiting');
-const offline=reconcileSharedMaster(fleet(),records(),sources(),{online:false,now});
-assert.equal(offline.status,'waiting');
-assert.equal(offline.issues[0].reason,'offline');
+const offlineNetwork=reconcileSharedMaster(fleet(),records(),sources(),{online:false,now});
+assert.equal(offlineNetwork.status,'waiting');
+assert.equal(offlineNetwork.issues[0].reason,'offline');
 const oldData=reconcileSharedMaster(fleet(),records(),{
   ...sources(),vehicles:{...trusted,serverAt:now-11*60000}
 },{now});
