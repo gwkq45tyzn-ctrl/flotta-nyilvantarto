@@ -108,6 +108,17 @@ service cloud.firestore {
         && request.resource.data.content.size() <= 18000;
       allow delete: if admin();
     }
+
+    match /flottaSharedState/{docId} {
+      allow read: if member();
+      allow write: if member()
+        && docId == 'current'
+        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','version'])
+        && request.resource.data.version is int;
+    }
+
     match /{path=**} { allow read, write: if false; }
+
+
   }
 }
