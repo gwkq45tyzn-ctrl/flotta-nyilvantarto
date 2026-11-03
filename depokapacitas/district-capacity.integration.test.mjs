@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const app=readFileSync(new URL('./app.js',import.meta.url),'utf8');
+const preview=readFileSync(new URL('../staging/imile-management/build-preview.mjs',import.meta.url),'utf8');
+const core=readFileSync(new URL('./district-capacity.mjs',import.meta.url),'utf8');
+assert.match(app,/import \{summarizeDistrictCapacity\} from '\.\/district-capacity\.mjs'/);
+assert.match(app,/const plan=summarizeDistrictCapacity\(/);
+assert.match(app,/validDemand\?plan\.totalNew:null/);
+assert.match(app,/validDemand\?plan\.totalRetry:null/);
+assert.match(app,/validDemand\?plan\.gap:null/);
+assert.match(app,/x\.gap===null\?'Nincs igényadat'/);
+assert.match(app,/plan\.issues\.length/);
+assert.match(app,/egyedi csomagazonosító nélkül/i);
+assert.match(preview,/'depokapacitas\/district-capacity\.mjs'/);
+assert.doesNotMatch(core,/\b(?:setDoc|updateDoc|deleteDoc|writeBatch|runTransaction|UrlFetchApp|SpreadsheetApp)\s*\(/);
+console.log('PASS: staging UI and preview bundle include conservative district capacity without source writes');

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {decodeCsv} from './import-encoding.mjs';
+const text='Név;Megjegyzés\nTesztfutár;Árvíztűrő tükörfúrógép';
+const utf8=new TextEncoder().encode(text);
+assert.equal(decodeCsv(utf8),text);
+assert.equal(decodeCsv(Uint8Array.from([239,187,191,...utf8])),text);
+assert.equal(decodeCsv(Buffer.concat([Buffer.from([255,254]),Buffer.from(text,'utf16le')])),text);
+const be=Buffer.from(text,'utf16le');be.swap16();
+assert.equal(decodeCsv(Buffer.concat([Buffer.from([254,255]),be])),text);
+const legacy=Uint8Array.from([0xc1,0x72,0x76,0xed,0x7a,0x74,0xfb,0x72,0xf5,0x20,0x74,0xfc,0x6b,0xf6,0x72,0x66,0xfa,0x72,0xf3,0x67,0xe9,0x70]);
+assert.equal(decodeCsv(legacy),'Árvíztűrő tükörfúrógép');
+assert.equal(decodeCsv(new TextEncoder().encode('DA0001,000123,2099-01-15')),'DA0001,000123,2099-01-15');
+assert.equal(decodeCsv(new ArrayBuffer(0)),'');
+console.log('PASS: 7 UTF-8/BOM/UTF-16/Windows-1250 CSV decoding cases');
