@@ -3,7 +3,7 @@ import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.
 import {getFirestore,doc,collection,getDocFromServer,getDocsFromServer,query,
  orderBy,limit,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
-import {allowedProfile} from '../session-policy.mjs';
+import {allowedProfile,isSharedFirebaseUser} from '../session-policy.mjs';
 import {inhub,ofd} from './report-core.mjs';
 import {readXlsxFirstSheet,writeReportXlsx} from './xlsx-lite.mjs';
 import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash} from './report-statistics.mjs';
@@ -218,6 +218,7 @@ else{
   const authRev=++revision;authorized=false;canSave=false;user=null;clearReport();
   $('controls').hidden=true;$('file').value='';$('save').disabled=true;stats=null;
   if(!current){window.location.replace('../index.html');return;}
+  if(!isSharedFirebaseUser(current)){field('access','Csak a közös iMile-fiók jogosult.');return;}
   try{
    const profile=(await getDocFromServer(doc(db,'users',current.uid))).data();
    if(authRev+1!==revision)return;
