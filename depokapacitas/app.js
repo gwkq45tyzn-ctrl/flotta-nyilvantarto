@@ -220,7 +220,7 @@ function sharedFleetView(){
   // Compare against server-confirmed Depo data; never synthesize or apply writes.
   const match=reconcileSharedMaster(p,{
     drivers:get('drivers'),vehicles:get('vehicles'),bookings:get('bookings')
-  },state.sourceMeta);
+  },state.sourceMeta,{online:navigator.onLine,now:Date.now()});
   const labels={matching:'Egyezik',different:'Eltér',onlyFleet:'Csak a Flottában',onlyDepo:'Csak a Depóban'};
   const kindLabels={driver:'Futár',vehicle:'Autó'};
   const reconciliationRows=match.items.filter(x=>x.status!=='matching').slice(0,80)
