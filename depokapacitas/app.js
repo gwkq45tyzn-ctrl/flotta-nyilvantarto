@@ -1,5 +1,6 @@
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {emptySharedFleetPreview,projectSharedFleetSnapshot} from './flotta-master-readonly.mjs';
+import {reconcileSharedMaster} from './master-reconciliation.mjs';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocFromServer,onSnapshot,setDoc,deleteDoc,runTransaction,writeBatch,serverTimestamp,query,orderBy} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
@@ -216,12 +217,39 @@ function sharedFleetView(){
   const vehicles=p.vehicles.map(x=>td(esc(x.data.plate),esc(x.data.model),esc(x.data.status)));
   const drivers=p.drivers.map(x=>td(esc(x.data.daCode),esc(x.data.name),esc(x.data.vendor),esc(x.data.active?'Aktív':'Nem aktív'),esc(x.data.capacity)));
   const errors=(p.issues||[]).map(x=>'<li>'+esc(x.kind+' #'+x.index+' – '+x.reason)+'</li>').join('');
+  // Compare against server-confirmed Depo data; never synthesize or apply writes.
+  const match=reconcileSharedMaster(p,{
+    drivers:get('drivers'),vehicles:get('vehicles'),bookings:get('bookings')
+  },state.sourceMeta);
+  const labels={matching:'Egyezik',different:'Eltér',onlyFleet:'Csak a Flottában',onlyDepo:'Csak a Depóban'};
+  const kindLabels={driver:'Futár',vehicle:'Autó'};
+  const reconciliationRows=match.items.filter(x=>x.status!=='matching').slice(0,80)
+    .map(x=>td(esc(kindLabels[x.kind]||x.kind),esc(x.id),
+      esc(labels[x.status]||x.status),esc(x.fields?.join(', ')||'—')));
+  const bookingRisks=match.issues.filter(x=>x.reason==='booking_at_risk').slice(0,30)
+    .map(x=>td(esc(x.driverId||'—'),esc(x.vehicleId||'—'),
+      esc(x.fields?.join(', ')||'—')));
+  const compareNote=section('Flotta ↔ Depó eltérésvizsgálat · csak olvasható',
+    '<p class="inline-note">'+esc(match.note||match.issues?.[0]?.detail||
+      'Az eltérésvizsgálathoz friss, szerverről visszaigazolt Depó-adatok szükségesek.')+'</p>'+
+    (['matching','review'].includes(match.status)
+      ?'<p>Egyező rekordok: '+fmt(match.counts.matching)+
+       ' · Eltérők: '+fmt(match.counts.different)+
+       ' · Csak Flotta: '+fmt(match.counts.onlyFleet)+
+       ' · Csak Depó: '+fmt(match.counts.onlyDepo)+
+       ' · Érintett foglalások: '+fmt(match.counts.bookingsAtRisk)+'</p>'+
+       table(['Típus','Azonosító','Eltérés','Érintett mezők'],reconciliationRows)+
+       (bookingRisks.length?section('Foglalási figyelmeztetések',
+          table(['Futár DA','Autó','Ütközés'],bookingRisks)):'')
+      :'<p class="notice">'+esc(match.issues?.[0]?.detail||
+        'Az adatforrások még nincsenek megerősítve.')+'</p>'));
   return section('Eredeti Flotta – szerverről visszaigazolt adat (rev '+esc(p.revision)+')',
     advisory+'<p>'+esc(p.note)+'</p>'+
     '<p>Járművek: '+fmt(p.counts.vehicles)+' · Futárok: '+fmt(p.counts.drivers)+' · Megőrzött történeti események: '+fmt(p.counts.vehicleHistory+p.counts.driverHistory)+'</p>'+
     section('Járműtörzs',table(['Rendszám','Modell','Állapot'],vehicles))+
     section('Futártörzs',table(['DA-kód','Futár','Vállalkozó','Állapot','Kapacitás'],drivers))+
-    (errors?section('Ellenőrizendő eltérések','<ul>'+errors+'</ul>'):'')
+    (errors?section('Ellenőrizendő Flotta-adatok','<ul>'+errors+'</ul>'):'')+
+    compareNote
   );
 }
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,alerts:alertsView,planning,drivers,vehicles,sharedFleet:sharedFleetView,demands,results,attendance,import:imports,admin}[state.view];const tools=['overview','alerts','sharedFleet'].includes(state.view)?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
