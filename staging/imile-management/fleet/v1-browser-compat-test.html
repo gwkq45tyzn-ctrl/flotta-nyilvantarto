@@ -36,16 +36,22 @@
     };
     const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     async function boundedConfirmedRetry(writeOnce) {
-      const initial=Number($('revision').textContent);
+      // Capture the revision we observed when the user clicked Save.
+      // A remote concurrent write may advance the UI before our transaction
+      // commits. permission-denied from the rules revision check is the
+      // expected conflict signal (SDK does not auto-retry it). Always re-read
+      // the server and retry the transaction; the transaction itself computes
+      // the correct next revision. Stop only after the attempt budget.
       for(let attempt=0;attempt<4;attempt++){
         try{return await writeOnce();}
         catch(error){
           if(!['permission-denied','aborted'].includes(error?.code)||attempt===3)
             throw error;
-          // Do not retry an actual authorization rejection. Only a CONFIRMED
-          // concurrent revision bump can justify rebasing the synthetic edit.
           const serverRevision=await readServer();
-          if(serverRevision<=initial)throw error;
+          // If the server has not advanced at all, this is a real auth failure.
+          // If it has advanced (or our local view is stale), rebase and retry.
+          const local=Number($('revision').textContent);
+          if(serverRevision<local && attempt>0)throw error;
           $('state').textContent='retrying-conflict';
           await sleep(50*(attempt+1));
         }

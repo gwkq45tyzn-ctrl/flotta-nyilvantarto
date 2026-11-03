@@ -256,13 +256,23 @@
   }
 
   async function verifyMember(uid) {
-    try {
-      const userDoc = await db.doc('users/' + uid).get({ source: 'server' });
-      return userDoc.exists && userDoc.data().active === true &&
-        ['admin', 'editor'].includes(userDoc.data().role);
-    } catch (e) {
-      return false;
+    // Server-only read. Retry once on transient emulator/network errors.
+    // A missing or inactive profile is a hard failure, not a retry.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const userDoc = await db.doc('users/' + uid).get({ source: 'server' });
+        const data = userDoc.exists ? userDoc.data() : null;
+        if (!data) return false;
+        return data.active === true && ['admin', 'editor'].includes(data.role);
+      } catch (e) {
+        if (attempt === 1) {
+          console.error('verifyMember failed', e && e.code ? e.code : e);
+          return false;
+        }
+        await new Promise(r => setTimeout(r, 150));
+      }
     }
+    return false;
   }
 
   function unlockUI() {
