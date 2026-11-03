@@ -1,96 +1,105 @@
-# ÁTADÁS A CHATGPT-NEK – iMile Management V1 (Grok, végleges, 2026-11-03)
+# ÁTADÁS A CHATGPT-NEK – Független Grok V1 release audit (2026-11-03)
 
-**Ág:** `grok/original-flotta-firestore-bridge`  
-**PR:** https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/pull/72 (Draft)  
-**HEAD:** `a718ebb74b1125c1027b9209825ec7b69d558e82`
+**Auditor:** Grok (független)  
+**Candidate SHA (integration):** `a74edec` (integration/imile-v1-unified-20261103)  
+**Grok security branch HEAD:** `e450017` (grok/v1-security-migration-20261103)  
+**PR-ek:** #79 (integráció), #81 (Grok rules/migration), #82 (ChatGPT nested-hash + emulator CI)  
+**Döntés:** **NO-GO**
 
-## 1. Teljes rendszer állapota
-Az eredeti Flotta Nyilvántartó (`main/index.html`) megőrizve. Firestore-híd v5 + adatvédelmi és migrációs szigorításokkal. Közös törzsadat-adapter (#76) beépítve. DepóKapacitás és riportok staging ágon léteznek, de nincsenek az eredeti UI-ba integrálva. Élő Firebase deploy, kétböngészős élő E2E és valós migráció nincs.
+## S1 – Azonos fagyasztott SHA, artifact, Rules hash, modulscope, Flotta paritás
+- [S] Integration HEAD `a74edec` létezik, tartalmazza a dual-signoff dokumentumot és a release gate sablont.
+- [S] Eredeti `index.html` Flotta megőrizve a #79-ben.
+- [N] Nincs fagyasztott, mindkét auditor által azonosított release artifact SHA-256 + Rules SHA-256 pár.
+- **NO-GO.** Nincs közös, fagyasztott candidate csomag.
 
-**NO-GO élesítésre.**
+## S2 – Közös Firebase Auth és egyetlen belső UID
+- [S] Integration rules: `member()` bármely aktív admin/editor/viewer-t enged. Nincs hard single-UID kényszer a belső collectionökön.
+- [S] Grok #81 rules: `flottaSharedState` email + `REPLACE_WITH_REAL_SHARED_UID` placeholder. A többi collection továbbra is `member()`.
+- [S] Courier/photo/vehicleSessions útvonalak a feature rulesben jelen vannak (Grok ág).
+- **NO-GO.** Egyetlen UID nincs minden releváns collectionön kikényszerítve.
 
-## 2. Elkészült fejlesztések (commitok)
-- `4fda4af` első híd
-- `563dbc9` Auth, dual-sync gate, tranzakció, rules
-- `efabc54` v3 dirty, session, staging rules base
-- `2cada4a` QA #73 login-unlock + concurrent requeue
-- `d04c294` v4 requeue cap + Auth gate
-- `c8bfd7e` v5 pre-import read-only, early script order, conflict stop
-- `ba10205` első adapter + migration plan
-- `87a700c` #76 exact-schema adapter + pre-import applyRemote gate
-- `f1741eb` handover frissítés
-- `a718ebb` compat exists fix, migration token, nav stub, synthetic two-browser test
+## S3 – Rules-emulátor pozitív/negatív
+- [S] #82 állítása szerint emulatoros UID-tesztek futottak, de a teljes staging suite Attendance mezőknél FAIL.
+- [N] Ebben a környezetben firebase-tools nincs; saját emulator futtatás nem történt.
+- **NO-GO.** Nincs regressziómentes, teljes emulatoros bizonyíték.
 
-## 3. Módosított fájlok (összesített, a híd körül)
-- `features/firestore-bridge.js`
-- `features/firestore-bridge.*.test.cjs` / `.mjs`
-- `features/shared-master-adapter.mjs` + test
-- `features/imile-nav-stub.mjs` + test
-- `index.html` (script order)
-- `depokapacitas/firestore.rules`
-- `docs/GROK_FULL_AUDIT_HANDOVER.md`
-- `docs/MIGRATION_RESTORE_PLAN.md`
-- `docs/SHARED_MASTER_INTEGRATION_CONTRACT.md`
-- `.github/workflows/flotta-bridge-synthetic.yml`
+## S4 – Migráció, backup, 1 MiB, dry-run, rollback
+- [S] Migrációs manifest létezik (Grok ág). Browser string token nem jóváhagyás.
+- [N] Nincs privát teljes Flotta backup + Apps Script szerverváltozat ellenőrzése.
+- [N] Nincs hiteles 1 MiB mérés nagy history-n.
+- [N] Nincs server-verified import vagy rollback végrehajtás.
+- **NO-GO.**
 
-## 4. Tényleges teszteredmények [T]
-```bash
-node features/firestore-bridge.test.mjs
-node --test features/firestore-bridge.preimport-protect.test.cjs
-node --test features/firestore-bridge.cutover-safety.test.cjs
-node --test features/firestore-bridge.runtime-regressions.test.cjs
-node features/shared-master-adapter.test.mjs
-node features/imile-nav-stub.test.mjs
-```
-Mind sikeres a `a718ebb` commiton (7+ node:test + adapter + nav).
+## S5 – Két valódi böngészős multi-PC Firestore
+- [T] Szintetikus VM tesztek léteznek (two-browser synthetic).
+- [N] Nincs élő kétböngészős teszt a staging Firebase-en (conflict, offline, revoked role).
+- **NO-GO.**
 
-## 5. Mi működik bizonyítottan [T]
-- Pre-import read-only (nincs original save, nincs pending, nincs applySnapshot).
-- Auth után UI unlock.
-- Concurrent save requeue + conflict stop (max 1+3).
-- Exact-schema shared master projection (DA, status, history megőrizve a tervben).
-- Migration token szükséges a primary módhoz.
-- Firestore compat `exists` kezelés.
+## S6 – Eredeti Flotta teljes funkcionalitás és Apps Script hard stop
+- [S][T] Bridge pre-import read-only, concurrent requeue, conflict stop, migration token – contract tesztek zöldek az integration checkouton.
+- [S] Apps Script csak gated, hard disable cutover után nincs.
+- **NO-GO** a hard stop és az élő cutover hiányában.
 
-## 6. Mi készült el, de még nincs tesztelve [N]
-- Élő kétböngészős Firebase E2E.
-- Rules publikálás és emulator futtatás a teljes staging rulesre.
-- Depó UI bekötése a shared-master-adapterre.
-- In-Hub / OFD riport UI integráció.
-- Egységes navigáció a valós oldalakon.
-- Valós adatmigráció.
+## S7 – Depó canonical közös törzs és tranzakciók
+- [S] Shared master adapter exact-schema (#76) beépítve, sidecar a tervben marad.
+- [S] #79-ben a Depó nézet read-only projekció; authoritative write path nincs élesítve.
+- **NO-GO.**
 
-## 7. Javított problémák
-- QA #73: zárolt első belépés, elvesző második mentés.
-- PR #75: import előtti írás, legacy boot sorrend, unbounded retry.
-- Pre-import remote overwrite.
-- Bare `flottaMarkImportVerified()` nem elég (token kell).
-- Compat `exists` boolean vs method.
+## S8 – In-Hub / OFD riportok
+- [S] Staging riport pure functionok és spec megvan. OFD azonos kulcs szándékos összeadás dokumentált.
+- [N] Nincs pixel/Excel 1:1 összehasonlítás valós mintákkal ebben az auditban.
+- **NO-GO** a teljes vizuális/üzemi egyezőség bizonyítékának hiányában.
 
-## 8. Mi akadályozza a teljes használatot
-- Nincs rules deploy (jóváhagyás szükséges).
-- Nincs élő Auth + users/{uid} megerősített teszt.
-- Nincs kétböngészős élő szinkron teszt.
-- Depó és riportok nincsenek az eredeti Flotta shellbe integrálva.
-- 1 MiB dokumentumlimit nagy history esetén nincs kezelve.
+## S9 – Teljes desktop browser E2E
+- [N] Nincs végigvitt böngészős E2E (login → Flotta edit → Depó → riport → logout) két gépen.
+- **NO-GO.**
 
-## 9. Mit kell a ChatGPT-nek ellenőriznie
-1. `a718ebb` commit és PR #72 diff.
-2. Futtassa a fenti tesztparancsokat.
-3. Ellenőrizze, hogy `applyRemote` csak `isPrimary()` után fut.
-4. Ellenőrizze, hogy a shared-master-adapter nem ír rich `flotta` sidecarot a szigorú `/vehicles` `/drivers` dokumentumokba.
-5. Nézze meg a `firestore-bridge.two-browser-synthetic.test.cjs`-t.
-6. Erősítse meg, hogy nincs rules deploy és nincs élő adatírás.
+## S10 – 0 Ft Spark, adatvédelem, backup
+- [S] Nincs Blaze, nincs fizetős szolgáltatás javasolva.
+- [N] Nincs üzemeltetési monitoring, privát backup+rollback végrehajtva.
+- **NO-GO** a hiányzó backup/rollback bizonyíték miatt.
 
-## 10. GO / NO-GO
-**NO-GO.**  
-Bizonyíték: nincs rules publikálás, nincs élő E2E, nincs jóváhagyott migráció, Depó/riportok UI integráció hiányzik.
+## S11 – CI zöld ugyanazon SHA-n
+- [S] #79 korábbi runok SUCCESS (14e0ff7 körül).
+- [S] #82 teljes staging integration FAIL (Attendance).
+- [N] Az aktuális `a74edec` SHA-ra nincs mindhárom (Flotta/Depó/staging) zöld run megerősítve ebben az auditban.
+- **NO-GO.**
 
-## 11. Következő munkafázis a ChatGPT-nek
-1. Rules jóváhagyás + publikálás.
-2. Élő szintetikus kétböngészős E2E.
-3. Depó UI bekötése a shared-master-adapterre (sidecar nélkül).
-4. Riport modul egyszerű belépő.
-5. 1 MiB limit kezelés tervezése.
+## S12 – Jövőbeli courier/Attendance/fotó nem aktiválódik
+- [S] Feature rules tartalmazza a courier/photo/vehicleSessions útvonalakat (Grok ág).
+- [S] Nincs külön V1-gate, ami ezeket hard disable-olja az éles rulesben.
+- **NO-GO.** V1-ben ezek nem kapcsolhatók be jóváhagyás nélkül.
+
+## Összesített döntés
+**GROK: NO-GO**
+
+**Blokkolók:**
+1. Nincs fagyasztott, mindkét auditor által azonosított release candidate SHA + artifact/Rules hash.
+2. Single-UID nincs minden belső collectionön kikényszerítve; placeholder UID; courier feature útvonalak jelen vannak.
+3. #82 staging CI Attendance FAIL.
+4. Nincs élő kétböngészős E2E.
+5. Nincs server-verified migráció, privát backup, 1 MiB mérés, rollback.
+6. Apps Script nincs hard stop.
+7. Depó authoritative write path nincs élesítve.
+
+**Következő konkrét feladatok a ChatGPT-nek:**
+1. Fagyasszátok le a candidate SHA-t és számoljatok artifact + Rules SHA-256-ot.
+2. Cseréljétek a UID placeholder-t a valódi UID-re (jóváhagyás után) és zárjátok a belső collectionöket single-UID-re.
+3. Javítsátok az Attendance rules regressziót (#82).
+4. Futtassátok a teljes emulator suite-ot és a kétböngészős szintetikus E2E-t.
+5. Készítsétek elő a privát backup + dry-run + rollback tervet.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
+
+**Felhasználói élesítési engedély:** nincs megadva. Bármely NO-GO = RELEASE STOP.
+
+## Frissítés (bb311d2)
+- `depokapacitas/firestore-v1-restricted.rules` hozzáadva (courier/photo útvonalak deferred).
+- Offline canonical JSON size check (`features/migration-size-check.test.mjs`) – szintetikus adat < 1 MiB.
+- Továbbra is **NO-GO**: nincs élő E2E, nincs rules deploy, nincs server-verified migráció, nincs Attendance CI javítás.
+
+## Frissítés (c9b90e9)
+- Offline migrációs dry-run: `features/migration-dry-run.mjs` (hash + counts + 1 MiB warning, nincs írás).
+- V1-restricted rules contract teszt: single-UID placeholder + catch-all deny.
+- Apps Script hard-stop terv: `docs/APPS_SCRIPT_HARD_STOP.md` (gated megvan, hard disable nincs).
+- Továbbra is **NO-GO**.
