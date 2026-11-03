@@ -94,6 +94,11 @@
   }
 
   function applyRemote(data, confirmed) {
+    // Critical: never overwrite local Flotta data before verified import.
+    if (!isPrimary()) {
+      status('Import előtt – távoli Firestore állapot nem írja felül a helyi Flotta adatot');
+      return;
+    }
     if (!data || applyingRemote || localDirty) {
       if (localDirty) status('Helyi nem mentett módosítás van – távoli frissítés várakozik');
       return;
