@@ -12,7 +12,10 @@ service cloud.firestore {
       // member or a matching email. UID stays intentionally unconfigured.
       return request.auth != null
         && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID'
-        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com';
+        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
+        && exists(userPath())
+        && get(userPath()).data.active == true
+        && get(userPath()).data.role in ['admin','editor','viewer'];
     }
     function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
     function member() {
