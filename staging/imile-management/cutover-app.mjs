@@ -2,6 +2,7 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase
 import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getFirestore,doc,getDocFromServer,collection,getDocsFromServer} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../depokapacitas/firebase-config.js';
+import {isSharedFirebaseUser} from './session-policy.mjs';
 import {assessFleetCutover} from './core-cutover-preflight.mjs';
 
 const $=id=>document.getElementById(id);
@@ -83,6 +84,7 @@ if(firebaseConfig.projectId!=='imile-management-staging'){
  const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
  onAuthStateChanged(auth,async user=>{
   hide();if(!user){status('Az iMile Management rendszerválasztón jelentkezz be.');return;}
+  if(!isSharedFirebaseUser(user)){status('Csak a közös iMile-fiók jogosult.',true);return;}
   const uid=user.uid,sequence=runSequence;
   try{
    const snap=await getDocFromServer(doc(db,'users',uid));
