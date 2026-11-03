@@ -110,6 +110,7 @@ try{
   for(const p of paths)assert.ok(existsSync(join(preview,p)),'Preview missing '+p);
   assert.ok(existsSync(join(preview,'features/shared-master-adapter.mjs')),'Pure read-only projection adapter missing');
   assert.ok(existsSync(join(preview,'depokapacitas/flotta-master-readonly.mjs')),'Depot projection missing');
+  assert.ok(existsSync(join(preview,'depokapacitas/master-reconciliation.mjs')),'Depot reconciliation missing');
   assert.ok(!existsSync(join(preview,'features/firestore-bridge.js')),'Live fleet backend must not be copied');
   assert.ok(existsSync(join(preview,'staging/imile-management/fleet/index.html')));
   assert.ok(!existsSync(join(preview,'flotta')),'Live Fleet must not be copied');
