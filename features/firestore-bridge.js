@@ -56,7 +56,7 @@
       {ready: () => typeof window.firebase?.firestore === 'function',
         src: 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js'}
     ];
-    if (modules.every(m => m.ready())) return Promise.resolve();
+    if (modules.every(m => m.ready())) return new Promise(resolve => resolve());
     if (sdkLoading) return sdkLoading;
     sdkLoading = new Promise((resolve, reject) => {
       let i = 0;
@@ -80,7 +80,7 @@
   }
 
   function initFirebase() {
-    if (app && auth && db) return Promise.resolve();
+    if (app && auth && db) return new Promise(resolve => resolve());
     if (firebaseInitializing) return firebaseInitializing;
     firebaseInitializing = (async () => {
       await loadSdk();
