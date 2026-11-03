@@ -87,8 +87,9 @@ try{
       user:'fleetmanager',at:Date.now()
     }));
   },initial);
-  const page=await context.newPage(),errors=[];
+  const page=await context.newPage(),errors=[],browserConsoleErrors=[];
   page.on('pageerror',error=>errors.push(error.message));
+  page.on('console',msg=>{if(msg.type()==='error')browserConsoleErrors.push(msg.text().slice(0,700));});
   await page.goto('http://'+host+':'+port+'/index.html',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>typeof window.fleetSimpleLogin==='function'&&
     document.getElementById('flottaLoginForm')!==null,{timeout:30000});
@@ -107,6 +108,7 @@ try{
     // Only synthetic/emulated state; never log passwords, tokens or real Fleet data.
     const diagnostic=await page.evaluate(()=>({
       authSdkLoaded:!!window.firebase,
+      emulatorAuthHasUser:!!(window.firebase?.auth()?.currentUser),
       loginHandlerPatched:String(window.fleetSimpleLogin).includes('signInWithEmailAndPassword'),
       sessionGatePatched:String(window.fleetGateSession).includes('isAuthenticated'),
       loginButtonDisabled:document.getElementById('flottaLoginSubmit')?.disabled,
@@ -115,7 +117,7 @@ try{
       sessionAlias:(()=>{try{return JSON.parse(sessionStorage.getItem('flotta_simple_session_v23')||'null')?.user||null;}catch{return null;}})()
     }));
     console.error('FAIL [B+E] sanitized local-emulator login diagnostics:',
-      JSON.stringify({diagnostic,pageErrors:errors}));
+      JSON.stringify({diagnostic,pageErrors:errors,browserConsoleErrors,forbiddenRequests}));
     throw error;
   }
   console.log('PASS [B+E]: REAL original Fleet HTML rejects stale legacy session and unlocks after server-verified Auth');
