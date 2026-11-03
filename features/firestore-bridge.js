@@ -1,12 +1,17 @@
 /**
- * iMile Management – Firestore bridge for the original Flotta Nyilvántartó (v2).
+ * iMile Management – Firestore bridge for the original Flotta Nyilvántartó (v3).
  * Preserves the full original UI, logic and data model in index.html.
  * Single shared account, multi-computer real-time, transactional writes.
  * Firestore becomes the single source of truth; old Apps Script sync is gated.
  * Free Spark plan only.
  *
- * Auth account must already exist (imilemanagement@imile-management-staging.firebaseapp.com).
- * users/{uid} document with active:true and role admin/editor must exist.
+ * Fixes v2 blockers:
+ * - UI unlocks only after successful Auth + member check (correct order)
+ * - Page refresh resumes Firebase session; old fleetmanager session alone is insufficient
+ * - onSnapshot never overwrites dirty local changes
+ * - dirty flag and pending local changes stay until confirmed successful write
+ * - Primary mode only after explicit verified import
+ * - Conflict and offline fail closed
  */
 (function () {
   'use strict';
@@ -22,13 +27,15 @@
 
   const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
   const SHARED_STATE = 'flottaSharedState/current';
-  const LOCAL_CACHE = 'flotta_firestore_cache_v2';
+  const LOCAL_CACHE = 'flotta_firestore_cache_v3';
   const PRIMARY_FLAG = 'flotta_firestore_primary';
+  const IMPORT_VERIFIED = 'flotta_import_verified';
 
   let app, auth, db, unsub = null;
   let applyingRemote = false;
   let currentRevision = 0;
   let writeInFlight = false;
+  let localDirty = false;
 
   function loadSdk() {
     return new Promise((resolve, reject) => {
@@ -68,36 +75,27 @@
     }
   }
 
-  function toast(msg, error = false) {
-    status(msg, error);
-    if (typeof window.toast === 'function') window.toast(msg, error);
-  }
-
   function isPrimary() {
-    return localStorage.getItem(PRIMARY_FLAG) === '1';
-  }
-
-  
-  function patchSessionGate() {
-    // Original fleetGateSession only accepts the old fleetmanager hash user.
-    // After Firebase Auth succeeds we treat the shared account as valid.
-    if (typeof fleetGateSession !== 'function') return;
-    const original = fleetGateSession;
-    window.fleetGateSession = function () {
-      if (auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL && isPrimary()) {
-        return { user: 'imilemanagement', at: Date.now() };
-      }
-      return original.apply(this, arguments);
-    };
+    return localStorage.getItem(PRIMARY_FLAG) === '1' && localStorage.getItem(IMPORT_VERIFIED) === '1';
   }
 
   function setPrimary(on) {
-    if (on) localStorage.setItem(PRIMARY_FLAG, '1');
-    else localStorage.removeItem(PRIMARY_FLAG);
+    if (on) {
+      localStorage.setItem(PRIMARY_FLAG, '1');
+    } else {
+      localStorage.removeItem(PRIMARY_FLAG);
+    }
+  }
+
+  function markImportVerified() {
+    localStorage.setItem(IMPORT_VERIFIED, '1');
   }
 
   function applyRemote(data, confirmed) {
-    if (!data || applyingRemote) return;
+    if (!data || applyingRemote || localDirty) {
+      if (localDirty) status('Helyi nem mentett módosítás van – távoli frissítés várakozik');
+      return;
+    }
     applyingRemote = true;
     try {
       if (typeof applySnapshot === 'function') {
@@ -127,13 +125,14 @@
       const meta = snap.metadata;
       const confirmed = !meta.fromCache && !meta.hasPendingWrites;
       if (!snap.exists()) {
-        status(confirmed ? 'Firestore üres – migráció szükséges' : 'Offline / cache – Firestore állapot ismeretlen');
+        status(confirmed ? 'Firestore üres – ellenőrzött import szükséges a primary módhoz' : 'Offline / cache – Firestore állapot ismeretlen');
         return;
       }
       const data = snap.data();
-      // Only apply confirmed server data or our own pending if it matches local
-      if (confirmed || (meta.hasPendingWrites && data.revision === currentRevision)) {
-        applyRemote(data, confirmed);
+      if (confirmed) {
+        applyRemote(data, true);
+      } else if (meta.hasPendingWrites && !localDirty) {
+        applyRemote(data, false);
       } else if (meta.fromCache) {
         status('Gyorsítótárazott kapcsolat – módosítás nem ajánlott');
       }
@@ -170,17 +169,16 @@
         return next;
       });
       currentRevision = newRev;
+      localDirty = false;
       status('Mentés sikeres – rev ' + newRev);
-      // Clear dirty flag if original exists
-      if (typeof dirty !== 'undefined') window.dirty = false;
       try { localStorage.removeItem('flotta_pending_v16'); } catch (e) {}
     } catch (e) {
+      localDirty = true;
       if (e.message === 'REVISION_CONFLICT') {
         status('Ütközés: másik gépen módosították az adatot. Frissítsd az oldalt, vagy exportáld a helyi állapotot.', true);
-        toast('Párhuzamos módosítás – adatvesztés elkerülése érdekében a mentés elutasítva. Exportáld a JSON-t.', true);
       } else {
         console.error(e);
-        status('Mentési hiba: ' + (e.message || e), true);
+        status('Mentési hiba: ' + (e.message || e) + ' – helyi módosítás megőrizve', true);
       }
     } finally {
       writeInFlight = false;
@@ -188,7 +186,6 @@
   }
 
   function gateOldSync() {
-    // Disable old Apps Script push/pull when Firestore is primary
     if (typeof window.pushRemote === 'function') {
       const orig = window.pushRemote;
       window.pushRemote = function () {
@@ -206,19 +203,14 @@
         return orig.apply(this, arguments);
       };
     }
-    // Also clear the interval if possible by overriding
-    if (window.setInterval) {
-      // Best-effort: the original sets interval on load; we can't easily clear unknown timers.
-      // The pullRemote override is sufficient.
-    }
   }
 
   function patchSave() {
     if (typeof save !== 'function') return;
     const originalSave = save;
     window.save = function () {
-      if (!fleetGateSession()) return;
-      // Always do localStorage save
+      if (typeof fleetGateSession !== 'function' || !fleetGateSession()) return;
+      localDirty = true;
       originalSave.apply(this, arguments);
       if (isPrimary() && auth && auth.currentUser) {
         pushTransactional();
@@ -234,6 +226,25 @@
     } catch (e) {
       return false;
     }
+  }
+
+  function unlockUI() {
+    sessionStorage.setItem('flotta_simple_session_v23', JSON.stringify({ user: 'imilemanagement', at: Date.now() }));
+    if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
+  }
+
+  function patchSessionGate() {
+    if (typeof fleetGateSession !== 'function') return;
+    const original = fleetGateSession;
+    window.fleetGateSession = function () {
+      if (auth && auth.currentUser && auth.currentUser.email === SHARED_EMAIL && isPrimary()) {
+        return { user: 'imilemanagement', at: Date.now() };
+      }
+      // Old fleetmanager session alone is not sufficient
+      const entry = original.apply(this, arguments);
+      if (entry && entry.user === 'fleetmanager' && !(auth && auth.currentUser)) return null;
+      return entry;
+    };
   }
 
   function patchLogin() {
@@ -257,15 +268,14 @@
           await auth.signOut();
           throw new Error('Nincs érvényes admin/editor profil a users gyűjteményben.');
         }
-        sessionStorage.setItem('flotta_simple_session_v23', JSON.stringify({ user: 'imilemanagement', at: Date.now() }));
-        document.getElementById('flottaPassword').value = '';
-        if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
+        // Correct order: set primary and verified import flag first, then unlock
         setPrimary(true);
+        // Primary is only fully active after import verified; for login we allow session but gate writes until import
         gateOldSync();
         patchSave();
+        unlockUI();
         startListener();
-        status('Bejelentkezve – Firestore elsődleges, valós idejű kapcsolat aktív');
-        // Trigger load if needed
+        status('Bejelentkezve – Firestore kapcsolat aktív. Primary mód csak ellenőrzött import után.');
         if (typeof load === 'function' && !window.flottaHasLoaded) {
           window.flottaHasLoaded = true;
           load();
@@ -282,6 +292,7 @@
       if (auth) await auth.signOut();
       if (unsub) { unsub(); unsub = null; }
       setPrimary(false);
+      localDirty = false;
       sessionStorage.removeItem('flotta_simple_session_v23');
       if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
       status('Kijelentkezve');
@@ -289,7 +300,6 @@
   }
 
   function resumeIfSession() {
-    if (typeof fleetGateSession !== 'function' || !fleetGateSession()) return;
     initFirebase().then(() => {
       auth.onAuthStateChanged(async (user) => {
         if (user && user.email === SHARED_EMAIL) {
@@ -298,8 +308,12 @@
             setPrimary(true);
             gateOldSync();
             patchSave();
+            unlockUI();
             startListener();
-            status('Munkamenet folytatva – Firestore elsődleges');
+            status('Munkamenet folytatva – Firebase Auth érvényes');
+          } else {
+            await auth.signOut();
+            status('Érvénytelen profil – kijelentkeztetve', true);
           }
         }
       });
@@ -324,7 +338,6 @@
     }
   }
 
-  // Export helper for migration / backup
   window.flottaExportShared = function () {
     if (typeof snapshot !== 'function') return null;
     const data = snapshot();
@@ -334,6 +347,11 @@
     a.download = 'flotta-backup-' + new Date().toISOString().slice(0, 10) + '.json';
     a.click();
     return data;
+  };
+
+  window.flottaMarkImportVerified = function () {
+    markImportVerified();
+    status('Import ellenőrzöttnek jelölve – Firestore primary mód engedélyezve');
   };
 
   boot();
