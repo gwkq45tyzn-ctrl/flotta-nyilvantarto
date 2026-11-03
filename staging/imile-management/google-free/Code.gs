@@ -1,4 +1,5 @@
-/*
+/**
+ * @OnlyCurrentDoc
  * iMile DEMO Google Sheets bridge.
  * Bound to an individually owned TEST workbook only.
  * No Firebase, Drive API, external fetch, photos, or company data.
