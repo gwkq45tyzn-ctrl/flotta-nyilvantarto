@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {projectSharedFleetSnapshot} from './flotta-master-readonly.mjs';
 import {reconcileSharedMaster} from './master-reconciliation.mjs';
 
-const trusted={loaded:true,error:false,fromCache:false,pending:false,serverAt:1730670000000};
+const now=Date.now();
+const trusted={loaded:true,error:false,fromCache:false,pending:false,serverAt:now};
 const sources=()=>({drivers:{...trusted},vehicles:{...trusted},bookings:{...trusted}});
 const fleet=()=>projectSharedFleetSnapshot({
   revision:3,
@@ -71,6 +72,14 @@ const pending=reconcileSharedMaster(fleet(),records(),{
   ...sources(),bookings:{...trusted,pending:true}
 });
 assert.equal(pending.status,'waiting');
+const offline=reconcileSharedMaster(fleet(),records(),sources(),{online:false,now});
+assert.equal(offline.status,'waiting');
+assert.equal(offline.issues[0].reason,'offline');
+const oldData=reconcileSharedMaster(fleet(),records(),{
+  ...sources(),vehicles:{...trusted,serverAt:now-11*60000}
+},{now});
+assert.equal(oldData.status,'waiting');
+assert.equal(oldData.issues[0].reason,'depo_source_unconfirmed');
 const noFleet=reconcileSharedMaster({status:'unconfirmed'},records(),sources());
 assert.equal(noFleet.status,'blocked');
 const corrupt=reconcileSharedMaster(fleet(),{drivers:'bad',vehicles:[],bookings:[]},sources());
