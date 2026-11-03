@@ -1,7 +1,8 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDoc,getDocFromServer,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
+import {isSharedFirebaseUser} from '../session-policy.mjs';
 import {correctQaMaster} from './functional-flow.mjs';
 import {executeStagingBookingQa} from './run-flow.mjs';
 
@@ -36,8 +37,9 @@ if(!isStaging) {
   onAuthStateChanged(auth,async user=>{
     admin=false;button.disabled=true;runButton.disabled=true;$('controls').hidden=true;
     if(!user){state('Nincs bejelentkezés. Lépj be a közös főmenüből.');return;}
+    if(!isSharedFirebaseUser(user)){state('Csak a közös iMile-fiók jogosult.');return;}
     try{
-      const profile=await getDoc(doc(db,'users',user.uid));
+      const profile=await getDocFromServer(doc(db,'users',user.uid));
       admin=profile.exists()&&profile.data().active===true&&profile.data().role==='admin';
       if(!admin){state('Az előkészítéshez aktív adminjogosultság szükséges.');return;}
       $('controls').hidden=false;state('Aktív adminfiók ellenőrizve. Csak mesterséges adatok engedélyezettek.');
