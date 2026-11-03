@@ -12,8 +12,9 @@ const normalizeDriver=x=>typeof x==='string'?x.trim().toUpperCase():'';
 const normalizeVehicle=x=>typeof x==='string'?x.trim().replace(/[\s-]/g,'').toUpperCase():'';
 const txt=x=>typeof x==='string'?x.trim():'';
 const validSource=values=>Array.isArray(values)&&values.every(v=>v&&typeof v==='object'&&!Array.isArray(v));
-const trustOk=m=>m&&m.loaded===true&&m.error!==true&&m.fromCache!==true&&
-  m.pending!==true&&typeof m.serverAt==='number'&&Number.isFinite(m.serverAt)&&m.serverAt>0;
+const trustOk=(m,now,maxAgeMs)=>m&&m.loaded===true&&m.error!==true&&m.fromCache!==true&&
+  m.pending!==true&&typeof m.serverAt==='number'&&Number.isFinite(m.serverAt)&&m.serverAt>0&&
+  m.serverAt<=now&&now-m.serverAt<=maxAgeMs;
 const fields=Object.freeze({
   driver:['daCode','name','vendor','capacity','active'],
   vehicle:['plate','model','status']
@@ -34,17 +35,24 @@ const normalizedValue=(kind,field,value)=>{
  * @param {object} depo {drivers, vehicles, bookings} current snapshots.
  * @param {object} sources Firestore server-confirmed metadata (drivers,vehicles,bookings).
  */
-export function reconcileSharedMaster(source,depo={},sources={}){
+export function reconcileSharedMaster(source,depo={},sources={},options={}){
   const out=unchanged();
   if(!source||source.status!=='preview'){
     return {...out,status:'blocked',issues:[{
       reason:'flotta_not_verified',detail:'Nincs hibátlan, szerverről igazolt, csak olvasható Flotta-előnézet.'
     }]};
   }
-  if(!['drivers','vehicles','bookings'].every(k=>trustOk(sources[k]))){
+  const now=Number.isFinite(options.now)?options.now:Date.now();
+  const maxAgeMs=Number.isFinite(options.maxAgeMs)&&options.maxAgeMs>=0?options.maxAgeMs:600000;
+  if(options.online===false){
+    return {...out,status:'waiting',issues:[{
+      reason:'offline',detail:'Offline állapot: nincs megbízható új összehasonlítás.'
+    }]};
+  }
+  if(!['drivers','vehicles','bookings'].every(k=>trustOk(sources[k],now,maxAgeMs))){
     return {...out,status:'waiting',issues:[{
       reason:'depo_source_unconfirmed',
-      detail:'A Depó futár-, jármű- és foglalási adatai közül nem mindegyik szerver-visszaigazolt.'
+      detail:'A Depó futár-, jármű- és foglalási adatai nem mind frissen (10 percen belül) szerver-visszaigazoltak.'
     }]};
   }
   if(!validSource(depo.drivers)||!validSource(depo.vehicles)||!validSource(depo.bookings)||
