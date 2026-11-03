@@ -119,10 +119,12 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
       - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
-      - name: A flotta belépési pontjának érintetlensége
+      - name: Az eredeti Flotta teljes felületének sértetlensége
         run: |
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          git diff --exit-code origin/main -- index.html
+          # Compare the original full Fleet blob from the reviewed Grok+QA base,
+          # not the older main (which predates the safe Firestore script order).
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          node --check features/firestore-bridge.js
 
       - name: Izolált, letölthető staging webcsomag építése
         run: node staging/imile-management/build-preview.mjs
