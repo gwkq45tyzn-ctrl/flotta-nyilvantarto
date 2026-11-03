@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {schemas,normalizeFleetRecord,expiryWarnings,validDate} from './operations-data.mjs';
-import {saveFleetRecord,moveFleetVehicle} from './operations-store.mjs';
+import {saveFleetRecord,moveFleetVehicle,fleetSourcesTrusted} from './operations-store.mjs';
 let count=0;const test=async(name,fn)=>{await fn();count++;};
 export function fixture(kind){return Object.fromEntries(schemas[kind].fields.map(f=>[f.key,f.type==='integer'?0:f.type==='boolean'?true:f.type==='vehicle'?'TESTCAR01':f.type==='driver'?'SYNTHETIC_TEST':f.type==='date'?(f.required?'2099-01-15':''):f.type==='status'?'Elérhető':f.type==='code'?'SYNTEST01':f.required?'SYNTHETIC TEST':'']));}
 for(const kind of Object.keys(schemas))await test(kind+' validates',()=>{assert.equal(normalizeFleetRecord(kind,fixture(kind)).kind,kind);});
@@ -33,4 +33,36 @@ await test('unmatched return denied',async()=>{const ctx=backend();await assert.
 await test('handover updates shared odometer',async()=>{const ctx=backend();await saveFleetRecord({...ctx,kind:'vehicle',input:{...fixture('vehicle'),mileage:100}});await moveFleetVehicle({...ctx,input:move});await moveFleetVehicle({...ctx,input:{...move,action:'return',mileage:'120'}});assert.equal(ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage,120);});
 await test('metadata odometer cannot decrease',async()=>{const ctx=backend();const id=await saveFleetRecord({...ctx,kind:'vehicle',input:{...fixture('vehicle'),mileage:100}});await assert.rejects(saveFleetRecord({...ctx,kind:'vehicle',baseline:{id,...ctx.records.get('fleetRecords/'+id)},input:{...fixture('vehicle'),mileage:99}}),/csökkenhet/);});
 await test('service raises shared odometer',async()=>{const ctx=backend();await saveFleetRecord({...ctx,kind:'vehicle',input:fixture('vehicle')});await saveFleetRecord({...ctx,kind:'service',input:{...fixture('service'),mileage:200,status:'Szerviz'}});assert.equal(ctx.records.get('fleetRecords/vehicle__TESTCAR01').data.mileage,200);});
+
+const liveNames=['drivers','vehicles','fleetRecords','fleetAssignments','fleetMovements','vehicleLocks'];
+const liveMeta=()=>Object.fromEntries(liveNames.map(name=>[name,{loaded:true,fromCache:false,pending:false,error:false}]));
+await test('Fleet is writable only with every server-confirmed collection',()=>{
+ const full=liveMeta();
+ assert.equal(fleetSourcesTrusted(full,liveNames),true);
+ assert.equal(fleetSourcesTrusted(full,liveNames,{online:false}),false);
+ assert.equal(fleetSourcesTrusted(full,[]),false);
+ const missing=liveMeta();delete missing.vehicleLocks;
+ assert.equal(fleetSourcesTrusted(missing,liveNames),false);
+});
+await test('Fleet rejects cached, pending, failed and not-yet-loaded snapshots',()=>{
+ for(const field of ['fromCache','pending','error']){
+  const meta=liveMeta();meta.fleetAssignments[field]=true;
+  assert.equal(fleetSourcesTrusted(meta,liveNames),false,field);
+ }
+ const meta=liveMeta();meta.drivers.loaded=false;
+ assert.equal(fleetSourcesTrusted(meta,liveNames),false);
+});
+await test('Fleet live UI requires metadata changes and server-side profile read',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const app=readFileSync(new URL('./operations-app.mjs',import.meta.url),'utf8');
+ assert.match(app,/onSnapshot\(collection\(db,name\),\{includeMetadataChanges:true\}/);
+ assert.match(app,/getDocFromServer\(doc\(db,'users',user\.uid\)\)/);
+ assert.match(app,/snapshot\.metadata\.fromCache/);
+ assert.match(app,/snapshot\.metadata\.hasPendingWrites/);
+ assert.match(app,/fleetSourcesTrusted\(sourceHealth,sources/);
+ assert.match(app,/window\.addEventListener\('offline'/);
+ assert.match(app,/if\(!recordWritable\(\)\|\|busy\)return/);
+ assert.match(app,/if\(!writable\(\)\|\|busy\)return/);
+});
+
 console.log('PASS: '+count+' Fleet schema, expiry, optimistic write, service and handover cases');
