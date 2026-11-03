@@ -100,8 +100,24 @@ try{
   await page.locator('#flottaUsername').fill('imilemanagement');
   await page.locator('#flottaPassword').fill(password);
   await page.locator('#flottaLoginSubmit').click();
-  await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),
-    null,{timeout:45000});
+  try {
+    await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),
+      null,{timeout:45000});
+  } catch (error) {
+    // Only synthetic/emulated state; never log passwords, tokens or real Fleet data.
+    const diagnostic=await page.evaluate(()=>({
+      authSdkLoaded:!!window.firebase,
+      loginHandlerPatched:String(window.fleetSimpleLogin).includes('signInWithEmailAndPassword'),
+      sessionGatePatched:String(window.fleetGateSession).includes('isAuthenticated'),
+      loginButtonDisabled:document.getElementById('flottaLoginSubmit')?.disabled,
+      status:document.getElementById('syncStatus')?.textContent?.slice(0,250),
+      loginError:document.getElementById('flottaLoginMessage')?.textContent?.slice(0,250),
+      sessionAlias:(()=>{try{return JSON.parse(sessionStorage.getItem('flotta_simple_session_v23')||'null')?.user||null;}catch{return null;}})()
+    }));
+    console.error('FAIL [B+E] sanitized local-emulator login diagnostics:',
+      JSON.stringify({diagnostic,pageErrors:errors}));
+    throw error;
+  }
   console.log('PASS [B+E]: REAL original Fleet HTML rejects stale legacy session and unlocks after server-verified Auth');
   await page.waitForTimeout(800);
   const after=await page.evaluate(()=>localStorage.getItem('flotta_nyilvantarto_v16'));
