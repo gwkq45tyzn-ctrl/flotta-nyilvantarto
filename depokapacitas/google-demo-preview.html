@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#173f7e">
+<title>iMile – Google DEMÓ előnézet</title>
+<link rel="stylesheet" href="./google-demo-preview.css">
+<script type="module" src="./google-demo-preview-app.mjs"></script>
+</head>
+<body>
+<header class="topbar"><span class="logo">i<span>Mile</span></span><span class="subtitle">Google Sheets · DEMÓ</span></header>
+<main>
+<section class="card intro">
+ <span class="eyebrow">HELYI, SZINTETIKUS ADATOK</span>
+ <h1>Kerületi kapacitás – előnézet</h1>
+ <p>Nyisd meg a Google Sheetsből exportált <strong>iMile DEMÓ JSON</strong> fájlt, vagy próbáld ki a szintetikus mintát. A fájlt a böngésződ dolgozza fel: nem kerül a Firebase-be, Google Drive-ba vagy szerverre.</p>
+ <p class="warning"><strong>Nem üzemi adatforrás.</strong> A csomagigény és a kapacitás kézzel megadott becslés. Ez a képernyő nem igazolja a futárok jelenlétét, az autók rendelkezésre állását vagy a kézbesítendő csomagokat.</p>
+</section>
+<section class="card">
+ <h2>DEMÓ-adatok megnyitása</h2>
+ <form id="demoForm">
+  <label for="demoFile">Google Sheets DEMÓ JSON</label>
+  <input id="demoFile" name="file" type="file" accept=".json,application/json" required>
+  <div class="buttons">
+   <button type="submit">JSON előnézet</button>
+   <button id="demoSample" type="button" class="secondary">Szintetikus minta megnyitása</button>
+   <button id="demoClear" type="button" class="ghost">Előnézet törlése</button>
+  </div>
+ </form>
+ <p id="demoStatus" role="status" aria-live="polite"></p>
+</section>
+<section id="demoOutput" class="card" hidden aria-live="polite">
+ <h2 id="demoTitle">Előnézet</h2>
+ <p class="warning">CSAK BEC SLÉS – nem hitelesített és nem mentett adatok.</p>
+ <div id="demoStats" class="stats"></div>
+ <div class="table-scroll">
+ <table><caption>Szintetikus kerületi összehasonlítás</caption>
+ <thead><tr><th>Kerület</th><th>Új</th><th>Retry</th><th>Igény</th><th>Tervezett</th><th>Megerősített</th><th>Tervezett eltérés</th><th>Megerősített eltérés</th></tr></thead>
+ <tbody id="demoRows"></tbody></table>
+ </div>
+ <p class="hint">Régebbi v1 exportban nincs kapacitásadat; ilyenkor a hiányzó számokat „—” jelöli, nem nullának tekintjük.</p>
+</section>
+<footer>iMile · szintetikus DEMÓ · nincs adatfeltöltés, nincs automatikus szinkron</footer>
+</main>
+</body></html>
