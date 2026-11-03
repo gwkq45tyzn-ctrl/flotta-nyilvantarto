@@ -114,3 +114,32 @@ test('Depó UI keeps the existing import separate from DEMO and never commits DE
  assert.match(app,/e\.target\.id==='googleDemoPreviewForm'/);
  assert.match(app,/googleDemoPreview=null;for\(const un of state\.unsubscribe/);
 });
+
+test('Standalone zero-login demo page is responsive and loads only local modules',()=>{
+ const html=readFileSync(new URL('./google-demo-preview.html',import.meta.url),'utf8');
+ const css=readFileSync(new URL('./google-demo-preview.css',import.meta.url),'utf8');
+ assert.match(html,/<meta name="viewport"/);
+ assert.match(html,/type="module" src="\.\/google-demo-preview-app\.mjs"/);
+ assert.match(html,/rel="stylesheet" href="\.\/google-demo-preview\.css"/);
+ assert.match(html,/id="demoSample"/);
+ assert.match(html,/id="demoFile"/);
+ assert.match(css,/@media\(max-width:620px\)/);
+ assert.match(css,/overflow-x:auto/);
+ assert.doesNotMatch(html,/https?:\/\/|firebase-app\.js|firebase-auth\.js/);
+});
+test('Standalone demo never calls a network API or persists input',()=>{
+ const app=readFileSync(new URL('./google-demo-preview-app.mjs',import.meta.url),'utf8');
+ assert.match(app,/from '\.\/google-demo-preview\.mjs'/);
+ assert.match(app,/previewGoogleDemoExport\(await file\.text\(\)\)/);
+ assert.match(app,/replaceChildren\(/);
+ for(const term of ['fetch(', 'XMLHttpRequest','WebSocket','navigator.sendBeacon','localStorage','sessionStorage','indexedDB','firebase','google.script.run','innerHTML','eval('])
+  assert.equal(app.includes(term),false,term);
+});
+test('Standalone sample has clear and user-visible synthetic warning',()=>{
+ const html=readFileSync(new URL('./google-demo-preview.html',import.meta.url),'utf8');
+ const script=readFileSync(new URL('./google-demo-preview-app.mjs',import.meta.url),'utf8');
+ assert.match(html,/Nem üzemi adatforrás/);
+ assert.match(script,/synthetic-google-sheet/);
+ assert.match(script,/authoritative:false/);
+ assert.match(script,/verifiedByTrackingId:false/);
+});
