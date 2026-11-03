@@ -4,8 +4,8 @@ const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
 const menu=read('../index.html'),entry=read('../app.mjs'),
  master=read('./app.mjs'),operations=read('./operations-app.mjs'),
  build=read('../build-preview.mjs'),rules=read('../../../depokapacitas/firestore.rules');
-assert.match(menu, /href="\.\/fleet\/operations\.html" id="fleetLink"/);
-assert.match(menu, /href="\.\/fleet\/index\.html" id="fleetMasterLink"/);
+assert.match(menu, /href="\.\.\/\.\.\/index\.html" id="fleetLink"/);
+assert.match(menu, /href="\.\/fleet\/operations\.html" id="fleetMasterLink"/);
 assert.match(entry, /\$\('fleetMasterLink'\)\.hidden/);
 assert.match(master,/import \{fleetAvailability\} from '\.\/availability\.mjs'/);
 assert.match(master,/['"]fleetAssignments['"]/);
