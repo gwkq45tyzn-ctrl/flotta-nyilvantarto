@@ -31,7 +31,7 @@ function makeHarness({ importVerified = false } = {}) {
   let unlocked = false;
   let uploads = 0;
   let fleet = { vehicles: [{ id: 'synthetic-v1', km: 0 }], drivers: [], fuelCards: [], contacts: [] };
-  let remote = { ...structuredClone(fleet), revision: 0 };
+  let remote = { ...structuredClone(fleet), revision: importVerified ? 1 : 0 };
   let releaseTransaction;
   const transactionBarrier = new Promise(resolve => { releaseTransaction = resolve; });
 
@@ -51,11 +51,27 @@ function makeHarness({ importVerified = false } = {}) {
     settings() {},
     doc(pathName) {
       return {
-        async get() {
-          assert.equal(pathName, 'users/synthetic-uid');
-          return { exists: true, data: () => ({ active: true, role: 'admin' }) };
+        async get(options) {
+          assert.equal(options?.source, 'server','Migration gate must be checked on the server');
+          if(pathName==='users/synthetic-uid')
+            return { exists: true, data: () => ({ active: true, role: 'admin' }) };
+          if(pathName==='flottaMigrationApproval/current')
+            return {exists:importVerified,data:()=>({
+              status:'approved',approvedUid:sharedUser.uid,sourceSha256:'c'.repeat(64)
+            })};
+          if(pathName==='flottaSharedState/current')
+            return {exists:importVerified,data:()=>structuredClone(remote)};
+          throw Error('Unexpected document read: '+pathName);
         },
-        onSnapshot() { return () => {}; }
+        onSnapshot(options, handler) {
+          if(pathName==='flottaSharedState/current'&&importVerified){
+            queueMicrotask(()=>handler({
+              exists:true,metadata:{fromCache:false,hasPendingWrites:false},
+              data:()=>structuredClone(remote)
+            }));
+          }
+          return () => {};
+        }
       };
     },
     async runTransaction(callback) {

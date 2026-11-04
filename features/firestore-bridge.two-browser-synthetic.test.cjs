@@ -14,7 +14,7 @@ const email='imilemanagement@imile-management-staging.firebaseapp.com';
 const copy=x=>JSON.parse(JSON.stringify(x));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-function makeServer(initial) {
+function makeServer(initial,{approved=false}={}) {
   let state=copy(initial);
   const subscribers=new Set();
   function emit(data=state, metadata={fromCache:false,hasPendingWrites:false}) {
@@ -26,9 +26,22 @@ function makeServer(initial) {
     emit,
     doc(name){
       if(name==='users/synthetic-uid')
-        return {get:async()=>({exists:true,data:()=>({active:true,role:'admin'})})};
+        return {get:async({source}={})=>{
+          assert.equal(source,'server');return {exists:true,data:()=>({active:true,role:'admin'})};
+        }};
+      if(name==='flottaMigrationApproval/current')
+        return {get:async({source}={})=>{
+          assert.equal(source,'server');
+          return {exists:approved,data:()=>({
+            status:'approved',approvedUid:'synthetic-uid',sourceSha256:'e'.repeat(64)
+          })};
+        }};
       if(name!=='flottaSharedState/current')throw Error('Unexpected doc: '+name);
       return {
+        async get({source}={}){
+          assert.equal(source,'server');
+          return {exists:true,data:()=>copy(state)};
+        },
         onSnapshot(_opts,callback){subscribers.add(callback);return()=>subscribers.delete(callback);}
       };
     },
@@ -50,8 +63,8 @@ function makeServer(initial) {
 }
 
 function makeClient(server,{verified=true,localKm=0}={}){
-  // A synthetic fixture must satisfy BOTH current client-side flags.
-  // This is NOT a production migration authorization; server-side approval is still required.
+  // Client flags cannot grant authority. Approved synthetic server policy and
+  // pre-seeded Fleet data are independently required by the real bridge.
   const stores=new Map(verified?[['flotta_import_verified','1'],['flotta_migration_token','verified-import']]:[]);
   const sessions=new Map();
   let fleet={
@@ -156,7 +169,7 @@ test('pre-import confirmed remote never overwrites original Fleet localStorage',
 });
 
 test('unconfirmed cache or pending snapshots cannot overwrite Fleet even after import',async()=>{
-  const server=makeServer(fixture());
+  const server=makeServer(fixture(),{approved:true});
   const client=makeClient(server,{verified:true,localKm:0});
   await client.login();
   server.emit(); // confirmed: establish current revision and canonical snapshot
@@ -170,7 +183,7 @@ test('unconfirmed cache or pending snapshots cannot overwrite Fleet even after i
 });
 
 test('confirmed write in one browser appears in another without reload',async()=>{
-  const server=makeServer(fixture());
+  const server=makeServer(fixture(),{approved:true});
   const first=makeClient(server,{verified:true,localKm:0});
   const second=makeClient(server,{verified:true,localKm:0});
   await first.login();

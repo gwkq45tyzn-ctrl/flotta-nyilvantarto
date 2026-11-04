@@ -861,28 +861,42 @@ service cloud.firestore {
     }
 
     
+    // Migration may be approved only by a privileged import process, never
+    // by client localStorage. Browser admin cannot create or mutate this gate.
+    function isSharedFleetAccount() {
+      return request.auth != null
+        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
+        && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID';
+    }
+    function approvedFleetMigration() {
+      let p = /databases/$(database)/documents/flottaMigrationApproval/current;
+      return exists(p)
+        && get(p).data.status == 'approved'
+        && get(p).data.approvedUid == request.auth.uid
+        && get(p).data.sourceSha256 is string
+        && get(p).data.sourceSha256.matches('^[a-f0-9]{64}$')
+        && get(p).data.approvedAt is timestamp
+        && get(p).data.approvedAt <= request.time;
+    }
+    match /flottaMigrationApproval/{id} {
+      allow get: if id == 'current' && isSharedFleetAccount() && member();
+      allow list, create, update, delete: if false;
+    }
     match /flottaSharedState/{docId} {
-      // Single approved account only. Email match + active admin is necessary
-      // but not sufficient; the UID must also match the known shared UID.
-      // Replace SHARED_UID with the real imilemanagement UID before any deploy.
-      function isSharedAccount() {
-        return request.auth != null
-          && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
-          && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID';
-      }
-      allow read: if isSharedAccount() && member();
-      allow create, update: if isSharedAccount()
-        && member()
-        && get(userPath()).data.role in ['admin','editor']
-        && get(userPath()).data.active == true
-        && docId == 'current'
+      allow read: if isSharedFleetAccount() && member();
+      // The initial import must be seeded by a separate approved trusted process.
+      allow create: if false;
+      allow update: if docId == 'current'
+        && isSharedFleetAccount()
+        && editor()
+        && approvedFleetMigration()
         && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision'])
         && request.resource.data.revision is int
-        && request.resource.data.revision > 0
+        && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.vehicles is list
         && request.resource.data.drivers is list
-        && (!exists(/databases/$(database)/documents/flottaSharedState/current)
-            || request.resource.data.revision == get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1);
+        && request.resource.data.fuelCards is list
+        && request.resource.data.contacts is list;
       allow delete: if false;
     }
 

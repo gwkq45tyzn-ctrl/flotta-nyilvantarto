@@ -100,7 +100,8 @@ test('active SERVER profile unlocks original Fleet, but save remains pre-import 
  const h=harness({active:true});
  await h.login();
  assert.equal(h.state.unlocked,true);
- assert.deepEqual(h.state.serverReads.map(x=>x?.source),['server']);
+ assert.deepEqual(h.state.serverReads.map(x=>x?.source),['server','server']);
+ // Profile read succeeded, migration approval was NOT granted by role alone.
  assert.equal(h.ctx.fleetGateSession().user,'imilemanagement');
  h.ctx.save();
  assert.equal(h.state.originalSave,0,'Original save must not execute before migration');

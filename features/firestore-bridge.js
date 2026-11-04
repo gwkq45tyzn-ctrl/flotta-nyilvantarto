@@ -27,12 +27,14 @@
 
   const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
   const SHARED_STATE = 'flottaSharedState/current';
+  const MIGRATION_APPROVAL = 'flottaMigrationApproval/current';
   const LOCAL_CACHE = 'flotta_firestore_cache_v3';
   const PRIMARY_FLAG = 'flotta_firestore_primary';
   const IMPORT_VERIFIED = 'flotta_import_verified';
 
   let app, auth, db, unsub = null;
   let memberVerified = false;
+  let migrationServerApproved = false;
   let savePatched = false;
   let legacySyncGated = false;
   let applyingRemote = false;
@@ -110,22 +112,56 @@
     }
   }
 
+  // Browser storage alone is NEVER an import authorization. A server-only
+  // read of an immutable approval record and an existing imported Fleet
+  // snapshot are required, in addition to the Firestore Rules write gate.
   function isPrimary() {
-    return localStorage.getItem(PRIMARY_FLAG) === '1' &&
-           localStorage.getItem(IMPORT_VERIFIED) === '1' &&
-           localStorage.getItem('flotta_migration_token') === 'verified-import';
+    return migrationServerApproved === true &&
+           localStorage.getItem(PRIMARY_FLAG) === '1' &&
+           localStorage.getItem(IMPORT_VERIFIED) === '1';
   }
 
   function setPrimary(on) {
-    if (on) {
-      localStorage.setItem(PRIMARY_FLAG, '1');
-    } else {
-      localStorage.removeItem(PRIMARY_FLAG);
-    }
+    if (on) localStorage.setItem(PRIMARY_FLAG, '1');
+    else localStorage.removeItem(PRIMARY_FLAG);
   }
 
-  function markImportVerified() {
-    localStorage.setItem(IMPORT_VERIFIED, '1');
+  function clearVerifiedMigration() {
+    migrationServerApproved = false;
+    setPrimary(false);
+    localStorage.removeItem(IMPORT_VERIFIED);
+    // Clear insecure legacy token if a previous build created it.
+    localStorage.removeItem('flotta_migration_token');
+  }
+
+  async function verifyMigrationApproval() {
+    clearVerifiedMigration();
+    if (!memberVerified || !auth || !auth.currentUser || !db) return false;
+    try {
+      const gate = await db.doc(MIGRATION_APPROVAL).get({ source: 'server' });
+      const policy = gate.exists ? gate.data() : null;
+      if (!policy || policy.status !== 'approved' ||
+          policy.approvedUid !== auth.currentUser.uid ||
+          !/^[a-f0-9]{64}$/.test(policy.sourceSha256)) return false;
+      // A missing Fleet snapshot is NOT a permitted import target. The source
+      // must already have been migrated by an authorized privileged process.
+      const fleet = await db.doc(SHARED_STATE).get({ source: 'server' });
+      const data = fleet.exists ? fleet.data() : null;
+      if (!data || !Number.isSafeInteger(data.revision) || data.revision < 1 ||
+          !['vehicles','drivers','fuelCards','contacts'].every(k => Array.isArray(data[k])))
+        return false;
+      if (!memberVerified || !auth.currentUser ||
+          auth.currentUser.uid !== policy.approvedUid) return false;
+      migrationServerApproved = true;
+      localStorage.setItem(IMPORT_VERIFIED, '1');
+      setPrimary(true);
+      return true;
+    } catch (error) {
+      // No cache fallback, no local token workaround and no optimistic unlock.
+      console.warn('Fleet migration approval unavailable', error?.code || 'server-read');
+      clearVerifiedMigration();
+      return false;
+    }
   }
 
   function applyRemote(data, confirmed) {
@@ -348,14 +384,16 @@
         }
         // Fresh server profile is mandatory even when Firebase Auth has a cached user.
         memberVerified = true;
-        // Pre-import still remains read-only until independent migration approval.
-        setPrimary(true);
-        // Primary is only fully active after import verified; for login we allow session but gate writes until import
+        // Authentication only unlocks UI. Server-approved migration is a
+        // separate prerequisite for remote writes and applying Fleet state.
+        const approved = await verifyMigrationApproval();
         gateOldSync();
         patchSave();
         unlockUI();
         startListener();
-        status('Bejelentkezve – Firestore kapcsolat aktív. Primary mód csak ellenőrzött import után.');
+        status(approved
+          ? 'Bejelentkezve – migráció szerveroldalon jóváhagyva'
+          : 'Bejelentkezve – írásvédett; jóváhagyott migráció még nincs');
         if (typeof load === 'function' && !window.flottaHasLoaded) {
           window.flottaHasLoaded = true;
           load();
@@ -370,6 +408,7 @@
 
     window.fleetSimpleLogout = async function () {
       memberVerified = false;
+      clearVerifiedMigration();
       if (auth) await auth.signOut();
       if (unsub) { unsub(); unsub = null; }
       setPrimary(false);
@@ -384,17 +423,20 @@
     initFirebase().then(() => {
       auth.onAuthStateChanged(async (user) => {
         memberVerified = false;
+        clearVerifiedMigration();
         if (typeof fleetGateDisplay === 'function') fleetGateDisplay();
         if (user && user.email === SHARED_EMAIL) {
           const ok = await verifyMember(user.uid);
           if (ok) {
             memberVerified = true;
-            setPrimary(true);
+            const approved = await verifyMigrationApproval();
             gateOldSync();
             patchSave();
             unlockUI();
             startListener();
-            status('Munkamenet folytatva – Firebase Auth érvényes');
+            status(approved
+              ? 'Munkamenet folytatva – migráció szerveroldalon jóváhagyva'
+              : 'Munkamenet folytatva – írásvédett, migráció még nem jóváhagyott');
           } else {
             memberVerified = false;
             await auth.signOut();
@@ -442,15 +484,16 @@
     return data;
   };
 
-  window.flottaMarkImportVerified = function (token) {
-    if (token !== 'verified-import') {
-      status('Érvénytelen migrációs token – primary mód nem engedélyezve', true);
-      return false;
-    }
-    markImportVerified();
-    localStorage.setItem('flotta_migration_token', 'verified-import');
-    status('Ellenőrzött import token elfogadva – Firestore primary mód engedélyezve');
-    return true;
+  // Backward-compatible QA hook: request a fresh SERVER verification only.
+  // The old constant token cannot authorize migration or a new Fleet import.
+  window.flottaMarkImportVerified = async function () {
+    await initFirebase();
+    const approved = await verifyMigrationApproval();
+    status(approved
+      ? 'Szerveroldali migráció-jóváhagyás ellenőrizve'
+      : 'Nincs jogosult szerveroldali migráció-jóváhagyás – írásvédelem aktív',
+      !approved);
+    return approved;
   };
 
   boot();

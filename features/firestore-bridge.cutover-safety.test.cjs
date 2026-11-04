@@ -16,8 +16,11 @@ const bridgeSource = fs.readFileSync(path.join(__dirname, 'firestore-bridge.js')
 const originalHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
 
-function mockBridge({importVerified = false, failTransactions = false} = {}) {
-  const storage = new Map(importVerified ? [['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']] : []);
+function mockBridge({importVerified = false, forgeLocal = false, failTransactions = false} = {}) {
+  // Deliberate forged local flags are NOT sufficient without server proof.
+  const storage = new Map(importVerified || forgeLocal
+    ? [['flotta_firestore_primary','1'], ['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']]
+    : []);
   const sessions = new Map();
   const delayedMicrotasks = [];
   const controls = {
@@ -52,9 +55,17 @@ function mockBridge({importVerified = false, failTransactions = false} = {}) {
     settings(){},
     doc(name){
       return {
-        async get(){
-          assert.equal(name,'users/'+mockUser.uid);
-          return {exists:true,data:()=>({active:true,role:'admin'})};
+        async get(options){
+          assert.equal(options?.source,'server','Migration authorization must never use a cache');
+          if(name==='users/'+mockUser.uid)
+            return {exists:true,data:()=>({active:true,role:'admin'})};
+          if(name==='flottaMigrationApproval/current')
+            return {exists:importVerified,data:()=>({
+              status:'approved',approvedUid:mockUser.uid,sourceSha256:'a'.repeat(64)
+            })};
+          if(name==='flottaSharedState/current')
+            return {exists:importVerified,data:()=>({...localSnapshot,revision:1})};
+          throw Error('Unexpected server read: '+name);
         },
         onSnapshot(){return ()=>{};}
       };
@@ -114,7 +125,8 @@ function mockBridge({importVerified = false, failTransactions = false} = {}) {
     pending:()=>storage.has('flotta_pending_v16'),
     pendingCallbacks:()=>delayedMicrotasks.length,
     shiftCallback:()=>delayedMicrotasks.shift(),
-    status:()=>controls.syncStatus.textContent
+    status:()=>controls.syncStatus.textContent,
+    requestApproval:()=>context.flottaMarkImportVerified('verified-import')
   };
 }
 
@@ -155,4 +167,15 @@ test('permanent revision conflict stops retry chain and preserves pending',async
   assert.equal(h.pendingCallbacks(),0,'Failed transaction must not leave unbounded retry microtasks');
   assert.equal(h.pending(),true,'Conflict must retain the local backup');
   assert.match(h.status(),/Túl sok újrapróbálkozás|ütközés/i);
+});
+
+test('legacy localStorage migration token cannot enable original Fleet writes',async()=>{
+  const h=mockBridge({forgeLocal:true,importVerified:false});
+  await h.login();
+  assert.equal(h.unlocked(),true,'Authenticated Fleet read-only UI should open');
+  assert.equal(await h.requestApproval(),false,'Client-side constant token never grants migration');
+  h.save();
+  assert.equal(h.originalSaves(),0,'Forged flags must not activate original local mutation');
+  assert.equal(h.remoteWrites(),0,'Forged flags must not create or mutate Fleet snapshot');
+  assert.equal(h.pending(),false,'No misleading local pending write');
 });
