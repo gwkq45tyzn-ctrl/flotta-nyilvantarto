@@ -1,53 +1,38 @@
-# ÁTADÁS A CHATGPT-NEK – #86 review + migration/Apps Script dry-run (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – S7 canonical transaction (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-migration-appscript-dryrun`  
-**Base:** `qa/grok-concurrent-deny-guard-20261103` (3c47764, PR #86)  
-**HEAD:** `695b0ca`  
+**Ág:** `grok/v1-s7-canonical`  
+**Base:** `qa/v1-fleet-depo-canonical-transition-20261104` (#93)  
+**HEAD:** `dad565d`  
 **Döntés:** **NO-GO**
 
-## 1. #86 független ellenőrzés
-**Commit:** `3c47764939e634d435c407470714ca75f925f023`  
-**CI (mind success):**
-- Flotta Firestore Bridge synthetic QA: run 41767850919
-- Staging integration: run 41767850910
-- Two-browser Chromium + emulator QA: run 41767850892
+## 1. #92–#96 független ellenőrzés
+- **#92** (8cbd4ad): migráció csak szerveroldali jóváhagyás után. 5/5 CI success. Helyes.
+- **#93** (1cfba6c): read-only canonical planner. Nincs valódi tranzakció. Alap a S7-hez.
+- **#94** (24efe08): szűkített V1 gate, S8/S12 kizárva. Helyes.
+- **#96** (3de9607): offline full-history backup/restore SHA parity. CI success. Helyes.
 
-**Kétböngészős log bizonyíték (41767850892):**
-- PASS: two independent Chromium contexts signed into LOCAL Auth
-- PASS: compat write propagated to modular browser
-- PASS: parallel writes converged at revision 4
-- PASS: offline client refuses successful write
-- PASS: revoked editor role hard-denied
-- PASS: REAL original Fleet HTML unlocks after Auth
-- PASS: pre-import read-only, no Apps Script calls
-- PASS: logout re-locks
+## 2. S7 – amit hozzáadtam
+`features/s7-canonical-transaction.mjs`:
+- A teljes eredeti Flotta snapshot a kanonikus forrás.
+- A szigorú Depó /drivers és /vehicles csak projekciók; a rich history, insurance, fuel cards, contacts csak a Flotta snapshotban maradnak.
+- Offline és jogosulatlan írás elutasítva (nincs hamis siker).
+- Aktív foglalás védi a járműváltozást.
+- Revízió csak ready plan esetén nő.
 
-**SDK fix (a278234):** a `loadSdk` most mindhárom compat modult (app, auth, firestore) megvárja, és egyetlen shared initializationt használ. Ez javítja a `firebase.firestore is not a function` hibát. A concurrent retry a szerverrevízió előrehaladásától függ, fail-closed.
-
-**Értékelés:** a #86 javításai és a három CI a szintetikus emulatoros szinten meggyőzőek. Nem bizonyítják az élő staging Firebase E2E-t, a rules publikálást vagy a valós migrációt.
-
-## 2. Amit hozzáadtam (695b0ca)
-- `features/migration-size-probe.mjs`: offline canonical JSON méret + SHA-256, warn >900 KiB, stop >1 MiB.
-- `docs/APPS_SCRIPT_HARD_STOP_PROOF.md`: a gated no-op CI-ben bizonyított; a hard disable jóváhagyás utáni lépés.
-
-## 3. Tesztek [T]
+**Tesztek [T]:**
 ```bash
-node features/migration-size-probe.test.mjs
-node features/firestore-bridge.test.mjs
-node staging/imile-management/fleet/concurrent-retry-decision.test.mjs
+node --test features/s7-canonical-transaction.test.mjs
 ```
-Mind sikeres a `695b0ca` commiton.
+5/5 pass a `dad565d` commiton.
 
-## 4. Mi maradt
-- Valódi UID behelyettesítése (jóváhagyás után).
-- Élő kétböngészős E2E a staging Firebase-en.
-- Server-verified migráció, privát backup, 1 MiB mérés nagy history-n, rollback.
+## 3. Mi maradt
+- Valódi Firestore transaction adapter (re-read inside transaction).
+- Élő kétböngészős E2E.
+- Rules deploy, UID csere, valós migráció (jóváhagyás után).
 - Apps Script hard disable.
-- Depó authoritative write path.
-- Work riportmodulok biztonsági/integrációs felülvizsgálata, amint elkészülnek.
 
-## 5. GO / NO-GO
+## 4. GO / NO-GO
 **NO-GO.**  
-Az S1–S12 feltételek nem teljesülnek. Nincs rules deploy, nincs élő E2E, nincs jóváhagyott migráció.
+Az S7 safe path megvan pure formában. Élő E2E, rules deploy és jóváhagyott migráció nincs.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
