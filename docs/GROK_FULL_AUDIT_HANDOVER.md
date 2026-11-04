@@ -1,47 +1,50 @@
-# ÁTADÁS A CHATGPT-NEK – Concurrent + login harden (Grok, 2026-11-03)
+# ÁTADÁS A CHATGPT-NEK – #86 review + migration/Apps Script dry-run (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-concurrent-login-fix`  
-**Base:** `integration/v1-security-restricted-20261103` (aefbe74)  
-**HEAD:** `74e18b1`  
+**Ág:** `grok/v1-migration-appscript-dryrun`  
+**Base:** `qa/grok-concurrent-deny-guard-20261103` (3c47764, PR #86)  
+**HEAD:** `695b0ca`  
 **Döntés:** **NO-GO**
 
-## 1. Mit vizsgáltam
-- ChatGPT `aefbe74` és a #84 PR.
-- GitHub Actions run `41723239042` (two-browser emulator QA): **FAIL**.
-- Diagnosztika a logból:
-  ```
-  CONCURRENT QA DIAGNOSTIC: {"serverRevision":3,"clients":[
-    {"state":"connected-server","revision":"3","saveEnabled":true},
-    {"state":"write-error: permission-denied","revision":"3","saveEnabled":true}
-  ]}
-  Error: concurrent transaction resolution failed, UI status=connected-server
-  ```
-- Korábbi run `41721515412` (régebbi SHA): concurrent PASS + original Fleet login PASS.
+## 1. #86 független ellenőrzés
+**Commit:** `3c47764939e634d435c407470714ca75f925f023`  
+**CI (mind success):**
+- Flotta Firestore Bridge synthetic QA: run 41767850919
+- Staging integration: run 41767850910
+- Two-browser Chromium + emulator QA: run 41767850892
 
-## 2. Mit javítottam
-### Concurrent revision (megerősített hiba)
-A `v1-browser-compat-test.html` `boundedConfirmedRetry` a `permission-denied`-ot csak akkor retry-zta, ha a szerverrevízió nagyobb volt, mint a kattintáskor látott UI-revízió. Ha a másik kliens írása már frissítette az UI-t, a feltétel hamis volt, és a második írás elveszett (revízió 3 maradt 4 helyett).
+**Kétböngészős log bizonyíték (41767850892):**
+- PASS: two independent Chromium contexts signed into LOCAL Auth
+- PASS: compat write propagated to modular browser
+- PASS: parallel writes converged at revision 4
+- PASS: offline client refuses successful write
+- PASS: revoked editor role hard-denied
+- PASS: REAL original Fleet HTML unlocks after Auth
+- PASS: pre-import read-only, no Apps Script calls
+- PASS: logout re-locks
 
-**Javítás:** a tranzakciót újraolvasás után retry-zzuk, amíg a próbálkozási keret tart. Csak akkor állunk meg, ha a szerver a helyi nézet mögött van egy próbálkozás után (valódi jogosultsági hiba).
+**SDK fix (a278234):** a `loadSdk` most mindhárom compat modult (app, auth, firestore) megvárja, és egyetlen shared initializationt használ. Ez javítja a `firebase.firestore is not a function` hibát. A concurrent retry a szerverrevízió előrehaladásától függ, fail-closed.
 
-### Login / verifyMember
-A `verifyMember` most egyszer újrapróbálja a tranziens szerverolvasási hibát, és logolja az error code-ot. Hiányzó vagy inaktív profil továbbra is hard fail. Az eredeti Flotta login teszt a legutóbbi sikeres runban (41721515412) PASS volt; a későbbi runokban a concurrent lépés miatt nem futott le. A harden csökkenti a tranziens emulatoros false-fail esélyét.
+**Értékelés:** a #86 javításai és a három CI a szintetikus emulatoros szinten meggyőzőek. Nem bizonyítják az élő staging Firebase E2E-t, a rules publikálást vagy a valós migrációt.
+
+## 2. Amit hozzáadtam (695b0ca)
+- `features/migration-size-probe.mjs`: offline canonical JSON méret + SHA-256, warn >900 KiB, stop >1 MiB.
+- `docs/APPS_SCRIPT_HARD_STOP_PROOF.md`: a gated no-op CI-ben bizonyított; a hard disable jóváhagyás utáni lépés.
 
 ## 3. Tesztek [T]
 ```bash
+node features/migration-size-probe.test.mjs
+node features/firestore-bridge.test.mjs
 node staging/imile-management/fleet/concurrent-retry-decision.test.mjs
 ```
-Sikeres a `74e18b1` commiton.
-
-Az emulatoros kétböngészős és az eredeti Flotta HTML login teszt ebben a környezetben nem futtatható (nincs firebase-tools + Playwright). A ChatGPT CI-je fogja megerősíteni.
+Mind sikeres a `695b0ca` commiton.
 
 ## 4. Mi maradt
-- A javítás CI-ben való megerősítése (kétböngészős emulator QA + original Fleet login).
-- Single-UID placeholder csere a valódi UID-re (jóváhagyás után).
+- Valódi UID behelyettesítése (jóváhagyás után).
 - Élő kétböngészős E2E a staging Firebase-en.
-- Server-verified migráció, privát backup, 1 MiB mérés, rollback.
-- Apps Script hard stop.
-- Attendance CI regresszió (#82) végleges javítása.
+- Server-verified migráció, privát backup, 1 MiB mérés nagy history-n, rollback.
+- Apps Script hard disable.
+- Depó authoritative write path.
+- Work riportmodulok biztonsági/integrációs felülvizsgálata, amint elkészülnek.
 
 ## 5. GO / NO-GO
 **NO-GO.**  
