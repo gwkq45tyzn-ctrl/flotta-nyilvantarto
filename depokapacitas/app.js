@@ -14,7 +14,7 @@ import {planSharedMasterMigration} from '../staging/imile-management/shared-impo
 import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-handover.mjs';
 import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs';
 import {decodeCsv} from './import-encoding.mjs';
-import {assessSources} from './source-health.mjs';
+import {assessSources,liveIndicatorPresentation} from './source-health.mjs';
 
 const $=id=>document.getElementById(id);
 const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[]},unsubscribe:[],loaded:new Set(),errors:new Set(),sharedFleet:emptySharedFleetPreview()};
@@ -253,31 +253,62 @@ function sharedFleetView(){
   );
 }
 function render(){if($('shell').hidden)return;$('pageTitle').textContent=names[state.view];$('todayLabel').textContent=datestr(state.date);$('adminNav').hidden=state.role!=='admin';document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));const c={overview,alerts:alertsView,planning,drivers,vehicles,sharedFleet:sharedFleetView,demands,results,attendance,import:imports,admin}[state.view];const tools=['overview','alerts','sharedFleet'].includes(state.view)?'':'<div class="actions"><input id="tableSearch" type="search" aria-label="Keresés a táblázatban" placeholder="Keresés a listában…" style="width:220px;max-width:100%"><button id="exportCsv" class="secondary" type="button">CSV export</button></div>';$('content').innerHTML='<div class="section-head"><h2>'+esc(names[state.view])+'</h2>'+tools+'</div>'+(c?c():'');}
+// The badge covers EVERY observed V1 data source, including the original
+// Fleet snapshot. A single fresh onSnapshot is not a global "all live" proof.
+const watchedCollections=[
+ 'drivers','vehicles','driverCapacities','bookings','demands','results',
+ 'attendance','sourceRows','fleetRecords','fleetAssignments'
+];
+const liveSources=[...watchedCollections,'flottaSharedState'];
+function updateLiveIndicator(){
+ if($('shell').hidden)return;
+ const health=assessSources(state.sourceMeta,{
+  online:navigator.onLine,required:liveSources
+ });
+ const label=liveIndicatorPresentation(health);
+ $('liveIndicator').textContent=label.text;
+ $('liveIndicator').classList.toggle('off',!label.trusted);
+ $('dataStamp').textContent=label.trusted&&health.confirmedAt
+  ?'Minden forrás visszaigazolva: '+new Date(health.confirmedAt).toLocaleTimeString('hu-HU')
+  :'Nem minden adatforrás kapott friss szerveri visszaigazolást';
+}
 function listen(){
  for(const un of state.unsubscribe)un();state.unsubscribe=[];state.sharedFleet=emptySharedFleetPreview();state.loaded=new Set();state.errors=new Set();state.sourceMeta={};
- for(const name of ['drivers','vehicles','driverCapacities','bookings','demands','results','attendance','sourceRows','fleetRecords','fleetAssignments',/* V1: no cross-user enumeration, admin user CRUD disabled */]){
+ updateLiveIndicator();
+ for(const name of watchedCollections){
   const unsub=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
    state.data[name]=snap.docs.map(d=>({id:d.id,...d.data()}));state.loaded.add(name);state.errors.delete(name);
    const meta=snap.metadata,confirmed=!meta.fromCache&&!meta.hasPendingWrites;
    state.sourceMeta[name]={loaded:true,fromCache:meta.fromCache,pending:meta.hasPendingWrites,error:false,serverAt:confirmed?Date.now():state.sourceMeta[name]?.serverAt};
-   $('liveIndicator').textContent=state.errors.size?'● Részleges adatkapcsolat':meta.fromCache?'● Gyorsítótárazott kapcsolat':'● Élő Firestore kapcsolat';
-   $('liveIndicator').classList.toggle('off',state.errors.size>0||meta.fromCache);
-   if(confirmed)$('dataStamp').textContent='Utolsó szerveri visszaigazolás: '+new Date().toLocaleTimeString('hu-HU');
+   updateLiveIndicator();
    render();
   },err=>{
    console.error(name,err);state.errors.add(name);state.loaded.delete(name);state.sourceMeta[name]={...state.sourceMeta[name],loaded:false,error:true};
-   $('liveIndicator').textContent='● Adatkapcsolati hiba';$('liveIndicator').classList.add('off');
+   updateLiveIndicator();
    toast('Nem érhető el a(z) '+name+' adatbázis. Ellenőrizd a jogosultságokat.',true);render();
   });state.unsubscribe.push(unsub);
  }
  // Optional original Flotta snapshot. Deliberately NOT added to capacity/booking data.
  // Only fully server-confirmed documents are shown in this isolated read-only view.
  const unsubFleet=onSnapshot(doc(db,'flottaSharedState','current'),{includeMetadataChanges:true},snap=>{
-   state.sharedFleet=projectSharedFleetSnapshot(snap.exists()?snap.data():null,snap.metadata);
+   const exists=snap.exists(),meta=snap.metadata;
+   const confirmed=exists&&!meta.fromCache&&!meta.hasPendingWrites;
+   state.sourceMeta.flottaSharedState={
+    loaded:exists,fromCache:meta.fromCache,pending:meta.hasPendingWrites,
+    error:!exists,
+    serverAt:confirmed?Date.now():state.sourceMeta.flottaSharedState?.serverAt
+   };
+   if(exists)state.errors.delete('flottaSharedState');
+   else state.errors.add('flottaSharedState');
+   state.sharedFleet=projectSharedFleetSnapshot(exists?snap.data():null,meta);
+   updateLiveIndicator();
    if(state.view==='sharedFleet')render();
  },err=>{
    console.error('flottaSharedState/current',err);
+   state.errors.add('flottaSharedState');
+   state.sourceMeta.flottaSharedState={...state.sourceMeta.flottaSharedState,loaded:false,error:true};
    state.sharedFleet={...emptySharedFleetPreview(),status:'unavailable',note:'A Flotta közös dokumentum nem olvasható. Nem történt adatátvitel.'};
+   updateLiveIndicator();
    if(state.view==='sharedFleet')render();
  });
  state.unsubscribe.push(unsubFleet);
@@ -422,8 +453,8 @@ async function previewMasterComparison(form){
  toast('A flottaadatok összehasonlítása elkészült; nincs adatírás.');
 }
 document.addEventListener('click',event=>{if(event.target.closest('#refreshSources'))window.location.reload();});
-for(const name of ['online','offline'])window.addEventListener(name,()=>{if(['overview','planning'].includes(state.view))render();});
-setInterval(()=>{if(state.view==='overview'&&!$('shell').hidden)render();else if(state.view==='planning'&&$('nextDayForecast'))$('nextDayForecast').outerHTML=nextDayPanel();},30000);
+for(const name of ['online','offline'])window.addEventListener(name,()=>{updateLiveIndicator();if(['overview','planning'].includes(state.view))render();});
+setInterval(()=>{updateLiveIndicator();if(state.view==='overview'&&!$('shell').hidden)render();else if(state.view==='planning'&&$('nextDayForecast'))$('nextDayForecast').outerHTML=nextDayPanel();},30000);
 document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
 $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}

@@ -10,6 +10,8 @@ on:
   pull_request:
     paths:
       - 'staging/imile-management/**'
+      - 'depokapacitas/**'
+      - '.github/workflows/imile-staging.yml'
 
 permissions:
   contents: read
