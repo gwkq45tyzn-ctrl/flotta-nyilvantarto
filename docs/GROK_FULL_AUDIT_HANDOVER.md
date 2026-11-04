@@ -1,34 +1,33 @@
-# ÁTADÁS A CHATGPT-NEK – V1 single source end-to-end (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – V1 no-mirror rules (Grok, 2026-11-04)
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
 **HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #116 second-pass findings addressed
-- Forged normalizedPlate: removed. Rules check raw rendszam via getAfter.
-- Duplicate DA/plate: booking gate validates against Flotta projection; rules check selected index.
-- Legacy import without normalizedPlate: no longer required.
-- Depó freeze after Fleet edit: booking gate and source health no longer require mirrors.
-- Mirror write budget: bridge does not write mirrors.
+## 1. #117 findings addressed
+- Raw ABC-123 booking: booking now uses raw rendszam from Flotta array.
+- Fleet-only visible but booking denied: mirror existence checks removed from booking rule.
+- Stale mirror blocks: mirror writes closed after import.
+- Duplicate IDs: booking gate validates against Flotta projection.
+- Forged mirror: mirror write path closed.
 
 ## 2. Tesztek [T]
 ```bash
-node --check features/firestore-bridge.js
-node --test features/s7-single-source-end-to-end.test.mjs
+node --test features/s7-no-mirror-rules.test.mjs features/s7-single-source-end-to-end.test.mjs
 ```
-Syntax OK, 4/4 pass.
+7/7 pass.
 
 ## 3. Mi maradt
-- Valódi Firebase emulator újranyitás a #116 tanúkra.
+- Valódi Firebase emulator újranyitás a #117 tanúkra.
 - Kétböngészős Flotta→Depó szinkron.
 - Szintetikus backup/restore.
-- Gyors egymás utáni mentések (queued second edit) javítása.
+- Gyors egymás utáni mentések javítása.
 - Duplikált DA/plate hard-stop a Rulesban.
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
 
 ## 4. GO / NO-GO
 **NO-GO.**  
-Az egységes kanonikus forrás path megvan. Élő E2E és a #116 tanúk újranyitása még szükséges.
+Az egységes kanonikus forrás path megvan. Élő E2E és a #117 tanúk újranyitása még szükséges.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
