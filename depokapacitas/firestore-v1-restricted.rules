@@ -356,15 +356,8 @@ service cloud.firestore {
           && optionalText(request.resource.data.vendor,160)
           && nonNegative(request.resource.data.capacity,10000)
           && request.resource.data.active is bool
-        ) || (
-          editor()
-          && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
-          && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
-             get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
-          && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
-          && validDriverCode(driverId)
-          && request.resource.data.daCode == driverId
         );
+        // S7: after import, mirrors are not writable. Flotta is the only source.
       allow delete: if false;
     }
 
@@ -496,8 +489,7 @@ service cloud.firestore {
         && optionalText(request.resource.data.district,60)
         && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
         && request.resource.data.status in ['planned','confirmed']
-        && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
-        && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        // S7: Flotta is the single canonical source. Mirrors are not required.
         // S7: verify the selected master against the actual Flotta arrays.
         // The client supplies an index; rules confirm it points to a matching
         // eligible entry. Forged lists or mirrors cannot bypass this.

@@ -66,7 +66,7 @@ export async function commitCanonicalDepotBooking({
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
     const fleetData=fleet.exists()?fleet.data():{};
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>String(d.daCode||'').toUpperCase()===driverId);
-    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>String(v.rendszam||'').replace(/[\s-]/g,'').toUpperCase()===vehicleId);
+    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>String(v.rendszam||'')===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
