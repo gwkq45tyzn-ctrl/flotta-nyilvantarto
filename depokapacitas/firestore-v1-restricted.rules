@@ -344,8 +344,10 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read: if member();
-      // Fleet remains the source of truth. Only admins can stage canonical master records.
+      // Imported Fleet is canonical. A browser must not change strict Depot
+      // mirrors independently after the migration is approved.
       allow create, update: if admin()
+        && !canonicalImportActive()
         && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
         && validDriverCode(driverId)
         && request.resource.data.daCode == driverId
@@ -358,7 +360,9 @@ service cloud.firestore {
 
     match /vehicles/{vehicleId} {
       allow read: if member() || courier();
+      // Direct SDK/old-client mirror edits are denied after canonical import.
       allow create, update: if admin()
+        && !canonicalImportActive()
         && exactFields(request.resource.data,['plate','model','status'])
         && validVehiclePlate(vehicleId)
         && request.resource.data.plate == vehicleId
@@ -459,7 +463,9 @@ service cloud.firestore {
     }
     match /bookings/{bookingId} {
       allow read: if member();
+      // No direct SDK/old-client booking create before original Fleet import.
       allow create: if editor()
+        && canonicalImportActive()
         && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity'])
         && validDay(request.resource.data.date)
         && sameDayOccupancy(request.resource.data)
@@ -878,6 +884,17 @@ service cloud.firestore {
         && get(p).data.approvedAt is timestamp
         && get(p).data.approvedAt <= request.time;
     }
+    // Read-only, source-linked original Fleet and approval must already be
+    // seeded by a separately authorized and privileged migration process.
+    // Any browser can read only after shared UID+role verification; no writes.
+    function canonicalImportActive() {
+      let fleet = /databases/$(database)/documents/flottaSharedState/current;
+      let approval = /databases/$(database)/documents/flottaMigrationApproval/current;
+      return isSharedFleetAccount()
+        && approvedFleetMigration()
+        && exists(fleet)
+        && get(fleet).data.migrationSourceSha256 == get(approval).data.sourceSha256;
+    }
     match /flottaMigrationApproval/{id} {
       allow get: if id == 'current' && isSharedFleetAccount() && member();
       allow list, create, update, delete: if false;
@@ -890,7 +907,12 @@ service cloud.firestore {
         && isSharedFleetAccount()
         && editor()
         && approvedFleetMigration()
-        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision'])
+        // Imported original Fleet's source proof cannot be invented or changed
+        // by any browser after the privileged seed.
+        && resource.data.migrationSourceSha256 is string
+        && resource.data.migrationSourceSha256 == get(/databases/$(database)/documents/flottaMigrationApproval/current).data.sourceSha256
+        && request.resource.data.migrationSourceSha256 == resource.data.migrationSourceSha256
+        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision','migrationSourceSha256'])
         && request.resource.data.revision is int
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.vehicles is list
