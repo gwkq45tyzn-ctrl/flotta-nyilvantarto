@@ -225,6 +225,26 @@
     });
   }
 
+
+  function projectStrictMasters(draft) {
+    const plate = s => String(s || '').replace(/[\s-]/g, '').toUpperCase();
+    const code = s => String(s || '').trim().toUpperCase();
+    const drivers = (draft.drivers || []).map(d => {
+      const id = code(d.daCode);
+      if (!id) return null;
+      return { id, data: { name: String(d.name || d.nev || '').trim(), daCode: id, vendor: String(d.agency || d.vendor || '').trim(), capacity: Number(d.kapacitas || d.capacity || 0), active: ['aktiv','aktív'].includes(String(d.status || '').toLowerCase()) } };
+    }).filter(Boolean);
+    const vehicles = (draft.vehicles || []).map(v => {
+      const id = plate(v.rendszam);
+      if (!id) return null;
+      const model = [String(v.gyartmany || ''), String(v.modell || '')].filter(Boolean).join(' ');
+      const st = String(v.status || '').toLowerCase();
+      const status = ['aktiv','aktív'].includes(st) ? 'Elérhető' : st === 'szerviz' ? 'Szerviz' : 'Leállított';
+      return { id, data: { plate: id, model, status } };
+    }).filter(Boolean);
+    return { drivers, vehicles };
+  }
+
   async function pushTransactional() {
     if (applyingRemote || writeInFlight || !auth.currentUser || !isPrimary()) return;
     if (typeof snapshot !== 'function') return;
@@ -250,6 +270,15 @@
           updatedBy: auth.currentUser.uid
         };
         tx.set(ref, payload);
+        // S7: project strict Depot masters in the same transaction.
+        // Rules must allow these writes only when flottaSharedState is also written.
+        const projected = projectStrictMasters(draft);
+        for (const d of projected.drivers) {
+          tx.set(db.doc('drivers/' + d.id), d.data);
+        }
+        for (const v of projected.vehicles) {
+          tx.set(db.doc('vehicles/' + v.id), v.data);
+        }
         return next;
       });
       currentRevision = newRev;
