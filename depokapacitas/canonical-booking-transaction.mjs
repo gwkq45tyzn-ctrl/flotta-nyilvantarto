@@ -60,12 +60,15 @@ export async function commitCanonicalDepotBooking({
       depotVehicle:vehicle.exists()?{id:vehicleId,...vehicle.data()}:null
     });
     if(!check.ready)throw Error('BOOKING_BLOCKED: '+check.code);
-    const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').toUpperCase()===driverId);
-    const rawCapacity=capacity.exists()?capacity.data()?.capacity:(fleetDriver?.kapacitas||fleetDriver?.capacity||driver.data()?.capacity);
+    const fleetData=fleet.exists()?fleet.data():{};
+    const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').trim().toUpperCase()===driverId);
+    // Canonical Flotta is the fallback when no per-day Depot capacity exists.
+    // Do not dereference an absent legacy Depot mirror.
+    const rawCapacity=capacity.exists()?capacity.data()?.capacity:
+      (fleetDriver?.kapacitas??fleetDriver?.capacity??(driver.exists()?driver.data()?.capacity:undefined));
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    const fleetData=fleet.exists()?fleet.data():{};
     const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>norm(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>norm(v.rendszam)===vehicleId);
