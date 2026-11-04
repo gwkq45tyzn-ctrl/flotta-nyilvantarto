@@ -515,7 +515,40 @@ async function previewMasterComparison(form){
 }
 document.addEventListener('click',event=>{if(event.target.closest('#refreshSources'))window.location.reload();});
 for(const name of ['online','offline'])window.addEventListener(name,()=>{updateLiveIndicator();if(['overview','planning'].includes(state.view))render();});
-setInterval(()=>{updateLiveIndicator();if(state.view==='overview'&&!$('shell').hidden)render();else if(state.view==='planning'&&$('nextDayForecast'))$('nextDayForecast').outerHTML=nextDayPanel();},30000);
+// A source can expire without an onSnapshot callback. Never leave an old
+// available car/driver SELECT visible after its server proof has expired.
+setInterval(()=>{
+ const wasTrusted=state.canonicalMaster?.trusted===true;
+ updateLiveIndicator();
+ const isTrusted=state.canonicalMaster?.trusted===true;
+ if(!$('shell').hidden && wasTrusted!==isTrusted &&
+    ['drivers','vehicles','planning'].includes(state.view))render();
+ else if(state.view==='overview'&&!$('shell').hidden)render();
+ else if(state.view==='planning'&&!$('shell').hidden&&$('nextDayForecast'))
+   $('nextDayForecast').outerHTML=nextDayPanel();
+},30000);
+
+// Going offline invalidates the prior server confirmation. Reconnecting
+// never reuses it: onSnapshot must deliver newly confirmed source metadata.
+window.addEventListener('offline',()=>{
+ state.canonicalFleetRaw=null;
+ state.canonicalApproval=null;
+ for(const source of ['flottaSharedState','flottaMigrationApproval','drivers','vehicles']){
+  if(state.sourceMeta[source]){
+   state.sourceMeta[source]={...state.sourceMeta[source],
+     loaded:false,fromCache:true,pending:false,serverAt:0};
+  }
+ }
+ if(!$('shell').hidden){updateLiveIndicator();render();}
+});
+window.addEventListener('online',()=>{
+ if(!$('shell').hidden){updateLiveIndicator();render();}
+});
+// Browsers may throttle interval callbacks in background tabs. Revalidate
+// before showing any existing booking selector when the operator returns.
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden&&!$('shell').hidden){updateLiveIndicator();render();}
+});
 document.addEventListener('submit',async e=>{if(e.target.matches('[data-form]')){e.preventDefault();const f=e.target,values=Object.fromEntries(new FormData(f).entries());const b=f.querySelector('button[type=submit]');b.disabled=true;try{await saveForm(f.dataset.form,values);f.reset();render();}catch(ex){toast(ex.message,true);}finally{b.disabled=false;}}else if(e.target.id==='importForm'){e.preventDefault();try{await importFile(e.target);}catch(ex){toast(ex.message,true);}}else if(e.target.id==='masterCompareForm'){e.preventDefault();try{await previewMasterComparison(e.target);}catch(ex){toast('Hiba az összehasonlításban: '+ex.message,true);}}});
 $('menuToggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('open'));
 if(!firebaseConfig.apiKey||!firebaseConfig.projectId||!firebaseConfig.appId){showOnly('setup');}
