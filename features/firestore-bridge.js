@@ -279,8 +279,7 @@
         }
         tx.set(ref, payload);
         // S7: project strict Depot masters in the same transaction.
-        // Rules must allow these writes only when flottaSharedState is also written.
-        const projected = projectStrictMasters(draft);
+        // Reuse the projected value computed above.
         for (const d of projected.drivers) {
           tx.set(db.doc('drivers/' + d.id), d.data);
         }
