@@ -66,6 +66,8 @@ jobs:
           node --test depokapacitas/canonical-booking-gate.test.mjs
           node --test depokapacitas/canonical-booking-integration.test.mjs
           node --check depokapacitas/app.js
+      - name: V1 S7 actual original Fleet bridge VM regression – write budget and orphan masters [T]
+        run: node --test staging/imile-management/fleet/v1-original-bridge-write-budget.test.mjs
       - name: V1 S7 eredeti Flotta a Depó egyetlen operatív törzsforrása
         run: |
           node --test depokapacitas/canonical-source-health.test.mjs
