@@ -184,6 +184,19 @@ try{
     ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:null}));
   await expectPermission('approved original Fleet source admits atomic booking + claim',true,
     ()=>bookFuture('2099-01-01'));
+  // Valid plate normalization survives a hyphen in the canonical original.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),{...fleetData(2),
+      vehicles:[{rendszam:'TEST-0001',status:'aktiv',normalizedPlate:'TEST0001'}]}));
+  await expectPermission('original plate with hyphen is eligible after Rules normalization',true,
+    ()=>bookFuture('2099-01-06'));
+  // Forging the browser-owned normalizedPlate cannot book a different car.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),{...fleetData(2),
+      vehicles:[{rendszam:'OTHER001',status:'aktiv',normalizedPlate:'TEST0001'}]}));
+  await expectPermission('forged normalizedPlate cannot authorize a different original plate',false,
+    ()=>bookFuture('2099-01-07'));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),fleetData(2)));
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,
