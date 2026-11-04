@@ -140,14 +140,21 @@ try{
   await env.withSecurityRulesDisabled(async ctx=>{
     await updateDoc(doc(ctx.firestore(),'users',uid),{role:'viewer'});
   });
-  const revisionBeforeRevocation=(await env.withSecurityRulesDisabled(async ctx=>
-    getDoc(doc(ctx.firestore(),'flottaSharedState','current')))).data().revision;
+  let revisionBeforeRevocation;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const snapshot=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    revisionBeforeRevocation=snapshot.data()?.revision;
+  });
+  assert.equal(revisionBeforeRevocation,4,'Baseline revision must already be 4');
   await compat.locator('#save').click();
   await wait(compat,()=>document.getElementById('state')?.textContent
       ?.startsWith('write-error: permission-denied'),
     'revoked write must report permission-denied, never successful conflict retry');
-  const revisionAfterRevocation=(await env.withSecurityRulesDisabled(async ctx=>
-    getDoc(doc(ctx.firestore(),'flottaSharedState','current')))).data().revision;
+  let revisionAfterRevocation;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const snapshot=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    revisionAfterRevocation=snapshot.data()?.revision;
+  });
   assert.equal(revisionAfterRevocation,revisionBeforeRevocation,
     'Revoked role must not write new Fleet revision');
   assert.equal(await compat.locator('#revision').textContent(),
