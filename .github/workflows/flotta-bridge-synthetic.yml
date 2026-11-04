@@ -4,12 +4,14 @@ on:
     paths:
       - 'features/firestore-bridge*'
       - 'features/shared-master-adapter*'
+      - 'features/migration-size-probe*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
   pull_request:
     paths:
       - 'features/firestore-bridge*'
       - 'features/shared-master-adapter*'
+      - 'features/migration-size-probe*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
 permissions:
@@ -37,3 +39,5 @@ jobs:
         run: node --test features/firestore-bridge.strict-auth.test.cjs
       - name: Shared master mapping
         run: node features/shared-master-adapter.test.mjs
+      - name: Offline Fleet 1 MiB native document preflight + integrity regression
+        run: node --test features/migration-size-probe.test.mjs
