@@ -347,7 +347,7 @@ service cloud.firestore {
       // Imported Fleet is canonical. A browser must not change strict Depot
       // mirrors independently after the migration is approved.
       allow create, update: if admin()
-        && !canonicalImportActive()
+        && !exists(/databases/$(database)/documents/flottaSharedState/current)
         && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
         && validDriverCode(driverId)
         && request.resource.data.daCode == driverId
@@ -362,7 +362,7 @@ service cloud.firestore {
       allow read: if member() || courier();
       // Direct SDK/old-client mirror edits are denied after canonical import.
       allow create, update: if admin()
-        && !canonicalImportActive()
+        && !exists(/databases/$(database)/documents/flottaSharedState/current)
         && exactFields(request.resource.data,['plate','model','status'])
         && validVehiclePlate(vehicleId)
         && request.resource.data.plate == vehicleId
