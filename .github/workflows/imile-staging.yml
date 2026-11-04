@@ -130,6 +130,17 @@ jobs:
           test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
           node --check features/firestore-bridge.js
 
+      - name: Szűkített Flotta + Depó V1 offline csomag – biztonsági regresszió
+        run: node --test staging/imile-management/build-v1-core.test.mjs
+      - name: V1 eredeti Flotta + Depó QA-forráscsomag összeállítása – NO-GO
+        run: node staging/imile-management/build-v1-core.mjs
+      - name: Szűkített V1 QA-csomag archiválása – NEM deployolható
+        uses: actions/upload-artifact@v4
+        with:
+          name: imile-v1-core-qa-NO-GO
+          path: candidate-imile-v1-core/
+          if-no-files-found: error
+          retention-days: 7
       - name: Izolált, letölthető staging webcsomag építése
         run: node staging/imile-management/build-preview.mjs
       - name: Ellenőrzött staging webcsomag archiválása
