@@ -4,7 +4,8 @@ const txt=x=>typeof x==='string'?x.trim():x==null?'':String(x).trim();
 const date=x=>{const v=x instanceof Date?x.toISOString().slice(0,10):txt(x).slice(0,10);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
 const int=x=>typeof x==='number'?x:typeof x==='string'&&/^\d+$/.test(x.trim())?Number(x.trim()):NaN;
 const header=(matrix,required)=>{if(!Array.isArray(matrix)||!Array.isArray(matrix[0])||matrix.length>10002)throw Error('Hibás vagy túl nagy export.');const h=matrix[0].map(txt);if(new Set(h).size!==h.length)throw Error('Duplikált oszlopfejléc.');for(const k of required)if(!h.includes(k))throw Error('Hiányzó oszlop: '+k);return Object.fromEntries(h.map((v,i)=>[v,i]));};
-const data=matrix=>matrix.slice(1).filter(x=>Array.isArray(x)&&x.some(v=>txt(v)!==''));
+const sourceEntries=matrix=>Array.from(matrix.entries()).slice(1).filter(([,row])=>Array.isArray(row)&&row.some(v=>txt(v)!==''));
+const data=matrix=>sourceEntries(matrix).map(([,row])=>row);
 const cmp=(a,b)=>a.localeCompare(b,'hu',{numeric:true});
 export function cityOrDistrict(city,zip){
  const c=txt(city),z=txt(zip);
@@ -14,10 +15,10 @@ export function cityOrDistrict(city,zip){
 export function inhub(matrix){
  const h=header(matrix,['Waybill Number','LM Receive Date','Consignee city','Consignee zipcode']);
  const ids=new Set(),counts=new Map(),days=new Set(),areas=new Set(),issues=[];
- for(const [i,r]of data(matrix).entries()){
+ for(const [i,r]of sourceEntries(matrix)){
   const id=txt(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
-  if(!id||!day||!area){issues.push({line:i+2,reason:'invalid_parcel_or_area'});continue;}
-  if(ids.has(id)){issues.push({line:i+2,reason:'duplicate_waybill'});continue;}
+  if(!id||!day||!area){issues.push({line:i+1,reason:'invalid_parcel_or_area'});continue;}
+  if(ids.has(id)){issues.push({line:i+1,reason:'duplicate_waybill'});continue;}
   ids.add(id);days.add(day);areas.add(area);const k=JSON.stringify([area,day]);counts.set(k,(counts.get(k)||0)+1);
  }
  if(issues.length)return {kind:'inhub',status:'blocked',issues,total:null,rows:[],dates:[]};
@@ -28,13 +29,13 @@ export function inhub(matrix){
 export function ofd(matrix){
  const h=header(matrix,['OFD Date','DA','DA Code','Vendor','Station','OFD','Delivered']);
  const byId=new Map(),issues=[];
- for(const [i,r]of data(matrix).entries()){
+ for(const [i,r]of sourceEntries(matrix)){
   const day=date(r[h['OFD Date']]),name=txt(r[h['DA']]),code=txt(r[h['DA Code']]),vendor=txt(r[h['Vendor']]),station=txt(r[h['Station']]);
   const out=int(r[h['OFD']]),del=int(r[h['Delivered']]);
-  if(!day||!name||!code||!vendor||!station||!Number.isSafeInteger(out)||!Number.isSafeInteger(del)||out<0||del<0||del>out){issues.push({line:i+2,reason:'invalid_da_metric'});continue;}
+  if(!day||!name||!code||!vendor||!station||!Number.isSafeInteger(out)||!Number.isSafeInteger(del)||out<0||del<0||del>out){issues.push({line:i+1,reason:'invalid_da_metric'});continue;}
   const key=JSON.stringify([day,station,code,vendor]);
   if(!byId.has(key))byId.set(key,{date:day,station,code,name,vendor,ofd:0,delivered:0,sourceCount:0,district:null});
-  const v=byId.get(key);if(v.name!==name)issues.push({line:i+2,reason:'conflicting_da_name'});v.ofd+=out;v.delivered+=del;v.sourceCount++;
+  const v=byId.get(key);if(v.name!==name)issues.push({line:i+1,reason:'conflicting_da_name'});v.ofd+=out;v.delivered+=del;v.sourceCount++;
  }
  if(issues.length)return {kind:'ofd',status:'blocked',issues,rows:[],vendors:[],totalOfd:null,totalDelivered:null};
  const rows=[...byId.values()].sort((a,b)=>cmp(a.date,b.date)||cmp(a.vendor,b.vendor)||cmp(a.station,b.station)||cmp(a.name,b.name));

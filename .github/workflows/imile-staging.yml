@@ -51,6 +51,7 @@ jobs:
       - name: Napi In-Hub és DA OFD riportmotor – adat- és UI-regresszió
         run: |
           node staging/imile-management/reports/report-core.test.mjs
+          node --test staging/imile-management/reports/source-lines.test.mjs
           node staging/imile-management/reports/report-statistics.test.mjs
           node staging/imile-management/reports/inventory-statistics.test.mjs
           node staging/imile-management/reports/xlsx-lite.test.mjs
