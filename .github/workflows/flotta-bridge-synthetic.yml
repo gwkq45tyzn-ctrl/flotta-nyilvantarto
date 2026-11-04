@@ -5,6 +5,7 @@ on:
       - 'features/firestore-bridge*'
       - 'features/shared-master-adapter*'
       - 'features/fleet-depo-canonical-transition*'
+      - 'features/s7-canonical-transaction*'
       - 'features/migration-size-probe*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
@@ -13,6 +14,7 @@ on:
       - 'features/firestore-bridge*'
       - 'features/shared-master-adapter*'
       - 'features/fleet-depo-canonical-transition*'
+      - 'features/s7-canonical-transaction*'
       - 'features/migration-size-probe*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
@@ -43,5 +45,7 @@ jobs:
         run: node features/shared-master-adapter.test.mjs
       - name: V1 original Fleet to canonical Depot atomic transition – fail-closed offline plan
         run: node --test features/fleet-depo-canonical-transition.test.mjs
+      - name: Grok S7 strict dry-run and adversarial regressions – NO real apply
+        run: node --test features/s7-canonical-transaction.test.mjs
       - name: Offline Fleet 1 MiB native document preflight + integrity regression
         run: node --test features/migration-size-probe.test.mjs
