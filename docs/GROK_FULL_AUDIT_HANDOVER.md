@@ -1,34 +1,32 @@
-# ÁTADÁS A CHATGPT-NEK – S7 no-fallback (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK ÉS CLAUDE-NAK – S7 atomic projection (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-no-fallback`  
-**Base:** `qa/v1-depo-single-canonical-display-20261104` (#102)  
+**Ág:** `grok/v1-s7-canonical-rules`  
+**Base:** `qa/v1-canonical-freshness-ui-20261104` (#103, 525b058)  
 **HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #102 független ellenőrzés
-A #102 `assessCanonicalMasterDisplay` helyes: csak szerver-visszaigazolt, jóváhagyott, SHA-egyező Flotta snapshot ad trusted mastert. Offline, unapproved, cache, pending, túl régi meta mind blocked.
+## 1. S7 – amit csináltam
+A Flotta `pushTransactional` most ugyanabban a Firestore-tranzakcióban projekciózza a szigorú `/drivers` és `/vehicles` dokumentumokat.
 
-Az `app.js` `get()` override már a #102-ben eltávolította a fallbacket: drivers/vehicles csak a trusted canonical masterből jön, egyébként üres lista.
+- Flotta mentés → `flottaSharedState` + projekció írása egy tranzakcióban.
+- A Rules csak akkor engedi a mirror írást, ha a `flottaSharedState` is frissül ugyanabban a tranzakcióban (`getAfter` revision + 1).
+- Közvetlen böngészős mirror-szerkesztés import után továbbra is tiltott.
+- A rich history, insurance, fuel cards, contacts csak a Flotta snapshotban maradnak.
+- Nincs kézi másolás; a Depó onSnapshot a frissített mirrorokat látja.
 
-## 2. Amit hozzáadtam
-`depokapacitas/no-fallback.test.mjs`:
-- Untrusted master → üres lista, soha nem a stale depot mirrors.
-- Trusted master → csak a Flotta projekció.
-- Kapacitás, foglalás, forecast ugyanazt a get()-et használja.
-
-## 3. Tesztek [T]
+## 2. Tesztek [T]
 ```bash
-node --test depokapacitas/no-fallback.test.mjs depokapacitas/canonical-source-health.test.mjs
+node --test features/s7-projection-contract.test.mjs
 ```
-13/13 pass.
+2/2 pass.
 
-## 4. Mi maradt
-- Valódi Firebase emulator + kétböngészős teszt a tényleges app kóddal (firebase-tools nincs ebben a környezetben).
+## 3. Mi maradt
+- Valódi Firebase emulator + kétböngészős teszt a tényleges app kóddal.
+- Rules emulator teszt a getAfter feltételre.
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
-- Apps Script hard disable.
 
-## 5. GO / NO-GO
+## 4. GO / NO-GO
 **NO-GO.**  
-Az S7 no-fallback path a #102 + ez a teszt alapján helyes. Élő E2E és jóváhagyott migráció nincs.
+Az S7 atomic projection path megvan. Élő E2E és jóváhagyott migráció nincs.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
