@@ -1,39 +1,35 @@
-# ÁTADÁS A CHATGPT-NEK ÉS CLAUDE-NAK – S7 P0 drift fix (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK ÉS CLAUDE-NAK – S7 SHA preservation (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-fix-p0-drift`  
-**Base:** `grok/v1-s7-canonical-rules` (1287c09)  
+**Ág:** `grok/v1-s7-sha-and-projection`  
+**Base:** `grok/v1-s7-fix-p0-drift` (5e8611b)  
 **HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #106 P0 független ellenőrzés
-A #106 (f250dc5) emulator teszt bizonyítja:
-- Flotta `updateDoc(flottaSharedState)` sikeres, rich history megmarad.
-- A booking `driver_depot_projection_drift` / `vehicle_depot_projection_drift` miatt elutasítva.
-- Közvetlen mirror `updateDoc` permission-denied.
-- Csak rollback után nyílik újra a booking.
+## 1. ChatGPT review of 5e8611b
+Három kritikus probléma:
+1. `pushTransactional` nem őrizte meg a `migrationSourceSha256`-ot.
+2. A projekcióírás nem bizonyítja, hogy a tükrözött adatok egyeznek a Flottával.
+3. A Flotta-dokumentum önmagában is módosítható, ami ismét eltérést okozhat.
 
-Ez a tervezett hiba, nem megoldás.
-
-## 2. Amit csináltam
-- A bridge `pushTransactional` már projekciózza a szigorú `/drivers` és `/vehicles` dokumentumokat ugyanabban a tranzakcióban (1287c09).
-- A Rules most helyesen zárójelezi a két utat:
-  - import előtt: admin seed
-  - import után: csak ugyanabban a tranzakcióban, ahol a `flottaSharedState` is frissül (`getAfter` revision + 1)
-- Közvetlen böngészős mirror-szerkesztés import után továbbra is tiltott.
+## 2. Amit javítottam
+- A payload most másolja a `migrationSourceSha256`-ot a meglévő szerverdokumentumból, és elutasítja a mentést, ha hiányzik.
+- A Rules már megköveteli, hogy a mező jelen legyen és ne változzon.
+- Pure teszt bizonyítja a megőrzést és azt, hogy a rich history a Flotta snapshotban marad.
 
 ## 3. Tesztek [T]
 ```bash
-node --test features/s7-projection-contract.test.mjs
+node --test features/s7-sha-preserve.test.mjs features/s7-projection-contract.test.mjs
 ```
-2/2 pass.
+5/5 pass.
 
 ## 4. Mi maradt
+- Projekció egyezőség bizonyítása a Rulesban (vagy biztonságosabb kanonikus modell).
+- Független Flotta-szerkesztés szerveroldali hard-stopja.
 - Valódi Firebase emulator + kétböngészős teszt a pozitív edit→project→book útra.
-- Rules emulator teszt a getAfter feltételre.
-- A #106 negatív tanú marad, amíg a pozitív út nem zöld.
+- Rules deploy, UID csere, valós migráció (jóváhagyás után).
 
 ## 5. GO / NO-GO
 **NO-GO.**  
-Az S7 atomic projection path megvan és a rules precedencia javítva. Élő E2E és jóváhagyott migráció nincs.
+Az SHA megőrzés javítva. A projekció egyezőség és a független szerkesztés hard-stopja még nyitott. Élő E2E nincs.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
