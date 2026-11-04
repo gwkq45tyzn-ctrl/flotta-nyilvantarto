@@ -940,12 +940,12 @@ service cloud.firestore {
         && request.resource.data.vehicles is list
         && request.resource.data.drivers is list
         && request.resource.data.fuelCards is list
-        && request.resource.data.contacts is list
-        // S7: a Flotta update that changes masters must also project them
-        // in the same transaction. Independent SDK edits that skip the
-        // projection are denied. The booking gate still re-validates parity.
-        && existsAfter(/databases/$(database)/documents/drivers/$(request.resource.data.drivers[0].daCode))
-        && existsAfter(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicles[0].rendszam));
+        && request.resource.data.contacts is list;
+        // S7: flottaSharedState is the single canonical source.
+        // Mirror projection is best-effort and not required for the update.
+        // The booking gate re-validates full parity against this document.
+        // The previous existsAfter(drivers[0]/vehicles[0]) guard caused
+        // Index out of bound on empty arrays and did not prove full parity.
       allow delete: if false;
     }
 
