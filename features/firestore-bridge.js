@@ -260,15 +260,20 @@
           throw new Error('REVISION_CONFLICT');
         }
         const next = serverRev + 1;
+        const existing = snap.exists ? snap.data() : {};
         const payload = {
           vehicles: draft.vehicles || [],
           fuelCards: draft.fuelCards || [],
           drivers: draft.drivers || [],
           contacts: draft.contacts || [],
           revision: next,
+          migrationSourceSha256: existing.migrationSourceSha256 || '',
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy: auth.currentUser.uid
         };
+        if (!payload.migrationSourceSha256) {
+          throw new Error('MISSING_MIGRATION_SOURCE');
+        }
         tx.set(ref, payload);
         // S7: project strict Depot masters in the same transaction.
         // Rules must allow these writes only when flottaSharedState is also written.
