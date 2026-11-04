@@ -54,7 +54,7 @@ try{
     // A browser must not be able to invent initial migration data or approval.
     // Seed BOTH solely through the synthetic emulator's privileged test context.
     await setDoc(doc(db,'flottaSharedState','current'),{
-      revision:1,vehicles:[],drivers:[],fuelCards:[],contacts:[]
+      revision:1,migrationSourceSha256:'e'.repeat(64),vehicles:[],drivers:[],fuelCards:[],contacts:[]
     });
     await setDoc(doc(db,'flottaMigrationApproval','current'),{
       status:'approved',approvedUid:uid,sourceSha256:'e'.repeat(64),
