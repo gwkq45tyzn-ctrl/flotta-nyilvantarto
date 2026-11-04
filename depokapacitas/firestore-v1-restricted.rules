@@ -492,6 +492,11 @@ service cloud.firestore {
         && request.resource.data.vehicleIndex is int
         && request.resource.data.vehicleIndex >= 0
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].normalizedPlate == request.resource.data.vehicleId
+        // The normalized field is browser-writable in the rich legacy Fleet.
+        // Recompute eligibility from the ORIGINAL plate at booking time.
+        // A forged normalizedPlate must never authorize another vehicle.
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam is string
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
