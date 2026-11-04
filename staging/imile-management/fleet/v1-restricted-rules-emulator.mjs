@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
+import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc,Timestamp} from 'firebase/firestore';
 
 const projectId='demo-imile-restricted-v1';
 const uid='synthetic-imile-v1-admin-0000001';
@@ -42,6 +42,8 @@ const anonymous=env.unauthenticatedContext().firestore();
 
 const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
+const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
+const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
 const fleetData=(revision)=>({revision,vehicles:[],drivers:[],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
@@ -78,7 +80,8 @@ const locations=[
   ['vehicleLocks','TEST0001'],
   ['driverLocks','TEST0001'],
   ['courierLocks',courierUid],
-  ['flottaSharedState','current']
+  ['flottaSharedState','current'],
+  ['flottaMigrationApproval','current']
 ];
 try{
   await env.withSecurityRulesDisabled(async ctx=>{
@@ -107,7 +110,7 @@ try{
 
   for(const collection of [
     'users','drivers','vehicles','bookings','attendance','fleetRecords',
-    'performanceDays','inventoryDays','courierDayPlans','flottaSharedState'
+    'performanceDays','inventoryDays','courierDayPlans','flottaSharedState','flottaMigrationApproval'
   ]){
     const id=collection==='users'?uid:collection==='flottaSharedState'?'current':'SYNTH1';
     await expectPermission('valid shared can get '+collection,true,
@@ -117,16 +120,59 @@ try{
     ()=>setDoc(doc(shared,'drivers','TEST0001'),driver('TEST0001')));
   await expectPermission('shared admin create vehicle',true,
     ()=>setDoc(doc(shared,'vehicles','TEST0001'),vehicle('TEST0001')));
-  await expectPermission('shared admin can create Fleet snapshot',true,
+  // The original Fleet can NEVER be initialized by a browser, even as admin.
+  await expectPermission('browser cannot seed initial Fleet snapshot',false,
     ()=>setDoc(fleet(shared),fleetData(1)));
-  await expectPermission('shared admin increments revision',true,
+  await expectPermission('browser cannot self-approve migration',false,
+    ()=>setDoc(migrationGate(shared),approvedGate));
+  // Trusted, pre-approved migration path is represented ONLY by a Rules-bypass
+  // emulator seed. No real privilege or data is used in this test.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(fleet(ctx.firestore()),fleetData(1));
+  });
+  await expectPermission('pre-approval Fleet update is denied',false,
     ()=>updateDoc(fleet(shared),{revision:2}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),{...approvedGate,status:'pending'});
+  });
+  await expectPermission('pending migration approval denies Fleet update',false,
+    ()=>updateDoc(fleet(shared),{revision:2}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),{...approvedGate,approvedUid:adversary});
+  });
+  await expectPermission('wrong UID migration approval denies Fleet update',false,
+    ()=>updateDoc(fleet(shared),{revision:2}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),{...approvedGate,sourceSha256:'INVALID'});
+  });
+  await expectPermission('invalid migration source digest denies Fleet update',false,
+    ()=>updateDoc(fleet(shared),{revision:2}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),approvedGate);
+  });
+  await expectPermission('shared admin may read server migration approval',true,
+    ()=>getDoc(migrationGate(shared)));
+  await expectPermission('shared admin increments revision after trusted approval',true,
+    ()=>updateDoc(fleet(shared),{revision:2}));
+  await expectPermission('approval cannot be revoked by browser',false,
+    ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,
     ()=>updateDoc(fleet(shared),{revision:2}));
   await expectPermission('skipped Fleet revision fails',false,
     ()=>updateDoc(fleet(shared),{revision:4}));
   await expectPermission('cannot delete Fleet snapshot',false,
     ()=>deleteDoc(fleet(shared)));
+  // Trusted revocation is effective for an already authenticated shared UID.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),{...approvedGate,status:'revoked'});
+  });
+  await expectPermission('revoked migration approval denies Fleet update',false,
+    ()=>updateDoc(fleet(shared),{revision:3}));
+  await expectPermission('browser cannot recreate revoked migration approval',false,
+    ()=>setDoc(migrationGate(shared),approvedGate));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(migrationGate(ctx.firestore()),approvedGate);
+  });
 
   await expectPermission('admin cannot create another user profile',false,
     ()=>setDoc(user(shared,'synthetic-extra'),{name:'SYNTHETIC EXTRA',active:true,role:'admin'}));
