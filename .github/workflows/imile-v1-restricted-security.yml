@@ -62,13 +62,31 @@ jobs:
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.staging-emulator.json \
             "node staging/imile-management/fleet/v1-canonical-booking-emulator.mjs"
-      - name: S7 first-master existsAfter actual emulator bypass and deadlock proof
+      # The next adversarial suite runs in an independent job. An existing
+      # intentional FAIL here must not prevent collection of real S7 witness
+      # results. The whole workflow stays RED as long as either job fails.
+      - name: Protect active staging Rules and actual original Fleet
+        run: |
+          test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+
+  s7-first-master-adversarial:
+    runs-on: ubuntu-latest
+    name: S7 isolated REAL emulator adversarial witnesses (never deploy)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned Firestore SDK and rules test dependencies
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Run all first-master existsAfter witnesses independently of legacy test failure
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.staging-emulator.json \
             "node staging/imile-management/fleet/v1-first-master-exists-after-adversarial.mjs"
-      - name: Protect active staging Rules and actual original Fleet
-        run: |
-          test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
-          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
