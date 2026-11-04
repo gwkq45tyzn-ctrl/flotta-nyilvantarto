@@ -9,16 +9,21 @@ function test(name, fn) {
   catch (e) { console.error('FAIL -', name, e.message); process.exitCode = 1; }
 }
 
-test('primary requires both flags', () => {
+test('primary requires trusted in-memory SERVER approval as well as flags', () => {
   const PRIMARY = 'flotta_firestore_primary';
   const IMPORT = 'flotta_import_verified';
   const store = {};
-  const isPrimary = () => store[PRIMARY] === '1' && store[IMPORT] === '1';
+  let serverApproved = false;
+  const isPrimary = () => serverApproved && store[PRIMARY] === '1' && store[IMPORT] === '1';
   assert.equal(isPrimary(), false);
   store[PRIMARY] = '1';
-  assert.equal(isPrimary(), false);
   store[IMPORT] = '1';
+  store.flotta_migration_token = 'verified-import';
+  assert.equal(isPrimary(), false,'Forged localStorage flags MUST NOT authorize migration');
+  serverApproved = true;
   assert.equal(isPrimary(), true);
+  serverApproved = false;
+  assert.equal(isPrimary(), false,'Revoked server attestation must deny access even if flags remain');
 });
 
 test('applyRemote skips when localDirty', () => {
@@ -73,10 +78,10 @@ test('old sync gated on auth, not only primary', () => {
   assert.equal(gated(false), 'allowed');
 });
 
-test('primary requires migration token', () => {
-  const store = { flotta_firestore_primary: '1', flotta_import_verified: '1' };
-  const isPrimary = () => store.flotta_firestore_primary === '1' && store.flotta_import_verified === '1' && store.flotta_migration_token === 'verified-import';
-  assert.equal(isPrimary(), false);
-  store.flotta_migration_token = 'verified-import';
-  assert.equal(isPrimary(), true);
+test('legacy fixed migration token never grants primary mode', () => {
+  const client = {flotta_firestore_primary:'1',flotta_import_verified:'1',flotta_migration_token:'verified-import'};
+  const migrationServerApproved=false;
+  const primary = migrationServerApproved &&
+    client.flotta_firestore_primary==='1' && client.flotta_import_verified==='1';
+  assert.equal(primary,false);
 });
