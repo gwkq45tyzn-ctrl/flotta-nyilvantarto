@@ -60,7 +60,8 @@ export async function commitCanonicalDepotBooking({
       depotVehicle:vehicle.exists()?{id:vehicleId,...vehicle.data()}:null
     });
     if(!check.ready)throw Error('BOOKING_BLOCKED: '+check.code);
-    const rawCapacity=capacity.exists()?capacity.data()?.capacity:driver.data()?.capacity;
+    const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').toUpperCase()===driverId);
+    const rawCapacity=capacity.exists()?capacity.data()?.capacity:(fleetDriver?.kapacitas||fleetDriver?.capacity||driver.data()?.capacity);
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
