@@ -1,32 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-
 const app=readFileSync(new URL('./app.js',import.meta.url),'utf8');
+const txn=readFileSync(new URL('./canonical-booking-transaction.mjs',import.meta.url),'utf8');
 const rules=readFileSync(new URL('./firestore-v1-restricted.rules',import.meta.url),'utf8');
 
-test('actual Depot booking transaction must read canonical Fleet, migration approval and mirror masters',()=>{
- assert.match(app,/import \{assessCanonicalBookingMaster\} from '\.\/canonical-booking-gate\.mjs'/);
- assert.match(app,/tx\.get\(doc\(db,'flottaSharedState','current'\)\)/);
- assert.match(app,/tx\.get\(doc\(db,'flottaMigrationApproval','current'\)\)/);
- assert.match(app,/tx\.get\(doc\(db,'drivers',driverId\)\)/);
- assert.match(app,/tx\.get\(doc\(db,'vehicles',vehicleId\)\)/);
- assert.match(app,/if\(!canonicalCheck\.ready\)throw Error\('Flotta–Depó adateltérés/);
- assert.ok(app.indexOf('const canonicalCheck=assessCanonicalBookingMaster') <
-  app.indexOf('tx.set(bRef,{date,vehicleId,driverId'),
-  'Validate inside transaction BEFORE writing booking');
- assert.match(app,/await runTransaction\(db,async tx=>/);
+test('Depot booking calls actual shared transaction adapter and awaits server acknowledgement',()=>{
+ assert.match(app,/import \{commitCanonicalDepotBooking\} from '\.\/canonical-booking-transaction\.mjs'/);
+ assert.match(app,/await commitCanonicalDepotBooking\(\{/);
+ assert.match(app,/sdk:\{doc,runTransaction\}/);
+ assert.match(app,/getCurrentUid:\(\)=>auth\.currentUser\?\.uid/);
+ assert.match(app,/offline:!navigator\.onLine/);
+ assert.ok(app.indexOf('await commitCanonicalDepotBooking(')<
+   app.indexOf("toast('Foglalás szerveroldalon visszaigazolva."),
+   'No success toast before server-acknowledged commit');
 });
-test('Rules must still prohibit direct booking update and require atomic driverClaim',()=>{
+test('transaction adapter re-reads approval, full Fleet and live mirror docs before BOTH writes',()=>{
+ assert.match(txn,/await sdk\.runTransaction\(db,async tx=>/);
+ assert.match(txn,/tx\.get\(refs\.fleet\)/);
+ assert.match(txn,/tx\.get\(refs\.approval\)/);
+ assert.match(txn,/tx\.get\(refs\.driver\)/);
+ assert.match(txn,/tx\.get\(refs\.vehicle\)/);
+ assert.match(txn,/assessCanonicalBookingMaster\(/);
+ assert.ok(txn.indexOf('assessCanonicalBookingMaster(') <
+   txn.indexOf('tx.set(refs.booking,'),'Canonical match MUST precede any writes');
+ assert.match(txn,/tx\.set\(refs\.booking,/);
+ assert.match(txn,/tx\.set\(refs\.driverClaim,/);
+ assert.match(txn,/return \{committed:true,\.\.\.confirmation\};/);
+ assert.doesNotMatch(txn,/applied:\s*true/);
+});
+test('Firestore Rules must enforce atomic reverse claim and source-linked approval',()=>{
  assert.match(rules,/match \/bookings\/\{bookingId\}/);
- assert.match(rules,/allow update: if false/);
+ assert.match(rules,/&& canonicalImportActive\(\)/);
  assert.match(rules,/existsAfter\(\/databases\/\$\(database\)\/documents\/driverClaims\//);
  assert.match(rules,/match \/driverClaims\/\{key\}/);
-});
-test('booking must not bypass source parity by looking only at stale UI state',()=>{
- const booking=app.slice(app.indexOf("else if(type==='booking')"),app.indexOf("else throw Error('Ismeretlen művelet.')"));
- assert.match(booking,/canonicalCheck/);
- assert.match(booking,/tx\.get\(doc\(db,'flottaSharedState','current'\)\)/);
- assert.doesNotMatch(booking,/setDoc\(bRef/);
- assert.doesNotMatch(booking,/writeBatch\(/);
+ assert.match(rules,/request\.resource\.data\.migrationSourceSha256 == resource\.data\.migrationSourceSha256/);
 });
