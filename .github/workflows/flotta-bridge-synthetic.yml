@@ -7,6 +7,7 @@ on:
       - 'features/fleet-depo-canonical-transition*'
       - 'features/s7-canonical-transaction*'
       - 'features/migration-size-probe*'
+      - 'features/fleet-backup-parity*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
   pull_request:
@@ -16,6 +17,7 @@ on:
       - 'features/fleet-depo-canonical-transition*'
       - 'features/s7-canonical-transaction*'
       - 'features/migration-size-probe*'
+      - 'features/fleet-backup-parity*'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
 permissions:
@@ -49,3 +51,5 @@ jobs:
         run: node --test features/s7-canonical-transaction.test.mjs
       - name: Offline Fleet 1 MiB native document preflight + integrity regression
         run: node --test features/migration-size-probe.test.mjs
+      - name: Full original four-array Fleet backup/restore SHA parity (offline synthetic)
+        run: node --test features/fleet-backup-parity.test.mjs

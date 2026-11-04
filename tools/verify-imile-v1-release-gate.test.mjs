@@ -8,7 +8,8 @@ const fixture=JSON.parse(fs.readFileSync(
 ));
 const copy=x=>JSON.parse(JSON.stringify(x));
 const repo='https://github.com/gwkq45tyzn-ctrl/flotta-nyilvantarto/';
-const sha='a'.repeat(40),artifact='b'.repeat(64),rules='c'.repeat(64),migration='d'.repeat(64);
+const sha='a'.repeat(40),artifact='b'.repeat(64),rules='c'.repeat(64),
+ migration='d'.repeat(64),scopeManifest='e'.repeat(64);
 
 function pretendCompleteApproval(){
   // FAKE DATA ONLY: tests consistency; cannot simulate real independent audit.
@@ -16,7 +17,9 @@ function pretendCompleteApproval(){
   Object.assign(f.releaseCandidate,{
     commitSha:sha,webArtifactSha256:artifact,firestoreRulesSha256:rules,
     migrationPlanSha256:migration,targetFirebaseProject:'synthetic-not-real',
-    targetEnvironment:'production',frozen:true
+    targetEnvironment:'production',frozen:true,scope:'fleet-depot-v1',
+    scopeManifestSha256:scopeManifest,
+    scopeManifestEvidenceUrl:repo+'blob/'+sha+'/docs/V1_NARROWED_SCOPE.md'
   });
   for(const name of ['grok','chatgpt']){
     const a=f.auditors[name];
@@ -24,18 +27,20 @@ function pretendCompleteApproval(){
       verdict:'GO',reviewedCandidateSha:sha,
       reviewedArtifactSha256:artifact,reviewedRulesSha256:rules,
       reviewedMigrationPlanSha256:migration,
+      reviewedScopeManifestSha256:scopeManifest,
       reviewedAt:'2026-11-03T20:00:00Z',
       independentReportUrl:repo+'blob/'+sha+'/docs/'+name+'-release-audit.md',
       openCriticalIssues:[]
     });
     for(const id of AUDIT_GATES){
-      a.gates[id]={result:'PASS',
+      a.gates[id]={result:id==='S8'?'EXCLUDED':'PASS',
         evidence:[repo+'actions/runs/1234567890']};
     }
   }
   f.userAuthorization={
     verdict:'GO',candidateSha:sha,artifactSha256:artifact,rulesSha256:rules,
-    migrationPlanSha256:migration,authorizedAt:'2026-11-03T20:01:00Z',
+    migrationPlanSha256:migration,scopeManifestSha256:scopeManifest,
+    authorizedAt:'2026-11-03T20:01:00Z',
     approvalReference:'test-only-synthetic-consent'
   };
   f.deployment={status:'BLOCKED',scheduled:false,performed:false};
@@ -108,4 +113,53 @@ test('user permission must reference exact artifact AND migration plan',()=>{
   const x=pretendCompleteApproval();
   x.userAuthorization.migrationPlanSha256='f'.repeat(64);
   assert.ok(codes(evaluateReleaseApproval(x)).includes('USER_migrationPlanSha256'));
+});
+
+test('report gate S8 may be EXCLUDED only for narrowed Fleet+Depot scope',()=>{
+  const x=pretendCompleteApproval();
+  assert.equal(x.auditors.grok.gates.S8.result,'EXCLUDED');
+  assert.equal(evaluateReleaseApproval(x).structurallyReady,true);
+  x.releaseCandidate.scope='full-v1';
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('SCOPE'));
+});
+test('marking S8 PASS in report-excluded V1 is a scope mismatch',()=>{
+  const x=pretendCompleteApproval();
+  x.auditors.chatgpt.gates.S8.result='PASS';
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('CHATGPT_S8'));
+});
+test('S8 exclusion without independently verifiable evidence still blocks GO',()=>{
+  const x=pretendCompleteApproval();
+  x.auditors.grok.gates.S8.evidence=[];
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('GROK_S8'));
+});
+test('S12 courier/PWA negative security proof is mandatory – NEVER excluded',()=>{
+  const x=pretendCompleteApproval();
+  x.auditors.grok.gates.S12.result='EXCLUDED';
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('GROK_S12'));
+  x.auditors.grok.gates.S12.result='PASS';
+  x.auditors.grok.gates.S12.evidence=[];
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('GROK_S12'));
+});
+test('not naming ALL deferred modules fails scope contract',()=>{
+  const x=pretendCompleteApproval();
+  x.releaseCandidate.excludedFeatures=['ofd-monitoring'];
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('SCOPE_EXCLUSIONS'));
+});
+test('scope manifest SHA and review URL must be supplied and content-addressed',()=>{
+  const x=pretendCompleteApproval();
+  x.releaseCandidate.scopeManifestSha256=null;
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('SCOPE_MANIFEST_SHA'));
+  x.releaseCandidate.scopeManifestSha256=scopeManifest;
+  x.releaseCandidate.scopeManifestEvidenceUrl='https://example.org/untrusted';
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('SCOPE_MANIFEST_EVIDENCE'));
+});
+test('Grok and ChatGPT must review SAME exact exclusion artifact',()=>{
+  const x=pretendCompleteApproval();
+  x.auditors.grok.reviewedScopeManifestSha256='f'.repeat(64);
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('GROK_SCOPE_MANIFEST'));
+});
+test('user must explicitly authorize exact scope artifact too',()=>{
+  const x=pretendCompleteApproval();
+  x.userAuthorization.scopeManifestSha256='f'.repeat(64);
+  assert.ok(codes(evaluateReleaseApproval(x)).includes('USER_SCOPE_MANIFEST'));
 });
