@@ -17,7 +17,7 @@ const vm = require('node:vm');
 const bridgeSource = fs.readFileSync(path.join(__dirname, 'firestore-bridge.js'), 'utf8');
 const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
 
-function makeHarness({ importVerified = false } = {}) {
+function makeHarness({ importVerified = false, sourceShaMismatch = false } = {}) {
   const storage = new Map(importVerified ? [['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']] : []);
   const session = new Map();
   const elements = {
@@ -31,7 +31,11 @@ function makeHarness({ importVerified = false } = {}) {
   let unlocked = false;
   let uploads = 0;
   let fleet = { vehicles: [{ id: 'synthetic-v1', km: 0 }], drivers: [], fuelCards: [], contacts: [] };
-  let remote = { ...structuredClone(fleet), revision: importVerified ? 1 : 0 };
+  let remote = {
+    ...structuredClone(fleet),
+    revision: importVerified ? 1 : 0,
+    ...(importVerified ? { migrationSourceSha256: (sourceShaMismatch ? 'b' : 'c').repeat(64) } : {})
+  };
   let releaseTransaction;
   const transactionBarrier = new Promise(resolve => { releaseTransaction = resolve; });
 
@@ -136,6 +140,8 @@ function makeHarness({ importVerified = false } = {}) {
     save: () => context.save(),
     setKm(km) { fleet.vehicles[0].km = km; },
     getRemoteKm: () => remote.vehicles[0].km,
+    getRemoteSha: () => remote.migrationSourceSha256,
+    stripRemoteSha() { delete remote.migrationSourceSha256; },
     getLocalKm: () => fleet.vehicles[0].km,
     pending: () => storage.has('flotta_pending_v16'),
     uploadCount: () => uploads,
@@ -166,4 +172,27 @@ test('two rapid saves cannot drop the second edit or erase its pending backup', 
   assert.equal(h.getRemoteKm(), 200,
     'The second edit was silently omitted from Firestore despite successful save status');
   assert.equal(h.pending(), false, 'Pending backup may be cleared only after latest edit is persisted');
+});
+
+test('mismatched imported Fleet SHA never authorizes a write', async () => {
+  const h = makeHarness({ importVerified: true, sourceShaMismatch: true });
+  await h.login();
+  assert.equal(h.isUnlocked(), true, 'Read-only Fleet UI should remain accessible');
+  h.setKm(170);
+  h.save();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.uploadCount(), 0, 'Wrong imported Fleet identity must not submit any writes');
+  assert.equal(h.getRemoteKm(), 0);
+});
+
+test('missing server Fleet SHA after verification cannot be silently removed by a save', async () => {
+  const h = makeHarness({ importVerified: true });
+  await h.login();
+  await new Promise(resolve => setImmediate(resolve));
+  h.stripRemoteSha(); // Test-only simulated corruption after initial verification.
+  h.setKm(150);
+  h.save();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.getRemoteKm(), 0, 'Missing source SHA must abort before commit');
+  assert.equal(h.pending(), true, 'Latest local change must remain recoverable on failed write');
 });
