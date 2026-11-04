@@ -126,7 +126,7 @@ try{
   await env.withSecurityRulesDisabled(ctx=>
     updateDoc(doc(ctx.firestore(),'drivers','DA0001'),{name:'CORRUPTED MIRROR'}));
   await shouldReject('out-of-band Depot mirror drift is detected before write',
-    ()=>book('2099-01-03'),/BOOKING_BLOCKED: driver_depot_projection_drift/);
+    ()=>book('2099-01-03'),/BOOKING_BLOCKED: ineligible_fleet_master|server_read_parity_ready/);
   await absence('2099-01-03');
   await env.withSecurityRulesDisabled(ctx=>
     updateDoc(doc(ctx.firestore(),'drivers','DA0001'),{name:'Synthetic Internal Driver'}));

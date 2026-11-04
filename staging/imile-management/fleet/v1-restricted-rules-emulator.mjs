@@ -44,7 +44,7 @@ const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
 const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
-const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[],drivers:[],fuelCards:[],contacts:[]});
+const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[{rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}],drivers:[{daCode:'TEST0001',status:'aktiv',kapacitas:50}],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
@@ -53,7 +53,8 @@ function bookFuture(date){
   const b=writeBatch(shared);
   b.set(doc(shared,'bookings',bookingId),{
     date,vehicleId:'TEST0001',driverId:'TEST0001',
-    district:'1',status:'planned',capacity:50
+    district:'1',status:'planned',capacity:50,
+    driverIndex:0,vehicleIndex:0
   });
   b.set(doc(shared,'driverClaims',date+'__TEST0001'),{
     date,driverId:'TEST0001',bookingId
