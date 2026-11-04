@@ -80,29 +80,41 @@ test('offline, cached, pending, stale, missing and future server confirmation al
   }
  }
 });
-test('extra or missing Depot mirror record blocks all operational lists',()=>{
- const base=good();
- const car=[...base.vehicleMirrors,{id:'XYZ999',plate:'XYZ999',model:'extra',status:'Elérhető'}];
- assert.equal(check({vehicleMirrors:car}).reason,'depot_mirror_drift');
- assert.equal(check({driverMirrors:[]}).reason,'depot_mirror_drift');
- assert.equal(check({driverMirrors:undefined}).reason,'depot_mirror_drift');
+test('extra or missing legacy Depot mirrors do not become the canonical operational source',()=>{
+ const base=good(),expected=check();
+ for(const partial of [
+  {vehicleMirrors:[...base.vehicleMirrors,{id:'XYZ999',plate:'XYZ999',model:'extra',status:'Elérhető'}]},
+  {driverMirrors:[]},{driverMirrors:undefined},{driverMirrors:null},
+  {vehicleMirrors:null}
+ ]){
+  const result=check(partial);
+  assert.equal(result.trusted,true,'Canonical Fleet remains the verified source');
+  assert.deepEqual(result.vehicles,expected.vehicles);
+  assert.deepEqual(result.drivers,expected.drivers);
+  assert.equal(result.vehicles.some(v=>v.id==='XYZ999'),false,'Forged mirror must not leak into lists');
+ }
 });
-test('out-of-band Depot master changes block every available car/driver',()=>{
+test('out-of-band legacy mirror changes cannot override Fleet master fields',()=>{
  const b=good();
  b.vehicleMirrors[0].status='Szerviz';
  let r=check({vehicleMirrors:b.vehicleMirrors});
- assert.equal(r.reason,'depot_mirror_drift');
- assert.deepEqual(r.vehicles,[]);
+ assert.equal(r.trusted,true);
+ assert.equal(r.vehicles[0].status,'Elérhető');
  const c=good();c.driverMirrors[0].name='Out of date';
  r=check({driverMirrors:c.driverMirrors});
- assert.equal(r.reason,'depot_mirror_drift');
- assert.deepEqual(r.drivers,[]);
+ assert.equal(r.trusted,true);
+ assert.equal(r.drivers[0].name,'Synthetic Courier');
 });
-test('original Fleet normalized master changes without projected updates block list',()=>{
+test('original Fleet changes update canonical lists without requiring legacy mirror writes',()=>{
  const b=source();b.vehicles[0].status='szerviz';
- assert.equal(check({fleet:b}).reason,'depot_mirror_drift');
+ let r=check({fleet:b});
+ assert.equal(r.trusted,true);
+ assert.equal(r.vehicles[0].status,'Szerviz');
+ assert.equal(r.vehicles.filter(v=>v.status==='Elérhető').length,0);
  b.vehicles[0].status='aktiv';b.drivers[0].name='Changed in Fleet';
- assert.equal(check({fleet:b}).trusted,false);
+ r=check({fleet:b});
+ assert.equal(r.trusted,true);
+ assert.equal(r.drivers[0].name,'Changed in Fleet');
 });
 test('original history-only changes do not alter strict projection',()=>{
  const b=source();b.vehicles[0].history[0].note='updated internally';
