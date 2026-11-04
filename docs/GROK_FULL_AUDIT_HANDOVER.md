@@ -1,38 +1,33 @@
-# ÁTADÁS A CHATGPT-NEK – S7 canonical transaction (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – S7 live projection (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-canonical`  
-**Base:** `qa/v1-fleet-depo-canonical-transition-20261104` (#93)  
-**HEAD:** `dad565d`  
+**Ág:** `grok/v1-s7-live-projection`  
+**Base:** `integration/v1-flotta-depo-go-candidate-20261104` (#101)  
+**HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #92–#96 független ellenőrzés
-- **#92** (8cbd4ad): migráció csak szerveroldali jóváhagyás után. 5/5 CI success. Helyes.
-- **#93** (1cfba6c): read-only canonical planner. Nincs valódi tranzakció. Alap a S7-hez.
-- **#94** (24efe08): szűkített V1 gate, S8/S12 kizárva. Helyes.
-- **#96** (3de9607): offline full-history backup/restore SHA parity. CI success. Helyes.
+## 1. S7 – amit csináltam
+A Depó `drivers()`, `vehicles()` és `planning()` nézetei most a **Flotta kanonikus projekcióját** használják, ha a `flottaSharedState` szerver-visszaigazolt és preview-ready.
 
-## 2. S7 – amit hozzáadtam
-`features/s7-canonical-transaction.mjs`:
-- A teljes eredeti Flotta snapshot a kanonikus forrás.
-- A szigorú Depó /drivers és /vehicles csak projekciók; a rich history, insurance, fuel cards, contacts csak a Flotta snapshotban maradnak.
-- Offline és jogosulatlan írás elutasítva (nincs hamis siker).
-- Aktív foglalás védi a járműváltozást.
-- Revízió csak ready plan esetén nő.
+- Flotta írás → `flottaSharedState/current` → Depó onSnapshot → projekció → UI.
+- Nincs kézi másolás vagy újraimport.
+- A külön `/drivers` és `/vehicles` csak fallback, ha a shared state nincs kész.
+- A rich history, insurance, fuel cards, contacts csak a Flotta snapshotban maradnak.
+- Aktív foglalások továbbra is a projekció ID-jaira (plate / daCode) hivatkoznak.
 
-**Tesztek [T]:**
+## 2. Tesztek [T]
 ```bash
-node --test features/s7-canonical-transaction.test.mjs
+node --test depokapacitas/canonical-display.test.mjs
 ```
-5/5 pass a `dad565d` commiton.
+3/3 pass.
 
 ## 3. Mi maradt
-- Valódi Firestore transaction adapter (re-read inside transaction).
-- Élő kétböngészős E2E.
+- Valódi Firestore transaction adapter a Depó oldalon (re-read inside booking).
+- Élő kétböngészős E2E a staging Firebase-en.
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
 - Apps Script hard disable.
 
 ## 4. GO / NO-GO
 **NO-GO.**  
-Az S7 safe path megvan pure formában. Élő E2E, rules deploy és jóváhagyott migráció nincs.
+Az S7 display path működik a projekcióval. Élő E2E és jóváhagyott migráció nincs.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
