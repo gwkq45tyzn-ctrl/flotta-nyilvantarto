@@ -197,6 +197,20 @@ try{
   await expectPermission('forged normalizedPlate cannot authorize a different original plate',false,
     ()=>bookFuture('2099-01-07'));
   await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),fleetData(2)));
+  // Canonical Fleet capacity must work when old Depot drivers/capacity mirrors
+  // do not exist. These records are intentionally removed only in the emulator.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await deleteDoc(doc(db,'driverCapacities','TEST0001'));
+    await deleteDoc(doc(db,'drivers','TEST0001'));
+  });
+  await expectPermission('Fleet kapacitas permits booking without any legacy Depot driver mirror',true,
+    ()=>bookFuture('2099-01-08'));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(doc(db,'driverCapacities','TEST0001'),{capacity:50});
+    await setDoc(doc(db,'drivers','TEST0001'),driver('TEST0001'));
+  });
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,
