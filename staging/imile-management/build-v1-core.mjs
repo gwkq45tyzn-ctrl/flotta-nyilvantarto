@@ -38,7 +38,7 @@ const seeds=[
 const deny=p=>/(^|\/)(?:reports|qa|attendance|courier|photo|node_modules)(?:\/|$)/i.test(p)
   || /\.(?:gs|xlsx?|csv|env|pem|key|p12)$/i.test(p)
   || /(^|\/)(?:firebase-admin|service-account|credentials|private[-_]backup)(?:\/|$)/i.test(p)
-  || /(^|\/)fleet\/(?:index|operations|master|app|availability|operations-data|operations-store)/i.test(p);
+  || /(^|\/)fleet\/(?:index\.html|operations(?:\.html|\.css|-app\.mjs|-store\.mjs)|master(?:-data|-editor)?\.mjs|app\.mjs|availability\.mjs)/i.test(p);
 const queue=[...seeds],included=new Map();
 function safePath(source,reference){
   if(!reference.startsWith('.')) return null;  // CDN or bare import
@@ -111,6 +111,16 @@ try{
     "$('fleetMasterLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled);",
     "$('fleetMasterLink').hidden=true; // Prototype unavailable in narrowed V1");
   writeFileSync(module,app);
+
+  // Fleet warning schemas are a PURE helper imported by the shared alert
+  // aggregator, not the prototype's UI. Retain the helper but point alert
+  // actions back at the full original Fleet, never a prototype link.
+  const alertsFile=join(target,'staging/imile-management/central-alerts.mjs');
+  let alerts=readFileSync(alertsFile,'utf8');
+  const prototypeTarget="actionUrl:'../staging/imile-management/fleet/operations.html'";
+  if(!alerts.includes(prototypeTarget))throw Error('Fleet alert target changed: re-review required');
+  alerts=alerts.replace(prototypeTarget,"actionUrl:'../index.html'");
+  writeFileSync(alertsFile,alerts);
 
   // Hide deferred *views* in the core Depot navigation only. The V1 runner is
   // not an authorization substitute: actual Firestore Rules must deny PWA.
