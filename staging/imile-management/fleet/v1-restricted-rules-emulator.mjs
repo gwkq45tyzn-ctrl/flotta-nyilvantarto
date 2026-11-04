@@ -44,7 +44,7 @@ const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
 const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
-const fleetData=(revision)=>({revision,vehicles:[],drivers:[],fuelCards:[],contacts:[]});
+const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[],drivers:[],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
