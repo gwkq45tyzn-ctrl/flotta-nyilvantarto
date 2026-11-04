@@ -161,6 +161,70 @@ try{
     ()=>book('2099-01-08',{getCurrentUid:()=>unauthorizedUid}),/session_changed/);
   await absence('2099-01-07');
   await absence('2099-01-08');
+
+  // P0 RELEASE-BLOCKER EVIDENCE: the existing restricted Rules allow a FULL
+  // original Fleet master edit but correctly freeze standalone Depot mirrors.
+  // This is deliberately a *positive demonstration of the defect*, not a
+  // shipping workaround. Grok/Claude must design true one-source semantics.
+  const originalSnapshot=(await getDoc(doc(shared,'flottaSharedState','current'))).data();
+  const modifiedDrivers=structuredClone(originalSnapshot.drivers);
+  modifiedDrivers[0].name='SYNTHETIC CHANGED IN ORIGINAL FLEET';
+  await updateDoc(doc(shared,'flottaSharedState','current'),{
+    revision:originalSnapshot.revision+1,drivers:modifiedDrivers
+  });
+  const driverEdited=(await getDoc(doc(shared,'flottaSharedState','current'))).data();
+  assert.equal(driverEdited.drivers[0].name,'SYNTHETIC CHANGED IN ORIGINAL FLEET');
+  assert.deepEqual(driverEdited.vehicles,originalSnapshot.vehicles);
+  assert.deepEqual(driverEdited.fuelCards,originalSnapshot.fuelCards);
+  assert.deepEqual(driverEdited.contacts,originalSnapshot.contacts);
+  assert.deepEqual(driverEdited.drivers[0].history,originalSnapshot.drivers[0].history,
+    'Rich original Fleet driver history must survive its master edit');
+  await shouldReject('P0 master driver edit accepted by Fleet but Depot booking now blocked by stale mirror',
+    ()=>book('2099-01-09'),/BOOKING_BLOCKED: driver_depot_projection_drift/);
+  await absence('2099-01-09');
+  await shouldReject('P0 browser cannot repair strict driver mirror outside approved architecture',
+    ()=>updateDoc(doc(shared,'drivers','DA0001'),{
+      name:'SYNTHETIC CHANGED IN ORIGINAL FLEET'
+    }),/permission-denied|Missing or insufficient permissions|PERMISSION_DENIED/i);
+  console.log('PASS [E] P0 NO-GO witness: Fleet committed driver edit, Depot cannot book and mirror cannot legally update');
+  passed++;
+
+  // A booked car is allowed to enter service in the original Fleet record
+  // while its previously committed future booking remains. This is a
+  // concrete occupancy/master-integrity issue that needs server-side design.
+  const serviceVehicles=structuredClone(originalSnapshot.vehicles);
+  serviceVehicles[0].status='szerviz';
+  await updateDoc(doc(shared,'flottaSharedState','current'),{
+    revision:driverEdited.revision+1,
+    drivers:originalSnapshot.drivers,
+    vehicles:serviceVehicles
+  });
+  const carEdited=(await getDoc(doc(shared,'flottaSharedState','current'))).data();
+  assert.equal(carEdited.vehicles[0].status,'szerviz');
+  assert.equal((await getDoc(doc(shared,'bookings','2099-01-01__ABC123'))).data()?.status,
+    'planned','Previously committed future booking still exists for now-service car');
+  await shouldReject('P0 Fleet car service edit causes old Depot vehicle projection mismatch',
+    ()=>book('2099-01-10'),/BOOKING_BLOCKED: vehicle_depot_projection_drift/);
+  await absence('2099-01-10');
+  console.log('PASS [E] P0 NO-GO witness: in-service Fleet car retains existing future booking, new booking blocked by stale mirror');
+  passed++;
+
+  // Restore just synthetic ORIGINAL Fleet masters, without touching any
+  // Depot mirror or external data. Its rich nonmaster fields stay unchanged.
+  await updateDoc(doc(shared,'flottaSharedState','current'),{
+    revision:carEdited.revision+1,
+    drivers:originalSnapshot.drivers,vehicles:originalSnapshot.vehicles
+  });
+  const restored=(await getDoc(doc(shared,'flottaSharedState','current'))).data();
+  assert.deepEqual(restored.vehicles,originalSnapshot.vehicles);
+  assert.deepEqual(restored.drivers,originalSnapshot.drivers);
+  assert.deepEqual(restored.fuelCards,originalSnapshot.fuelCards);
+  assert.deepEqual(restored.contacts,originalSnapshot.contacts);
+  assert.equal((await book('2099-01-11')).committed,true,
+    'Only after a synthetic Fleet rollback to exact matching masters can booking resume');
+  console.log('PASS [E] P0 NO-GO witness: restoring source master data reopens booking, but edit was never synchronized');
+  passed++;
+
   console.log('PASS LOCAL EMULATOR canonical Depot actual transaction regression: '+passed+' verified cases (NO LIVE CLOUD)');
 }finally{
   await env.cleanup();
