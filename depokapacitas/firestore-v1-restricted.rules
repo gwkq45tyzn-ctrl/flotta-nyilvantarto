@@ -498,6 +498,10 @@ service cloud.firestore {
         && request.resource.data.status in ['planned','confirmed']
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
+        // S7: also require the selected master to be in the Flotta canonical
+        // eligibility lists. Mirrors alone are not sufficient.
+        && request.resource.data.driverId in get(/databases/$(database)/documents/flottaSharedState/current).data.eligibleDrivers
+        && request.resource.data.vehicleId in get(/databases/$(database)/documents/flottaSharedState/current).data.eligibleVehicles
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
         // Both documents must be written in one transaction. This prevents double booking.
@@ -934,7 +938,7 @@ service cloud.firestore {
         && resource.data.migrationSourceSha256 is string
         && resource.data.migrationSourceSha256 == get(/databases/$(database)/documents/flottaMigrationApproval/current).data.sourceSha256
         && request.resource.data.migrationSourceSha256 == resource.data.migrationSourceSha256
-        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision','migrationSourceSha256'])
+        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision','migrationSourceSha256','eligibleDrivers','eligibleVehicles'])
         && request.resource.data.revision is int
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.vehicles is list

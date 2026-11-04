@@ -261,6 +261,7 @@
         }
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
+        const projected = projectStrictMasters(draft);
         const payload = {
           vehicles: draft.vehicles || [],
           fuelCards: draft.fuelCards || [],
@@ -268,6 +269,8 @@
           contacts: draft.contacts || [],
           revision: next,
           migrationSourceSha256: existing.migrationSourceSha256 || '',
+          eligibleDrivers: projected.drivers.filter(d => d.data.active).map(d => d.id),
+          eligibleVehicles: projected.vehicles.filter(v => v.data.status === 'Elérhető').map(v => v.id),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy: auth.currentUser.uid
         };
