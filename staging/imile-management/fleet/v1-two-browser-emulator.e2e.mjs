@@ -14,7 +14,7 @@ import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
 import {chromium} from 'playwright';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc,updateDoc} from 'firebase/firestore';
+import {doc,setDoc,getDoc,updateDoc,Timestamp} from 'firebase/firestore';
 
 const project='demo-imile-qa';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
@@ -51,8 +51,14 @@ try{
   await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
     await setDoc(doc(db,'users',uid),{name:'SYNTHETIC ADMIN',active:true,role:'admin'});
+    // A browser must not be able to invent initial migration data or approval.
+    // Seed BOTH solely through the synthetic emulator's privileged test context.
     await setDoc(doc(db,'flottaSharedState','current'),{
       revision:1,vehicles:[],drivers:[],fuelCards:[],contacts:[]
+    });
+    await setDoc(doc(db,'flottaMigrationApproval','current'),{
+      status:'approved',approvedUid:uid,sourceSha256:'e'.repeat(64),
+      approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
     });
   });
 
