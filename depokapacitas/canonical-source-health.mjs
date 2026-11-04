@@ -41,12 +41,8 @@ export function assessCanonicalMasterDisplay({
       return blocked('unconfirmed_or_stale_source_'+name);
   }
 
-  const plan=planCanonicalMasterTransition({
-    previousFleet:fleet,nextFleet:fleet,
-    liveDrivers:driverMirrors,liveVehicles:vehicleMirrors,bookings:[]
-  });
-  if(!plan.ready)return blocked('depot_mirror_drift',
-    (plan.issues||[]).slice(0,10).map(i=>({kind:i.kind,reason:i.reason})));
+  // S7: Flotta is the single canonical source. Mirror parity is not required.
+  // Display and booking use the Flotta projection directly.
   let projected;
   try{projected=planSharedMigration(fleet);}
   catch(_){return blocked('invalid_original_fleet_structure');}

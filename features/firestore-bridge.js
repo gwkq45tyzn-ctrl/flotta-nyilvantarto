@@ -262,9 +262,8 @@
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
         const projected = projectStrictMasters(draft);
-        const plate = s => String(s || '').replace(/[\s-]/g, '').toUpperCase();
         const payload = {
-          vehicles: (draft.vehicles || []).map(v => ({ ...v, normalizedPlate: plate(v.rendszam) })),
+          vehicles: draft.vehicles || [],
           fuelCards: draft.fuelCards || [],
           drivers: draft.drivers || [],
           contacts: draft.contacts || [],

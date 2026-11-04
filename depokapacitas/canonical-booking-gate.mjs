@@ -47,14 +47,8 @@ export function assessCanonicalBookingMaster({
   const driver=plan.writes.drivers.find(x=>x.id===driverId);
   const vehicle=plan.writes.vehicles.find(x=>x.id===vehicleId);
   if(!driver||!vehicle)return blocked('booking_master_not_in_original_fleet');
-  if(!depotDriver||depotDriver.id!==driverId||
-     !strictEquals(Object.fromEntries(
-       Object.entries(depotDriver).filter(([k])=>k!=='id')),driver.data))
-    return blocked('driver_depot_projection_drift');
-  if(!depotVehicle||depotVehicle.id!==vehicleId||
-     !strictEquals(Object.fromEntries(
-       Object.entries(depotVehicle).filter(([k])=>k!=='id')),vehicle.data))
-    return blocked('vehicle_depot_projection_drift');
+  // S7: Flotta is the single canonical source. Mirrors are not required.
+  // Eligibility is determined solely by the Flotta projection.
   if(driver.data.active!==true||vehicle.data.status!=='Elérhető')
     return blocked('ineligible_fleet_master');
 
