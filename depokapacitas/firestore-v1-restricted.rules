@@ -346,22 +346,25 @@ service cloud.firestore {
       allow read: if member();
       // Before import: admin may seed. After import: only the same transaction
       // that updates flottaSharedState may project the strict master.
-      allow create, update: if admin()
-        && !exists(/databases/$(database)/documents/flottaSharedState/current)
-        && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
-        && validDriverCode(driverId)
-        && request.resource.data.daCode == driverId
-        && textField(request.resource.data.name,160)
-        && optionalText(request.resource.data.vendor,160)
-        && nonNegative(request.resource.data.capacity,10000)
-        && request.resource.data.active is bool
-        || (editor()
-            && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
-            && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
-               get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
-            && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
-            && validDriverCode(driverId)
-            && request.resource.data.daCode == driverId);
+      allow create, update: if (
+          admin()
+          && !exists(/databases/$(database)/documents/flottaSharedState/current)
+          && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
+          && validDriverCode(driverId)
+          && request.resource.data.daCode == driverId
+          && textField(request.resource.data.name,160)
+          && optionalText(request.resource.data.vendor,160)
+          && nonNegative(request.resource.data.capacity,10000)
+          && request.resource.data.active is bool
+        ) || (
+          editor()
+          && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
+          && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
+             get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
+          && exactFields(request.resource.data,['name','daCode','vendor','capacity','active'])
+          && validDriverCode(driverId)
+          && request.resource.data.daCode == driverId
+        );
       allow delete: if false;
     }
 
@@ -369,21 +372,24 @@ service cloud.firestore {
       allow read: if member() || courier();
       // Direct SDK/old-client mirror edits are denied after canonical import.
       // After import, only the same transaction that updates flottaSharedState may project.
-      allow create, update: if admin()
-        && !exists(/databases/$(database)/documents/flottaSharedState/current)
-        && exactFields(request.resource.data,['plate','model','status'])
-        && validVehiclePlate(vehicleId)
-        && request.resource.data.plate == vehicleId
-        && optionalText(request.resource.data.model,160)
-        && request.resource.data.status in ['Elérhető','Szerviz','Leállított']
-        || (editor()
-            && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
-            && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
-               get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
-            && exactFields(request.resource.data,['plate','model','status'])
-            && validVehiclePlate(vehicleId)
-            && request.resource.data.plate == vehicleId
-            && request.resource.data.status in ['Elérhető','Szerviz','Leállított']);
+      allow create, update: if (
+          admin()
+          && !exists(/databases/$(database)/documents/flottaSharedState/current)
+          && exactFields(request.resource.data,['plate','model','status'])
+          && validVehiclePlate(vehicleId)
+          && request.resource.data.plate == vehicleId
+          && optionalText(request.resource.data.model,160)
+          && request.resource.data.status in ['Elérhető','Szerviz','Leállított']
+        ) || (
+          editor()
+          && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
+          && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
+             get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
+          && exactFields(request.resource.data,['plate','model','status'])
+          && validVehiclePlate(vehicleId)
+          && request.resource.data.plate == vehicleId
+          && request.resource.data.status in ['Elérhető','Szerviz','Leállított']
+        );
       allow delete: if false;
     }
 
