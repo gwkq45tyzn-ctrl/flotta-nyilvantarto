@@ -16,15 +16,20 @@ import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs
 import {decodeCsv} from './import-encoding.mjs';
 import {assessSources,liveIndicatorPresentation} from './source-health.mjs';
 import {commitCanonicalDepotBooking} from './canonical-booking-transaction.mjs';
+import {assessCanonicalMasterDisplay} from './canonical-source-health.mjs';
 
 const $=id=>document.getElementById(id);
-const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[]},unsubscribe:[],loaded:new Set(),errors:new Set(),sharedFleet:emptySharedFleetPreview()};
+const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[]},unsubscribe:[],loaded:new Set(),errors:new Set(),sharedFleet:emptySharedFleetPreview(),canonicalFleetRaw:null,canonicalApproval:null,canonicalMaster:{trusted:false,drivers:[],vehicles:[]}};
 const names={overview:'Áttekintés',alerts:'Összes teendő',planning:'Beosztás és foglalás',drivers:'Futárok',vehicles:'Autók',sharedFleet:'Közös Flotta-törzs (előnézet)',demands:'Kerületi csomagigény',results:'Futárteljesítmény',attendance:'Jelenlét és fotók',import:'Excel és adatok',admin:'Flotta import ellenőrzése'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n||0).toLocaleString('hu-HU');
 const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:state.date;
 const number=v=>Math.max(0,Math.floor(Number(v)||0));
-const get=name=>state.data[name]||[];
+// Original Fleet is the ONLY operational source for driver/car lists after
+// server-verified migration and complete strict Depot mirror parity.
+const get=name=>['drivers','vehicles'].includes(name)
+  ?(state.canonicalMaster?.trusted?state.canonicalMaster[name]:[])
+  :(state.data[name]||[]);
 const byId=(name,id)=>get(name).find(x=>x.id===id);
 const canWrite=()=>['admin','editor'].includes(state.role);
 const datestr=d=>new Date(d+'T12:00:00').toLocaleDateString('hu-HU',{year:'numeric',month:'long',day:'numeric'});
@@ -260,21 +265,35 @@ const watchedCollections=[
  'drivers','vehicles','driverCapacities','bookings','demands','results',
  'attendance','sourceRows','fleetRecords','fleetAssignments'
 ];
-const liveSources=[...watchedCollections,'flottaSharedState'];
+const liveSources=[...watchedCollections,'flottaSharedState','flottaMigrationApproval'];
+function refreshCanonicalMaster(){
+ state.canonicalMaster=assessCanonicalMasterDisplay({
+  fleet:state.canonicalFleetRaw,
+  approval:state.canonicalApproval,
+  uid:state.uid,driverMirrors:state.data.drivers,
+  vehicleMirrors:state.data.vehicles,sourceMeta:state.sourceMeta,
+  online:navigator.onLine
+ });
+ return state.canonicalMaster;
+}
 function updateLiveIndicator(){
  if($('shell').hidden)return;
  const health=assessSources(state.sourceMeta,{
   online:navigator.onLine,required:liveSources
  });
+ const canonical=refreshCanonicalMaster();
  const label=liveIndicatorPresentation(health);
- $('liveIndicator').textContent=label.text;
- $('liveIndicator').classList.toggle('off',!label.trusted);
- $('dataStamp').textContent=label.trusted&&health.confirmedAt
-  ?'Minden forrás visszaigazolva: '+new Date(health.confirmedAt).toLocaleTimeString('hu-HU')
-  :'Nem minden adatforrás kapott friss szerveri visszaigazolást';
+ const trusted=label.trusted&&canonical.trusted;
+ $('liveIndicator').textContent=trusted
+  ?'● Élő Flotta–Depó kapcsolat · kanonikus törzs egyezik'
+  :canonical.trusted?label.text:'● Flotta–Depó törzs zárolva · '+canonical.reason;
+ $('liveIndicator').classList.toggle('off',!trusted);
+ $('dataStamp').textContent=trusted&&health.confirmedAt
+  ?'Minden kanonikus forrás visszaigazolva: '+new Date(health.confirmedAt).toLocaleTimeString('hu-HU')
+  :'Hiányzó migrációs jóváhagyás vagy nem egyező törzsadat: foglalás nem hitelesíthető';
 }
 function listen(){
- for(const un of state.unsubscribe)un();state.unsubscribe=[];state.sharedFleet=emptySharedFleetPreview();state.loaded=new Set();state.errors=new Set();state.sourceMeta={};
+ for(const un of state.unsubscribe)un();state.unsubscribe=[];state.sharedFleet=emptySharedFleetPreview();state.canonicalFleetRaw=null;state.canonicalApproval=null;state.canonicalMaster={trusted:false,drivers:[],vehicles:[]};state.loaded=new Set();state.errors=new Set();state.sourceMeta={};
  updateLiveIndicator();
  for(const name of watchedCollections){
   const unsub=onSnapshot(collection(db,name),{includeMetadataChanges:true},snap=>{
@@ -302,17 +321,44 @@ function listen(){
    if(exists)state.errors.delete('flottaSharedState');
    else state.errors.add('flottaSharedState');
    state.sharedFleet=projectSharedFleetSnapshot(exists?snap.data():null,meta);
+   state.canonicalFleetRaw=confirmed&&exists?snap.data():null;
    updateLiveIndicator();
-   if(state.view==='sharedFleet')render();
+   render();
  },err=>{
    console.error('flottaSharedState/current',err);
    state.errors.add('flottaSharedState');
    state.sourceMeta.flottaSharedState={...state.sourceMeta.flottaSharedState,loaded:false,error:true};
    state.sharedFleet={...emptySharedFleetPreview(),status:'unavailable',note:'A Flotta közös dokumentum nem olvasható. Nem történt adatátvitel.'};
+   state.canonicalFleetRaw=null;
    updateLiveIndicator();
-   if(state.view==='sharedFleet')render();
+   render();
  });
  state.unsubscribe.push(unsubFleet);
+ // Privileged migration approval is browser-immutable in the V1 Rules.
+ // A cached, pending, missing, revoked or mismatched source closes every
+ // canonical master list rather than presenting stale Depot-only records.
+ const unsubApproval=onSnapshot(doc(db,'flottaMigrationApproval','current'),{includeMetadataChanges:true},snap=>{
+   const exists=snap.exists(),meta=snap.metadata;
+   const confirmed=exists&&!meta.fromCache&&!meta.hasPendingWrites;
+   state.canonicalApproval=confirmed&&exists?snap.data():null;
+   state.sourceMeta.flottaMigrationApproval={
+     loaded:exists,fromCache:meta.fromCache,pending:meta.hasPendingWrites,
+     error:!exists,
+     serverAt:confirmed?Date.now():state.sourceMeta.flottaMigrationApproval?.serverAt
+   };
+   if(exists)state.errors.delete('flottaMigrationApproval');
+   else state.errors.add('flottaMigrationApproval');
+   updateLiveIndicator();render();
+ },err=>{
+   console.error('flottaMigrationApproval/current',err);
+   state.canonicalApproval=null;
+   state.errors.add('flottaMigrationApproval');
+   state.sourceMeta.flottaMigrationApproval={
+     ...state.sourceMeta.flottaMigrationApproval,loaded:false,error:true
+   };
+   updateLiveIndicator();render();
+ });
+ state.unsubscribe.push(unsubApproval);
 }
 async function saveForm(type,values){if(!canWrite()&&type!=='user')throw Error('Csak belső szerkesztő módosíthat.');let col,id,obj;
 if(type==='driver'){throw Error('A futártörzs a Flotta kezelésében van. A közös rekordokat a Kapacitáskezelőben nem módosítjuk.');col='drivers';id=(values.daCode||'').trim().toUpperCase();if(!id)throw Error('Hiányzó DA-kód.');obj={name:values.name.trim(),daCode:id,vendor:values.vendor.trim(),capacity:number(values.capacity),active:true};}
@@ -478,5 +524,5 @@ else {
  $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const f=new FormData(e.target);try{const loginEmail=String(f.get('email')).trim().toLowerCase();if(loginEmail!==SHARED_LOGIN_EMAIL)throw Error('Shared login only');await signInWithEmailAndPassword(auth,loginEmail,String(f.get('password')));}catch(ex){$('loginError').textContent='Hibás belépési adatok, letiltott fiók vagy nem elérhető szolgáltatás.';}});
  $('logout').addEventListener('click',()=>signOut(auth));
  $('signoutDenied').addEventListener('click',()=>signOut(auth));
- onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}if(!isSharedFirebaseUser(user)){showOnly('denied');return;}try{const r=await getDocFromServer(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
+ onAuthStateChanged(auth,async user=>{for(const un of state.unsubscribe)un();state.unsubscribe=[];state.canonicalFleetRaw=null;state.canonicalApproval=null;state.canonicalMaster={trusted:false,drivers:[],vehicles:[]};if(!user){state.profile=null;state.uid=null;window.location.replace('../staging/imile-management/index.html');return;}if(!isSharedFirebaseUser(user)){showOnly('denied');return;}try{const r=await getDocFromServer(doc(db,'users',user.uid));if(!r.exists()||r.data().active!==true||!['admin','editor','viewer'].includes(r.data().role)){showOnly('denied');return;}state.uid=user.uid;state.profile=r.data();state.role=r.data().role;$('userSummary').textContent=(state.profile.name||user.email)+' · '+state.role;showOnly('shell');listen();}catch(ex){showOnly('denied');toast('Nem sikerült ellenőrizni a belső jogosultságot.',true);}});
 }
