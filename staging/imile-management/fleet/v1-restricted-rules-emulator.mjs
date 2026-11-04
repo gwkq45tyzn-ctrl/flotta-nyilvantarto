@@ -112,7 +112,7 @@ try{
     'users','drivers','vehicles','bookings','attendance','fleetRecords',
     'performanceDays','inventoryDays','courierDayPlans','flottaSharedState','flottaMigrationApproval'
   ]){
-    const id=collection==='users'?uid:collection==='flottaSharedState'?'current':'SYNTH1';
+    const id=collection==='users'?uid:['flottaSharedState','flottaMigrationApproval'].includes(collection)?'current':'SYNTH1';
     await expectPermission('valid shared can get '+collection,true,
       ()=>getDoc(doc(shared,collection,id)));
   }
@@ -193,7 +193,7 @@ try{
   await env.withSecurityRulesDisabled(ctx=>
     setDoc(user(ctx.firestore(),uid),{name:'SYNTHETIC REVOKED',active:false,role:'admin'}));
   for(const collection of ['users','drivers','vehicles','fleetRecords','bookings','flottaSharedState']){
-    const id=collection==='users'?uid:collection==='flottaSharedState'?'current':'SYNTH1';
+    const id=collection==='users'?uid:['flottaSharedState','flottaMigrationApproval'].includes(collection)?'current':'SYNTH1';
     await expectPermission('revoked user cannot read '+collection,false,
       ()=>getDoc(doc(shared,collection,id)));
   }
