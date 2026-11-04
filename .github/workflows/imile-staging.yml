@@ -66,6 +66,10 @@ jobs:
           node --test depokapacitas/canonical-booking-gate.test.mjs
           node --test depokapacitas/canonical-booking-integration.test.mjs
           node --check depokapacitas/app.js
+      - name: V1 S7 eredeti Flotta a Depó egyetlen operatív törzsforrása
+        run: |
+          node --test depokapacitas/canonical-source-health.test.mjs
+          node --test depokapacitas/canonical-source-health.integration.test.mjs
       - name: Eredeti Flotta-törzs – csak olvasható szerveri előnézet
         run: |
           node depokapacitas/flotta-master-readonly.test.mjs
