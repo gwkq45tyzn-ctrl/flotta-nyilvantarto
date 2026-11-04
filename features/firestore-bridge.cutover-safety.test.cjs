@@ -17,6 +17,7 @@ const originalHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SHARED_EMAIL = 'imilemanagement@imile-management-staging.firebaseapp.com';
 
 function mockBridge({importVerified = false, failTransactions = false} = {}) {
+  // Local flags are deliberately NEVER sufficient; the server mock below must also approve.
   const storage = new Map(importVerified ? [['flotta_import_verified', '1'], ['flotta_migration_token', 'verified-import']] : []);
   const sessions = new Map();
   const delayedMicrotasks = [];
@@ -52,9 +53,17 @@ function mockBridge({importVerified = false, failTransactions = false} = {}) {
     settings(){},
     doc(name){
       return {
-        async get(){
-          assert.equal(name,'users/'+mockUser.uid);
-          return {exists:true,data:()=>({active:true,role:'admin'})};
+        async get(options){
+          assert.equal(options?.source,'server','Migration authorization must never use a cache');
+          if(name==='users/'+mockUser.uid)
+            return {exists:true,data:()=>({active:true,role:'admin'})};
+          if(name==='flottaMigrationApproval/current')
+            return {exists:importVerified,data:()=>({
+              status:'approved',approvedUid:mockUser.uid,sourceSha256:'a'.repeat(64)
+            })};
+          if(name==='flottaSharedState/current')
+            return {exists:importVerified,data:()=>({...localSnapshot,revision:1})};
+          throw Error('Unexpected server read: '+name);
         },
         onSnapshot(){return ()=>{};}
       };
