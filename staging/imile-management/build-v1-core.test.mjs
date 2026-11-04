@@ -26,6 +26,11 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.ok(gate.files.includes('features/firestore-bridge.js'));
     assert.ok(gate.files.includes('depokapacitas/app.js'));
     assert.ok(gate.files.includes('staging/imile-management/index.html'));
+    // Pure schema/alert helper can remain, but no prototype user interface.
+    assert.ok(gate.files.includes('staging/imile-management/fleet/operations-data.mjs'));
+    const alerts=readFileSync(join(dest,'staging/imile-management/central-alerts.mjs'),'utf8');
+    assert.match(alerts,/actionUrl:'\.\.\/index\.html'/);
+    assert.doesNotMatch(alerts,/fleet\/operations\.html/);
     assert.ok(gate.files.every(p=>!/(^|\/)(reports|qa|courier|attendance|photo|node_modules)(\/|$)/i.test(p)),JSON.stringify(gate.files));
     assert.equal(existsSync(join(dest,'staging/imile-management/reports/index.html')),false);
     assert.equal(existsSync(join(dest,'staging/imile-management/fleet/operations.html')),false);
