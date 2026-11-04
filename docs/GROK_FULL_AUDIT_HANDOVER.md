@@ -1,38 +1,34 @@
-# ÁTADÁS A CHATGPT-NEK – S7 canonical transaction (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – S7 no-fallback (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-canonical`  
-**Base:** `qa/v1-fleet-depo-canonical-transition-20261104` (#93)  
-**HEAD:** `dad565d`  
+**Ág:** `grok/v1-s7-no-fallback`  
+**Base:** `qa/v1-depo-single-canonical-display-20261104` (#102)  
+**HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #92–#96 független ellenőrzés
-- **#92** (8cbd4ad): migráció csak szerveroldali jóváhagyás után. 5/5 CI success. Helyes.
-- **#93** (1cfba6c): read-only canonical planner. Nincs valódi tranzakció. Alap a S7-hez.
-- **#94** (24efe08): szűkített V1 gate, S8/S12 kizárva. Helyes.
-- **#96** (3de9607): offline full-history backup/restore SHA parity. CI success. Helyes.
+## 1. #102 független ellenőrzés
+A #102 `assessCanonicalMasterDisplay` helyes: csak szerver-visszaigazolt, jóváhagyott, SHA-egyező Flotta snapshot ad trusted mastert. Offline, unapproved, cache, pending, túl régi meta mind blocked.
 
-## 2. S7 – amit hozzáadtam
-`features/s7-canonical-transaction.mjs`:
-- A teljes eredeti Flotta snapshot a kanonikus forrás.
-- A szigorú Depó /drivers és /vehicles csak projekciók; a rich history, insurance, fuel cards, contacts csak a Flotta snapshotban maradnak.
-- Offline és jogosulatlan írás elutasítva (nincs hamis siker).
-- Aktív foglalás védi a járműváltozást.
-- Revízió csak ready plan esetén nő.
+Az `app.js` `get()` override már a #102-ben eltávolította a fallbacket: drivers/vehicles csak a trusted canonical masterből jön, egyébként üres lista.
 
-**Tesztek [T]:**
+## 2. Amit hozzáadtam
+`depokapacitas/no-fallback.test.mjs`:
+- Untrusted master → üres lista, soha nem a stale depot mirrors.
+- Trusted master → csak a Flotta projekció.
+- Kapacitás, foglalás, forecast ugyanazt a get()-et használja.
+
+## 3. Tesztek [T]
 ```bash
-node --test features/s7-canonical-transaction.test.mjs
+node --test depokapacitas/no-fallback.test.mjs depokapacitas/canonical-source-health.test.mjs
 ```
-5/5 pass a `dad565d` commiton.
+13/13 pass.
 
-## 3. Mi maradt
-- Valódi Firestore transaction adapter (re-read inside transaction).
-- Élő kétböngészős E2E.
+## 4. Mi maradt
+- Valódi Firebase emulator + kétböngészős teszt a tényleges app kóddal (firebase-tools nincs ebben a környezetben).
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
 - Apps Script hard disable.
 
-## 4. GO / NO-GO
+## 5. GO / NO-GO
 **NO-GO.**  
-Az S7 safe path megvan pure formában. Élő E2E, rules deploy és jóváhagyott migráció nincs.
+Az S7 no-fallback path a #102 + ez a teszt alapján helyes. Élő E2E és jóváhagyott migráció nincs.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
