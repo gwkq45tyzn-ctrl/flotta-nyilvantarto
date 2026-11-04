@@ -1,36 +1,36 @@
-# ÁTADÁS A CHATGPT-NEK ÉS CLAUDE-NAK – S7 single source (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – S7 rules eligibility (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-single-source`  
-**Base:** `grok/v1-s7-sha-and-projection` (bd7ef2d)  
+**Ág:** `grok/v1-s7-rules-eligibility`  
+**Base:** `grok/v1-s7-single-source` (411bbad)  
 **HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #110 emulator witnesses
-Négy NO-GO eset:
-- Üres Fleet tömbök → Index out of bound
-- Pre-existing mirrors → SOLO Fleet edit, stale mirror
-- Második master változás mirror írás nélkül
-- Normalizált ABC-123→ABC123 helyes projekció is denied
+## 1. #111 emulator bypasses
+- Közvetlen SDK szervizes autót foglalhatott.
+- Inaktív futár foglalható volt.
+- Tükör meghamisítható volt.
+- Flotta önálló módosítás után a booking működésképtelen lehetett.
 
 ## 2. Amit csináltam
-- Eltávolítottam a törékeny `existsAfter(drivers[0]/vehicles[0])` őrszemet.
-- A `flottaSharedState` marad az egyetlen kötelező írás.
-- A mirror projekció best-effort; a booking gate teljes paritást ellenőriz.
-- Az SHA megőrzés és a revízió-növelés továbbra is kötelező.
+- A booking rule most megköveteli, hogy a driverId a `flottaSharedState.eligibleDrivers` listában, a vehicleId az `eligibleVehicles` listában legyen.
+- A bridge ezeket a listákat a teljes eredeti snapshotból számolja.
+- Szervizes autó és inaktív futár kizárva.
+- A tükrök önmagukban már nem elegendőek a foglaláshoz.
 
 ## 3. Tesztek [T]
 ```bash
-node --test features/s7-single-source-contract.test.mjs features/s7-sha-preserve.test.mjs features/s7-projection-contract.test.mjs
+node --test features/s7-eligibility-lists.test.mjs features/s7-sha-preserve.test.mjs features/s7-projection-contract.test.mjs
 ```
 8/8 pass.
 
 ## 4. Mi maradt
-- Valódi Firebase emulator + kétböngészős teszt a pozitív edit→book útra a booking gate-tel.
-- Rules emulator teszt, hogy az üres tömbös mentés most sikeres.
+- Valódi Firebase emulator teszt a pozitív eligible bookingra és a negatív service/inactive SDK bookingra.
+- Kétböngészős Flotta→Depó teszt.
+- Szintetikus backup/restore próba.
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
 
 ## 5. GO / NO-GO
 **NO-GO.**  
-Az S7 single-source path megvan. Élő E2E és a #110 tanúk újranyitása a javított rules-szal még szükséges.
+Az S7 rules eligibility path megvan. Élő E2E és a #111 tanúk újranyitása a javított rules-szal még szükséges.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
