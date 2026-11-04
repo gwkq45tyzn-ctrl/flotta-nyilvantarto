@@ -14,7 +14,7 @@ import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
 import {chromium} from 'playwright';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,setDoc,getDoc} from 'firebase/firestore';
+import {doc,setDoc,getDoc,updateDoc} from 'firebase/firestore';
 
 const project='demo-imile-qa';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
@@ -133,6 +133,33 @@ try{
   assert.equal(await compat.locator('#revision').textContent(),'4');
   await ctxModular.setOffline(false);
   console.log('PASS [B+E]: offline client refuses to report successful write');
+
+  // Actual Firestore permission-denied is NOT an optimistic concurrency
+  // conflict: the server revision must not change and the UI must tell the
+  // operator the write was refused. A viewer can read but cannot edit.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await updateDoc(doc(ctx.firestore(),'users',uid),{role:'viewer'});
+  });
+  let revisionBeforeRevocation;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const snapshot=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    revisionBeforeRevocation=snapshot.data()?.revision;
+  });
+  assert.equal(revisionBeforeRevocation,4,'Baseline revision must already be 4');
+  await compat.locator('#save').click();
+  await wait(compat,()=>document.getElementById('state')?.textContent
+      ?.startsWith('write-error: permission-denied'),
+    'revoked write must report permission-denied, never successful conflict retry');
+  let revisionAfterRevocation;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const snapshot=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    revisionAfterRevocation=snapshot.data()?.revision;
+  });
+  assert.equal(revisionAfterRevocation,revisionBeforeRevocation,
+    'Revoked role must not write new Fleet revision');
+  assert.equal(await compat.locator('#revision').textContent(),
+    String(revisionBeforeRevocation));
+  console.log('PASS [B+E]: revoked editor role hard-denied without changing Fleet revision');
 
   assert.deepEqual(pageErrors,[]);
   console.log('PASS real browser synthetic V1 cross-SDK Auth/Firestore interoperability; NOT live cloud E2E');
