@@ -64,7 +64,11 @@ export async function commitCanonicalDepotBooking({
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity});
+    const fleetData=fleet.exists()?fleet.data():{};
+    const driverIndex=(fleetData.drivers||[]).findIndex(d=>String(d.daCode||'').toUpperCase()===driverId);
+    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>String(v.rendszam||'').replace(/[\s-]/g,'').toUpperCase()===vehicleId);
+    if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
+    tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });

@@ -488,7 +488,7 @@ service cloud.firestore {
       // No direct SDK/old-client booking create before original Fleet import.
       allow create: if editor()
         && canonicalImportActive()
-        && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity'])
+        && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity','driverIndex','vehicleIndex'])
         && validDay(request.resource.data.date)
         && sameDayOccupancy(request.resource.data)
         && validVehiclePlate(request.resource.data.vehicleId)
@@ -498,10 +498,17 @@ service cloud.firestore {
         && request.resource.data.status in ['planned','confirmed']
         && get(/databases/$(database)/documents/vehicles/$(request.resource.data.vehicleId)).data.status == 'Elérhető'
         && get(/databases/$(database)/documents/drivers/$(request.resource.data.driverId)).data.active == true
-        // S7: also require the selected master to be in the Flotta canonical
-        // eligibility lists. Mirrors alone are not sufficient.
-        && request.resource.data.driverId in get(/databases/$(database)/documents/flottaSharedState/current).data.eligibleDrivers
-        && request.resource.data.vehicleId in get(/databases/$(database)/documents/flottaSharedState/current).data.eligibleVehicles
+        // S7: verify the selected master against the actual Flotta arrays.
+        // The client supplies an index; rules confirm it points to a matching
+        // eligible entry. Forged lists or mirrors cannot bypass this.
+        && request.resource.data.driverIndex is int
+        && request.resource.data.driverIndex >= 0
+        && get(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].daCode == request.resource.data.driverId
+        && get(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].status in ['aktiv','aktív']
+        && request.resource.data.vehicleIndex is int
+        && request.resource.data.vehicleIndex >= 0
+        && get(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam == request.resource.data.vehicleId
+        && get(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
         // Both documents must be written in one transaction. This prevents double booking.
@@ -938,7 +945,7 @@ service cloud.firestore {
         && resource.data.migrationSourceSha256 is string
         && resource.data.migrationSourceSha256 == get(/databases/$(database)/documents/flottaMigrationApproval/current).data.sourceSha256
         && request.resource.data.migrationSourceSha256 == resource.data.migrationSourceSha256
-        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision','migrationSourceSha256','eligibleDrivers','eligibleVehicles'])
+        && request.resource.data.keys().hasAll(['vehicles','drivers','fuelCards','contacts','revision','migrationSourceSha256'])
         && request.resource.data.revision is int
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.vehicles is list
