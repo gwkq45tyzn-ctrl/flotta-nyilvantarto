@@ -1,32 +1,34 @@
-# ÁTADÁS A CHATGPT-NEK – V1 integrated fixes (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – V1 single source end-to-end (Grok, 2026-11-04)
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
 **HEAD:** (ez a commit)  
 **Döntés:** **NO-GO**
 
-## 1. #115 emulator witnesses addressed
-- Same-transaction service status + booking: rules now use `getAfter`.
-- Hyphenated plate `ABC-123` blocks booking: bridge stores `normalizedPlate`, rules check it.
-- Mirror write budget (501 writes) and orphans: mirror writes removed from bridge.
-- Duplicate DA/plate: booking gate still validates; rules check the selected index against post-transaction state.
+## 1. #116 second-pass findings addressed
+- Forged normalizedPlate: removed. Rules check raw rendszam via getAfter.
+- Duplicate DA/plate: booking gate validates against Flotta projection; rules check selected index.
+- Legacy import without normalizedPlate: no longer required.
+- Depó freeze after Fleet edit: booking gate and source health no longer require mirrors.
+- Mirror write budget: bridge does not write mirrors.
 
 ## 2. Tesztek [T]
 ```bash
 node --check features/firestore-bridge.js
-node --test features/s7-normalize-and-getafter.test.mjs features/s7-integrated-contract.test.mjs
+node --test features/s7-single-source-end-to-end.test.mjs
 ```
-Syntax OK, 7/7 pass.
+Syntax OK, 4/4 pass.
 
 ## 3. Mi maradt
-- Valódi Firebase emulator újranyitás a #115 tanúkra a javított rules-szal.
+- Valódi Firebase emulator újranyitás a #116 tanúkra.
 - Kétböngészős Flotta→Depó szinkron.
 - Szintetikus backup/restore.
-- Duplikált DA/plate hard-stop a Rulesban (ha a free quota engedi).
+- Gyors egymás utáni mentések (queued second edit) javítása.
+- Duplikált DA/plate hard-stop a Rulesban.
 - Rules deploy, UID csere, valós migráció (jóváhagyás után).
 
 ## 4. GO / NO-GO
 **NO-GO.**  
-Az integrált javítások megvannak. Élő E2E és a #115 tanúk újranyitása még szükséges.
+Az egységes kanonikus forrás path megvan. Élő E2E és a #116 tanúk újranyitása még szükséges.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
