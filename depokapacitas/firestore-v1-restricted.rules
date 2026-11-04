@@ -861,10 +861,8 @@ service cloud.firestore {
     }
 
     
-    // Migration can be authorized ONLY by an independently approved trusted
-    // admin/import process, never by browser localStorage or a shared-user SDK.
-    // The policy document is readable to the shared account for verification
-    // but immutable from EVERY browser, including admin.
+    // Migration may be approved only by a privileged import process, never
+    // by client localStorage. Browser admin cannot create or mutate this gate.
     function isSharedFleetAccount() {
       return request.auth != null
         && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
@@ -876,12 +874,7 @@ service cloud.firestore {
         && get(p).data.status == 'approved'
         && get(p).data.approvedUid == request.auth.uid
         && get(p).data.sourceSha256 is string
-        && get(p).data.sourceSha256.matches('^[a-f0-9]{64}
-
-    match /{path=**} { allow read, write: if false; }
-  }
-}
-)
+        && get(p).data.sourceSha256.matches('^[a-f0-9]{64}$')
         && get(p).data.approvedAt is timestamp
         && get(p).data.approvedAt <= request.time;
     }
@@ -891,9 +884,7 @@ service cloud.firestore {
     }
     match /flottaSharedState/{docId} {
       allow read: if isSharedFleetAccount() && member();
-      // Browser-side creation is NEVER an approved import. The complete,
-      // independently backed-up original Fleet must be seeded separately,
-      // using a privileged, explicitly authorized migration process.
+      // The initial import must be seeded by a separate approved trusted process.
       allow create: if false;
       allow update: if docId == 'current'
         && isSharedFleetAccount()
