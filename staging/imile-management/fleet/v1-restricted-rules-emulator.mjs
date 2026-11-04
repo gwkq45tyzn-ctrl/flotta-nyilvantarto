@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc,Timestamp} from 'firebase/firestore';
+import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc,writeBatch,Timestamp} from 'firebase/firestore';
 
 const projectId='demo-imile-restricted-v1';
 const uid='synthetic-imile-v1-admin-0000001';
@@ -44,10 +44,22 @@ const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
 const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
-const fleetData=(revision)=>({revision,vehicles:[],drivers:[],fuelCards:[],contacts:[]});
+const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[],drivers:[],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
+function bookFuture(date){
+  const bookingId=date+'__TEST0001';
+  const b=writeBatch(shared);
+  b.set(doc(shared,'bookings',bookingId),{
+    date,vehicleId:'TEST0001',driverId:'TEST0001',
+    district:'1',status:'planned',capacity:50
+  });
+  b.set(doc(shared,'driverClaims',date+'__TEST0001'),{
+    date,driverId:'TEST0001',bookingId
+  });
+  return b.commit();
+}
 const locations=[
   ['users',uid],
   ['drivers','TEST0001'],
@@ -120,6 +132,9 @@ try{
     ()=>setDoc(doc(shared,'drivers','TEST0001'),driver('TEST0001')));
   await expectPermission('shared admin create vehicle',true,
     ()=>setDoc(doc(shared,'vehicles','TEST0001'),vehicle('TEST0001')));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(
+    doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50}
+  ));
   // The original Fleet can NEVER be initialized by a browser, even as admin.
   await expectPermission('browser cannot seed initial Fleet snapshot',false,
     ()=>setDoc(fleet(shared),fleetData(1)));
@@ -130,6 +145,12 @@ try{
   await env.withSecurityRulesDisabled(async ctx=>{
     await setDoc(fleet(ctx.firestore()),fleetData(1));
   });
+  await expectPermission('canonical Fleet existence freezes browser driver master edits',false,
+    ()=>updateDoc(doc(shared,'drivers','TEST0001'),{name:'DRIFT'}));
+  await expectPermission('canonical Fleet existence freezes browser vehicle master edits',false,
+    ()=>updateDoc(doc(shared,'vehicles','TEST0001'),{status:'Szerviz'}));
+  await expectPermission('before source approval cannot create booking even with otherwise valid atomic claim',false,
+    ()=>bookFuture('2099-01-01'));
   await expectPermission('pre-approval Fleet update is denied',false,
     ()=>updateDoc(fleet(shared),{revision:2}));
   await env.withSecurityRulesDisabled(async ctx=>{
@@ -147,6 +168,8 @@ try{
   });
   await expectPermission('invalid migration source digest denies Fleet update',false,
     ()=>updateDoc(fleet(shared),{revision:2}));
+  await expectPermission('invalid migration source digest denies atomic booking',false,
+    ()=>bookFuture('2099-01-01'));
   await env.withSecurityRulesDisabled(async ctx=>{
     await setDoc(migrationGate(ctx.firestore()),approvedGate);
   });
@@ -154,6 +177,12 @@ try{
     ()=>getDoc(migrationGate(shared)));
   await expectPermission('shared admin increments revision after trusted approval',true,
     ()=>updateDoc(fleet(shared),{revision:2}));
+  await expectPermission('browser cannot forge an imported Fleet source SHA',false,
+    ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:'b'.repeat(64)}));
+  await expectPermission('browser cannot strip the original Fleet import source SHA',false,
+    ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:null}));
+  await expectPermission('approved original Fleet source admits atomic booking + claim',true,
+    ()=>bookFuture('2099-01-01'));
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,
@@ -168,6 +197,8 @@ try{
   });
   await expectPermission('revoked migration approval denies Fleet update',false,
     ()=>updateDoc(fleet(shared),{revision:3}));
+  await expectPermission('revoked migration approval denies NEW booking',false,
+    ()=>bookFuture('2099-01-02'));
   await expectPermission('browser cannot recreate revoked migration approval',false,
     ()=>setDoc(migrationGate(shared),approvedGate));
   await env.withSecurityRulesDisabled(async ctx=>{
