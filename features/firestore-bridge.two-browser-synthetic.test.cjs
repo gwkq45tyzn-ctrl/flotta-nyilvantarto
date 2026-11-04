@@ -150,7 +150,8 @@ function makeClient(server,{verified=true,localKm=0}={}){
 }
 const fixture=()=>({
   vehicles:[{id:'v1',rendszam:'ABC123',km:10}],
-  fuelCards:[],drivers:[],contacts:[],revision:1
+  fuelCards:[],drivers:[],contacts:[],revision:1,
+  migrationSourceSha256:'e'.repeat(64)
 });
 
 test('pre-import confirmed remote never overwrites original Fleet localStorage',async()=>{
