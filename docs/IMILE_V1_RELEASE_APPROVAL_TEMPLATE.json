@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "purpose": "iMile Management V1 FINAL production release - structural gate only, NOT deployment authorization",
+  "purpose": "iMile Management NARROWED Flotta+Depó V1 production release – structural checks only, NEVER deployment authorization",
   "releaseCandidate": {
     "commitSha": null,
     "webArtifactSha256": null,
@@ -8,7 +8,18 @@
     "migrationPlanSha256": null,
     "targetFirebaseProject": null,
     "targetEnvironment": "production",
-    "frozen": false
+    "frozen": false,
+    "scope": "fleet-depot-v1",
+    "scopeManifestSha256": null,
+    "scopeManifestEvidenceUrl": null,
+    "excludedFeatures": [
+      "ofd-monitoring",
+      "in-hub-inventory",
+      "excel-reports",
+      "attendance-pwa",
+      "courier-auth",
+      "photo-upload"
+    ]
   },
   "auditors": {
     "grok": {
@@ -69,7 +80,8 @@
           "result": "PENDING",
           "evidence": []
         }
-      }
+      },
+      "reviewedScopeManifestSha256": null
     },
     "chatgpt": {
       "verdict": "PENDING",
@@ -129,7 +141,8 @@
           "result": "PENDING",
           "evidence": []
         }
-      }
+      },
+      "reviewedScopeManifestSha256": null
     }
   },
   "userAuthorization": {
@@ -139,7 +152,8 @@
     "rulesSha256": null,
     "migrationPlanSha256": null,
     "authorizedAt": null,
-    "approvalReference": null
+    "approvalReference": null,
+    "scopeManifestSha256": null
   },
   "deployment": {
     "status": "BLOCKED",
