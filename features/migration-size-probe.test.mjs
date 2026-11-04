@@ -72,7 +72,7 @@ test('invalid Firestore names and excessive nesting fail closed',()=>{
 });
 
 test('no accidentally mutable CLI status for oversized data',()=>{
-  const r=analyze({vehicles:[{history:[{item:'x'.repeat(1_047_000)}]}]});
+  const r=analyze({vehicles:[{history:[{item:'x'.repeat(1_048_450)}]}]});
   assert.equal(r.stop,true);
   assert.match(r.hash,/^[a-f0-9]{64}$/);
 });
