@@ -10,6 +10,10 @@ import fs from 'node:fs';
 import process from 'node:process';
 
 export const AUDIT_GATES=Object.freeze(Array.from({length:12},(_,i)=>'S'+(i+1)));
+export const NARROWED_V1_EXCLUSIONS=Object.freeze([
+  'ofd-monitoring','in-hub-inventory','excel-reports',
+  'attendance-pwa','courier-auth','photo-upload'
+]);
 const commitOk=v=>typeof v==='string'&&/^[0-9a-f]{40}$/.test(v);
 const digestOk=v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
 const dateOk=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(v)
@@ -27,6 +31,19 @@ export function evaluateReleaseApproval(record){
     return {structurallyReady:false,blockers:[{code:'SCHEMA',why:'Unknown or missing release approval schema'}]};
   }
   const c=record.releaseCandidate||{};
+  // The owner selected a narrower Fleet+Depot V1. S8 report functionality is
+  // excluded, but a content-addressed scope manifest and independent proof of
+  // exclusion are REQUIRED. S12 must still prove forbidden courier/PWA access.
+  if(c.scope!=='fleet-depot-v1')
+    fail('SCOPE','Release must be the owner-approved narrowed Fleet+Depot V1');
+  if(!Array.isArray(c.excludedFeatures)||
+     c.excludedFeatures.length!==NARROWED_V1_EXCLUSIONS.length||
+     !NARROWED_V1_EXCLUSIONS.every((f,i)=>c.excludedFeatures[i]===f))
+    fail('SCOPE_EXCLUSIONS','Deferred report and PWA modules must be explicitly excluded');
+  if(!digestOk(c.scopeManifestSha256))
+    fail('SCOPE_MANIFEST_SHA','Frozen exclusion manifest SHA-256 is missing');
+  if(!githubLink(c.scopeManifestEvidenceUrl))
+    fail('SCOPE_MANIFEST_EVIDENCE','Exclusion manifest needs a reviewable GitHub evidence link');
   if(!commitOk(c.commitSha))fail('CANDIDATE_SHA','Frozen 40-character commit is missing');
   if(!digestOk(c.webArtifactSha256))fail('ARTIFACT_SHA','Web release artifact SHA-256 is missing');
   if(!digestOk(c.firestoreRulesSha256))fail('RULES_SHA','Rules SHA-256 is missing');
@@ -50,6 +67,10 @@ export function evaluateReleaseApproval(record){
       if(!digestOk(a[prop])||a[prop]!==c[cprop])
         fail(name.toUpperCase()+'_'+prop,name+' did not review the exact same '+cprop);
     }
+    if(!digestOk(a.reviewedScopeManifestSha256)||
+       a.reviewedScopeManifestSha256!==c.scopeManifestSha256)
+      fail(name.toUpperCase()+'_SCOPE_MANIFEST',
+        name+' did not independently review the exact release exclusions');
     if(!dateOk(a.reviewedAt))fail(name.toUpperCase()+'_TIME',name+' review timestamp is missing');
     if(!githubLink(a.independentReportUrl))
       fail(name.toUpperCase()+'_REPORT',name+' must provide an independently inspectable GitHub report');
@@ -58,7 +79,10 @@ export function evaluateReleaseApproval(record){
       fail(name.toUpperCase()+'_BLOCKERS',name+' has unresolved or unverified critical issues');
     for(const gate of AUDIT_GATES){
       const check=a.gates?.[gate];
-      if(!check||check.result!=='PASS'||!Array.isArray(check.evidence)||
+      const expectedResult=gate==='S8'?'EXCLUDED':'PASS';
+      // S8 may be excluded only under the EXACT frozen V1 artifact manifest.
+      // S12 remains PASS + evidence: exclusion requires negative Rules/QA proof.
+      if(!check||check.result!==expectedResult||!Array.isArray(check.evidence)||
          !check.evidence.length||!check.evidence.every(githubLink)){
         fail(name.toUpperCase()+'_'+gate,name+' has not evidenced the complete '+gate+' audit gate');
       }
@@ -68,6 +92,9 @@ export function evaluateReleaseApproval(record){
     fail('AUDIT_INDEPENDENCE','Grok and ChatGPT must submit DIFFERENT review reports');
 
   const u=record.userAuthorization||{};
+  if(!digestOk(u.scopeManifestSha256)||
+     u.scopeManifestSha256!==c.scopeManifestSha256)
+    fail('USER_SCOPE_MANIFEST','User has not approved the exact Fleet+Depot exclusion artifact');
   if(u.verdict!=='GO')fail('USER_GO','User has not explicitly authorized production release');
   if(!commitOk(u.candidateSha)||u.candidateSha!==c.commitSha)
     fail('USER_CANDIDATE','User has not approved this exact candidate SHA');
@@ -88,7 +115,7 @@ export function evaluateReleaseApproval(record){
   return {
     structurallyReady:blockers.length===0,
     blockers,
-    notice:'Structural consistency only. This is NOT proof of independent agent identity, user consent, valid external evidence or an authorization to deploy.'
+    notice:'Structural consistency only. This is NOT proof of actual artifact exclusions, independent identity, user permission or a deployment authorization.'
   };
 }
 if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
