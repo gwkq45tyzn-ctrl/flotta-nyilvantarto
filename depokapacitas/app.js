@@ -15,6 +15,7 @@ import {deriveAttendanceHandovers} from '../staging/imile-management/attendance-
 import {collectFleetAlerts} from '../staging/imile-management/central-alerts.mjs';
 import {decodeCsv} from './import-encoding.mjs';
 import {assessSources,liveIndicatorPresentation} from './source-health.mjs';
+import {assessCanonicalBookingMaster} from './canonical-booking-gate.mjs';
 
 const $=id=>document.getElementById(id);
 const state={role:'',profile:null,uid:null,view:'overview',mode:'month',date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),search:'',data:{drivers:[],vehicles:[],driverCapacities:[],bookings:[],demands:[],results:[],attendance:[],sourceRows:[],users:[],fleetRecords:[],fleetAssignments:[]},unsubscribe:[],loaded:new Set(),errors:new Set(),sharedFleet:emptySharedFleetPreview()};
@@ -320,7 +321,22 @@ else if(type==='capacity'){col='driverCapacities';id=values.driverId;if(!byId('d
 else if(type==='demand'){col='demands';const date=iso(values.date),district=values.district.trim().toUpperCase().replaceAll('/','-');id=date+'__'+district;obj={date,district,newCount:number(values.newCount),retryCount:number(values.retryCount)};}
 else if(type==='result'){col='results';const picked=number(values.picked),success=number(values.success),failed=number(values.failed);if(success+failed>picked)throw Error('A sikeres és sikertelen összeg nem lehet több a felvett csomagszámnál.');const date=iso(values.date),district=values.district.trim().toUpperCase().replaceAll('/','-');id=date+'__'+values.driverId+'__'+district;obj={date,driverId:values.driverId,district,picked,success,failed};}
 else if(type==='user'){throw Error('V1-ben kizárólag a meglévő közös iMile-fiók használható; felhasználók itt nem szerkeszthetők.');}
-else if(type==='booking'){const date=iso(values.date),driverId=values.driverId,vehicleId=values.vehicleId;const driver=byId('drivers',driverId),vehicle=byId('vehicles',vehicleId);if(!eligibleDriver(driver)||!vehicle||vehicle.status!=='Elérhető')throw Error('A futár inaktív vagy az autó nem elérhető.');const bookingId=date+'__'+vehicleId;const driverKey=date+'__'+driverId;const bRef=doc(db,'bookings',bookingId),dRef=doc(db,'driverClaims',driverKey);await runTransaction(db,async tx=>{const [oldBook,oldDriver,liveDriver,liveVehicle,liveCapacity]=await Promise.all([tx.get(bRef),tx.get(dRef),tx.get(doc(db,'drivers',driverId)),tx.get(doc(db,'vehicles',vehicleId)),tx.get(doc(db,'driverCapacities',driverId))]);if(oldBook.exists()||oldDriver.exists())throw Error('Ezen a napon az autó vagy a futár már foglalt.');if(!liveDriver.exists()||liveDriver.data().active!==true||!liveVehicle.exists()||liveVehicle.data().status!=='Elérhető')throw Error('A futár vagy autó állapota megváltozott. Frissítsd a beosztást.');tx.set(bRef,{date,vehicleId,driverId,district:values.district.trim().toUpperCase(),status:values.status,capacity:number(liveCapacity.exists()?liveCapacity.data().capacity:(liveDriver.data().capacity??0))});tx.set(dRef,{date,driverId,bookingId});});toast('Foglalás mentve.');return;}
+else if(type==='booking'){const date=iso(values.date),driverId=values.driverId,vehicleId=values.vehicleId;const driver=byId('drivers',driverId),vehicle=byId('vehicles',vehicleId);if(!eligibleDriver(driver)||!vehicle||vehicle.status!=='Elérhető')throw Error('A futár inaktív vagy az autó nem elérhető.');const bookingId=date+'__'+vehicleId;const driverKey=date+'__'+driverId;const bRef=doc(db,'bookings',bookingId),dRef=doc(db,'driverClaims',driverKey);await runTransaction(db,async tx=>{const [oldBook,oldDriver,liveDriver,liveVehicle,liveCapacity,canonicalFleet,migrationGate]=await Promise.all([
+  tx.get(bRef),tx.get(dRef),tx.get(doc(db,'drivers',driverId)),
+  tx.get(doc(db,'vehicles',vehicleId)),tx.get(doc(db,'driverCapacities',driverId)),
+  tx.get(doc(db,'flottaSharedState','current')),
+  tx.get(doc(db,'flottaMigrationApproval','current'))
+]);
+const canonicalCheck=assessCanonicalBookingMaster({
+  fleet:canonicalFleet.exists()?canonicalFleet.data():null,
+  approval:migrationGate.exists()?migrationGate.data():null,
+  uid:auth.currentUser?.uid===state.uid?state.uid:null,
+  driverId,vehicleId,
+  depotDriver:liveDriver.exists()?{id:driverId,...liveDriver.data()}:null,
+  depotVehicle:liveVehicle.exists()?{id:vehicleId,...liveVehicle.data()}:null
+});
+if(!canonicalCheck.ready)throw Error('Flotta–Depó adateltérés vagy hiányzó jóváhagyás: '+canonicalCheck.code+'. Foglalás tiltva.');
+if(oldBook.exists()||oldDriver.exists())throw Error('Ezen a napon az autó vagy a futár már foglalt.');if(!liveDriver.exists()||liveDriver.data().active!==true||!liveVehicle.exists()||liveVehicle.data().status!=='Elérhető')throw Error('A futár vagy autó állapota megváltozott. Frissítsd a beosztást.');tx.set(bRef,{date,vehicleId,driverId,district:values.district.trim().toUpperCase(),status:values.status,capacity:number(liveCapacity.exists()?liveCapacity.data().capacity:(liveDriver.data().capacity??0))});tx.set(dRef,{date,driverId,bookingId});});toast('Foglalás mentve.');return;}
 else throw Error('Ismeretlen művelet.');
 await setDoc(doc(db,col,id),obj,{merge:true});toast('Mentés sikeres.');}
 async function removeRow(col,id){if(!canWrite())throw Error('Nincs jogosultság.');if(!confirm('Biztosan törlöd a kiválasztott rekordot?'))return;if(col==='bookings')return;await deleteDoc(doc(db,col,id));toast('Törölve.');}
