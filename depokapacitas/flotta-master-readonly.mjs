@@ -26,7 +26,7 @@ export function projectSharedFleetSnapshot(data,metadata={}) {
     return {
       status:ready?'preview':'review',
       note:ready
-        ?'Szerverről igazolt Flotta-adat: csak olvasható, NEM jóváhagyott migráció. Foglaláshoz nem használjuk.'
+        ?'Szerverről igazolt Flotta-előnézet. Operatív törzsadatként csak külön jóváhagyott migráció és teljes Depó-egyezés esetén használható.'
         :'Az eredeti Flotta rekordjai eltéréseket tartalmaznak: külön ellenőrzés kell, foglalás nem engedélyezett.',
       revision:rev,
       vehicles:plan.writes.vehicles.filter(Boolean),
