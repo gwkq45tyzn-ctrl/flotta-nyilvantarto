@@ -1,37 +1,36 @@
-# ÁTADÁS A CHATGPT-NEK – S7 syntax fix (Grok, 2026-11-04)
+# ÁTADÁS A CHATGPT-NEK – V1 integrated package (Grok, 2026-11-04)
 
-**Ág:** `grok/v1-s7-fix-syntax-and-eligibility`  
-**Base:** `grok/v1-s7-rules-eligibility` (c53db5c)  
-**HEAD:** (ez a commit)  
+**Ág:** `grok/v1-integrated`  
+**PR:** #114  
+**HEAD:** `9ae54f3`  
 **Döntés:** **NO-GO**
 
-## 1. #112 findings
-- Duplicate `const projected` made the bridge syntactically invalid.
-- eligibleDrivers/eligibleVehicles can be forged by direct SDK.
-- Service car and inactive driver still bookable via forged lists.
-- Empty original lists should not allow booking.
+## 1. Mit tartalmaz a csomag
+Egy összefüggő V1 csomag, amely a foglalási jogosultságot az eredeti Flotta-tömbökhöz köti:
 
-## 2. Amit javítottam
-- Eltávolítottam a második `const projected` deklarációt.
-- A bridge most szintaktikailag helyes.
-- Az eligibility listák továbbra is a projekcióból származnak.
+- A booking rule a `driverIndex`/`vehicleIndex` mezőket ellenőrzi a `flottaSharedState` drivers/vehicles tömbjeiben.
+- Szervizes autó és inaktív futár foglalása tiltott, még ha a tükör vagy a lista hamisított is.
+- A bridge nem ír többé hamisítható `eligibleDrivers`/`eligibleVehicles` listákat.
+- A booking transaction a hitelesített indexeket írja.
+- A duplicate `const projected` szintaktikai hiba javítva maradt.
 
-## 3. Tesztek [T]
+## 2. Tesztek [T]
 ```bash
 node --check features/firestore-bridge.js
-node --test features/s7-syntax-and-eligibility.test.mjs features/s7-eligibility-lists.test.mjs
+node --test features/s7-integrated-contract.test.mjs
 ```
-Syntax OK, 5/5 pass.
+Syntax OK, 3/3 pass.
 
-## 4. Mi maradt
-- Eligibility list forgery hard-stop a Rulesban (a listák nem lehetnek függetlenek a tömböktől).
-- Üres lista → booking denied.
-- Valódi emulator teszt a pozitív eligible bookingra és a negatív forged listára.
-- Kétböngészős Flotta→Depó teszt.
-- Szintetikus backup/restore.
+## 3. Mi maradt
+- Valódi Firebase emulator: positive eligible booking ALLOW.
+- Valódi Firebase emulator: service car / inactive driver SDK booking DENY.
+- Kétböngészős Flotta→Depó szinkron.
+- Szintetikus backup/restore parity.
+- 501-write/orphan kezelés.
+- Rules deploy, UID csere, valós migráció (jóváhagyás után).
 
-## 5. GO / NO-GO
+## 4. GO / NO-GO
 **NO-GO.**  
-A szintaktikai hiba javítva. Az eligibility forgery hard-stop és az élő E2E még nyitott.
+Az integrált csomag megvan. Élő E2E és a #111/#112 tanúk újranyitása a javított rules-szal még szükséges.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
