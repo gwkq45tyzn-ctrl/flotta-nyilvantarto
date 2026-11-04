@@ -262,8 +262,9 @@
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
         const projected = projectStrictMasters(draft);
+        const plate = s => String(s || '').replace(/[\s-]/g, '').toUpperCase();
         const payload = {
-          vehicles: draft.vehicles || [],
+          vehicles: (draft.vehicles || []).map(v => ({ ...v, normalizedPlate: plate(v.rendszam) })),
           fuelCards: draft.fuelCards || [],
           drivers: draft.drivers || [],
           contacts: draft.contacts || [],
@@ -276,14 +277,9 @@
           throw new Error('MISSING_MIGRATION_SOURCE');
         }
         tx.set(ref, payload);
-        // S7: project strict Depot masters in the same transaction.
-        // Reuse the projected value computed above.
-        for (const d of projected.drivers) {
-          tx.set(db.doc('drivers/' + d.id), d.data);
-        }
-        for (const v of projected.vehicles) {
-          tx.set(db.doc('vehicles/' + v.id), v.data);
-        }
+        // S7: flottaSharedState is the single canonical source.
+        // Mirror writes removed to avoid 501-write budget and orphan risk.
+        // Depó reads the projection from flottaSharedState via onSnapshot.
         return next;
       });
       currentRevision = newRev;

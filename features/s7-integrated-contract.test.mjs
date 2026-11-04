@@ -10,7 +10,7 @@ test('bridge has no duplicate const projected', () => {
 test('booking rule verifies against actual Flotta arrays', () => {
   const rules = readFileSync('depokapacitas/firestore-v1-restricted.rules', 'utf8');
   assert.match(rules, /drivers\[request\.resource\.data\.driverIndex\]\.daCode/);
-  assert.match(rules, /vehicles\[request\.resource\.data\.vehicleIndex\]\.rendszam/);
+  assert.match(rules, /vehicles\[request\.resource\.data\.vehicleIndex\]\.normalizedPlate/);
   assert.doesNotMatch(rules, /eligibleDrivers/);
 });
 
