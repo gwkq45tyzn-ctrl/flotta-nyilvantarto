@@ -56,10 +56,14 @@ service cloud.firestore {
     function validVehiclePlate(value) {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
-    function declaredDriverCapacity(driverId) {
+    function declaredDriverCapacity(driverId, driverIndex) {
       let capacity = get(/databases/$(database)/documents/driverCapacities/$(driverId));
+      let original = getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[driverIndex];
+      // A missing legacy Depot mirror must not be required for booking.
+      // The same selected canonical Flotta driver is used for eligibility.
       return capacity != null ? capacity.data.capacity
-        : get(/databases/$(database)/documents/drivers/$(driverId)).data.capacity;
+        : (original.keys().hasAny(['kapacitas']) ? original.kapacitas
+          : (original.keys().hasAny(['capacity']) ? original.capacity : 0));
     }
 
     // New independent Attendance PWA. Separate self-service courier principal,
@@ -499,7 +503,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
-        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
+        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)
         // Both documents must be written in one transaction. This prevents double booking.
         && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
