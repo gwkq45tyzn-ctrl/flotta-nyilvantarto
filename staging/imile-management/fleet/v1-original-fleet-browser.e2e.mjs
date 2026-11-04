@@ -31,10 +31,12 @@ const configPattern=/const FIREBASE_CONFIG = \{[\s\S]*?\n  \};/;
 assert.match(bridgeRaw,configPattern);
 const bridge=bridgeRaw.replace(configPattern,
   "const FIREBASE_CONFIG = {apiKey:'fake-api-key',authDomain:'localhost',projectId:'demo-imile-qa',appId:'1:123:web:local-fleet'};");
-const init='db.settings({ ignoreUndefinedProperties: true });';
-assert.ok(bridge.includes(init));
+// Insert emulator endpoints only AFTER the full compat SDK has loaded and
+// both Firebase service instances have been assigned by initFirebase().
+const init='db = initializedDb;';
+assert.ok(bridge.includes(init),'Bridge emulator injection anchor changed; re-audit before QA');
 const localBridge=bridge.replace(init,init+
-  "\n    auth.useEmulator('http://127.0.0.1:9099');\n    db.useEmulator('127.0.0.1',8787);");
+  "\n      auth.useEmulator('http://127.0.0.1:9099');\n      db.useEmulator('127.0.0.1',8787);");
 const initial={
   vehicles:[{id:'local-only',rendszam:'ABC-123',gyartmany:'Ford',modell:'Transit',status:'aktiv',km:12345}],
   fuelCards:[],drivers:[],contacts:[]
