@@ -373,16 +373,8 @@ service cloud.firestore {
           && request.resource.data.plate == vehicleId
           && optionalText(request.resource.data.model,160)
           && request.resource.data.status in ['Elérhető','Szerviz','Leállított']
-        ) || (
-          editor()
-          && existsAfter(/databases/$(database)/documents/flottaSharedState/current)
-          && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision ==
-             get(/databases/$(database)/documents/flottaSharedState/current).data.revision + 1
-          && exactFields(request.resource.data,['plate','model','status'])
-          && validVehiclePlate(vehicleId)
-          && request.resource.data.plate == vehicleId
-          && request.resource.data.status in ['Elérhető','Szerviz','Leállított']
         );
+        // S7: after import, vehicle mirrors are not writable.
       allow delete: if false;
     }
 
@@ -390,9 +382,9 @@ service cloud.firestore {
       allow read: if member();
       allow create, update: if editor()
         && validDriverCode(driverId)
-        && exists(/databases/$(database)/documents/drivers/$(driverId))
         && exactFields(request.resource.data,['capacity'])
         && nonNegative(request.resource.data.capacity,10000);
+        // S7: capacity is independent of mirrors. Flotta is the source.
       allow delete: if editor();
     }
 
@@ -499,7 +491,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].status in ['aktiv','aktív']
         && request.resource.data.vehicleIndex is int
         && request.resource.data.vehicleIndex >= 0
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam == request.resource.data.vehicleId
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].normalizedPlate == request.resource.data.vehicleId
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId)
