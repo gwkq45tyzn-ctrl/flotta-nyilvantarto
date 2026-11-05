@@ -7,6 +7,7 @@
   <input id="password" type="password" value="" autocomplete="off">
   <button id="login">Sign in</button>
   <button id="save" disabled>Increase revision</button>
+  <button id="invalid" disabled>Attempt protected SHA mutation (negative QA only)</button>
   <p>SDK: <span id="sdk"></span></p>
   <p>Auth: <span id="auth">waiting</span></p>
   <p>Server revision: <span id="revision">-</span></p>
@@ -24,7 +25,7 @@
       const script=document.createElement('script');script.src=src;
       script.onload=resolve;script.onerror=reject;document.head.append(script);
     });
-    let login,subscribe,increment,readServer,readEditorStatus;
+    let login,subscribe,increment,incrementInvalid,readServer,readEditorStatus;
     const ready=()=>{
       // A listener cannot silently turn a failed or in-flight write into
       // a "connected-server" success state, or re-enable an in-flight button.
@@ -33,6 +34,7 @@
         return;
       $('state').textContent='connected-server';
       $('save').disabled=false;
+      $('invalid').disabled=false;
     };
     const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     async function boundedConfirmedRetry(writeOnce) {
@@ -108,6 +110,18 @@
           tx.set(ref,{...current,revision:next});
           return next;
         }));
+        // Negative adversarial witness: fully authorized editor, CURRENT
+        // revision, but malicious change to immutable import source SHA.
+        // A retry of permission-denied MUST NOT make this write succeed.
+        incrementInvalid=()=>boundedConfirmedRetry(recordRead=>db.runTransaction(async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists)throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          tx.set(ref,{...current,revision:Number(current.revision)+1,
+            migrationSourceSha256:'f'.repeat(64)});
+          return 'forbidden';
+        }));
       } else {
         const appModule=await import(endpoint+'firebase-app.js');
         const authModule=await import(endpoint+'firebase-auth.js');
@@ -143,6 +157,15 @@
           tx.set(ref,{...current,revision:next});
           return next;
         }));
+        incrementInvalid=()=>boundedConfirmedRetry(recordRead=>fire.runTransaction(db,async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists())throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          tx.set(ref,{...current,revision:Number(current.revision)+1,
+            migrationSourceSha256:'f'.repeat(64)});
+          return 'forbidden';
+        }));
       }
       $('state').textContent='login-needed';
       $('login').onclick=async()=>{
@@ -164,6 +187,20 @@
         }catch(error){
           $('state').textContent='write-error: '+String(error.code||error.message);
           $('save').disabled=false;
+        }
+      };
+      $('invalid').onclick=async()=>{
+        if(!navigator.onLine){
+          $('state').textContent='blocked-offline';return;
+        }
+        $('invalid').disabled=true;$('state').textContent='writing';
+        try{
+          await incrementInvalid();
+          $('state').textContent='write-confirmed-invalid';
+        }catch(error){
+          $('state').textContent='write-error: '+String(error.code||error.message);
+        }finally{
+          $('invalid').disabled=false;
         }
       };
     }catch(error){$('state').textContent='sdk-error: '+String(error.message||error);}
