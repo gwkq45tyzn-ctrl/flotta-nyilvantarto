@@ -2,17 +2,20 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** `2dae2c4` (integrates #120 at `389e2df`)  
-**Döntés:** **NO-GO** (pending two-browser post-import UI and Claude duplicate hard-stop)
+**HEAD:** `e3a560f` (integrates #120 at `2dae2c4` / `389e2df`)  
+**Döntés:** **NO-GO** (pending two-browser post-import UI chain and Claude duplicate hard-stop)
 
-## Verified on prior SHA 82b316f
-- All 6 GitHub Actions workflows SUCCESS (ChatGPT verified).
-- #119 integrated: Rules recompute eligibility from original rendszam; capacity from Fleet kapacitas; SHA fail-closed.
+## Verified CI (all 6 SUCCESS on current branch)
+- Flotta Firestore Bridge synthetic QA
+- DepóKapacitás code and security
+- staging-only integration tests
+- restricted one-account Rules and migration QA
+- real two-browser Auth/Firestore emulator QA
+- independent dual release approval QA
 
-## This commit integrates #120
-- Apps Script cutover plan corrected: no destructive rollback (re-enable + Firestore delete). Fail-closed recovery requires dual independent snapshots.
-- Synthetic backup/restore strengthened: actual file write/read, SHA verification, tampered backup rejection, revision conflict protection.
-- 4/4 backup tests pass.
+## Integrated
+- #119: Rules recompute eligibility from original rendszam; capacity from Fleet kapacitas; SHA fail-closed.
+- #120: fail-closed Apps Script rollback (no destructive re-enable + delete); nontrivial synthetic backup/restore with file I/O, SHA, tamper rejection, revision conflict protection.
 
 ## Tesztek [T]
 ```bash
@@ -22,13 +25,12 @@ node --test features/v1-synthetic-backup-restore.test.mjs features/firestore-bri
 Syntax OK, backup/restore 4/4 pass, bridge regressions pass.
 
 ## Nyitott
-- Two-browser post-import Flotta→Depó UI chain.
-- Claude duplicate DA/plate server-side hard-stop (separate track).
-- Full CI re-run on this new SHA.
+- Two-browser post-import Flotta→Depó UI chain (separate from local emulator browser workflow).
+- Claude duplicate DA/plate server-side hard-stop (separate track, not yet delivered for review).
 - Rules deploy, UID swap, real migration (after approval).
 
 ## GO feltételek
-1. Full CI green on this SHA.
+1. Full CI green on this SHA (verified).
 2. Two-browser post-import UI chain passes.
 3. Claude independent security review of duplicate identity hard-stop.
 4. Separate Grok GO + ChatGPT GO + owner authorization.
