@@ -10,7 +10,7 @@ import {once} from 'node:events';
 import {randomBytes,createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,setDoc,Timestamp} from 'firebase/firestore';
+import {doc,getDoc,setDoc,Timestamp} from 'firebase/firestore';
 
 const host='127.0.0.1',port=8127,projectId='demo-imile-qa';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
@@ -34,7 +34,7 @@ assert.ok(bridgeRaw.includes(emulatorAnchor),'Bridge injection point changed: ST
 
 
 const fleetData={
-  vehicles:[{rendszam:'ABC-123',status:'aktiv',normalizedPlate:'ABC123',history:[{date:'2026-01-01',note:'synthetic'}]}],
+  vehicles:[{id:'fleet-qa-vehicle-1',rendszam:'ABC-123',gyartmany:'Ford',modell:'Transit',km:5000,status:'aktiv',normalizedPlate:'ABC123',history:[{date:'2026-01-01',note:'synthetic'}]}],
   drivers:[{daCode:'DA0001',name:'Synthetic',status:'aktiv',kapacitas:80}],
   fuelCards:[{id:'FC001',provider:'synthetic'}],
   contacts:[{id:'CT001',name:'Synthetic Contact'}],
@@ -143,20 +143,47 @@ try{
     assert.match(sync||'',/Firestore|rev/, 'Browser '+(number+1)+' has confirmed sync status');
   }
   console.log('PASS [B+E]: both original Fleet browsers actually loaded rich approved source snapshot');
-  // Actual Flotta modification via UI save path
-  await page1.evaluate(()=>{
-    const raw=localStorage.getItem('flotta_firestore_cache_v3');
-    const data=JSON.parse(raw||'{}');
-    if(data.vehicles&&data.vehicles[0])data.vehicles[0].km=12345;
-    localStorage.setItem('flotta_firestore_cache_v3',JSON.stringify(data));
-    if(typeof window.save==='function')window.save();
-  });
+  // Real user interaction: click the original Fleet vehicle edit button,
+  // change the actual #km form control, and submit #vehicleForm. Never mutate
+  // a Firestore cache key to simulate a user edit: bridge.save() snapshots
+  // original in-memory Fleet arrays, not the cache.
+  const editFirst=page1.locator('#vehicleTable button[onclick^="editVehicle"]').first();
+  await editFirst.waitFor({state:'visible',timeout:15000});
+  await editFirst.click();
+  await page1.locator('#modal.active #km').fill('12345');
+  await page1.locator('#modal.active #vehicleForm button[type="submit"]').click();
+
+  // The Firestore local cache is just a *receiver* of server-confirmed data,
+  // not a source of truth or a fake mutation point.
   await page2.waitForFunction(()=>{
     const raw=localStorage.getItem('flotta_firestore_cache_v3');
     if(!raw)return false;
-    try{const x=JSON.parse(raw);return x.vehicles?.[0]?.km===12345;}catch{return false;}
-  },null,{timeout:15000});
-  console.log('PASS [B+E]: Flotta modification synced to second browser');
+    try{
+      const v=JSON.parse(raw);
+      return v.revision===2 && v.vehicles?.[0]?.km===12345;
+    }catch{return false;}
+  },null,{timeout:20000});
+  const persisted=await env.withSecurityRulesDisabled(async ctx=>
+    getDoc(doc(ctx.firestore(),'flottaSharedState','current'))
+  );
+  assert.equal(persisted.exists(),true,'Server has canonical Fleet document');
+  assert.equal(persisted.data().revision,2,'Server revision advanced after REAL original-UI save');
+  assert.equal(persisted.data().vehicles[0].km,12345,'Server saved vehicle km');
+  assert.deepEqual(persisted.data().vehicles[0].history,fleetData.vehicles[0].history,
+    'Original vehicle nested history must survive UI save');
+  assert.equal(persisted.data().drivers[0].kapacitas,80,'Driver capacity preserved');
+  assert.deepEqual(persisted.data().fuelCards,fleetData.fuelCards,'Original fuel cards preserved');
+  assert.deepEqual(persisted.data().contacts,fleetData.contacts,'Original contacts preserved');
+  assert.equal(persisted.data().migrationSourceSha256,sourceSha,
+    'Original import provenance SHA must be retained');
+  console.log('PASS [B+E]: original Fleet vehicle form edit persisted to REAL Firestore emulator with all rich data intact');
+
+  // The second *original Fleet UI*, not only the cache, must display the edit.
+  const editSecond=page2.locator('#vehicleTable button[onclick^="editVehicle"]').first();
+  await editSecond.click();
+  await page2.waitForFunction(()=>document.getElementById('km')?.value==='12345',null,{timeout:10000});
+  assert.equal(await page2.locator('#modal.active #km').inputValue(),'12345');
+  console.log('PASS [B+E]: second independent original Fleet UI reflects edit without reload');
   await page1.locator('#flottaLogout').click();
   await page1.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: logout re-locks');
