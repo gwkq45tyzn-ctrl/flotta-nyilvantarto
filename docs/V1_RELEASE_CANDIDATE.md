@@ -2,38 +2,33 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** (this commit)  
+**HEAD:** `effc474` (integrates #123 at `815d653`)  
 **Döntés:** **NO-GO** (pending real post-import UI chain and Claude duplicate hard-stop)
 
-## Verified CI (all 6 SUCCESS on fb54f43)
-- Flotta Firestore Bridge synthetic QA
-- DepóKapacitás code and security
-- staging-only integration tests
-- restricted one-account Rules and migration QA
-- real two-browser Auth/Firestore emulator QA
-- independent dual release approval QA
+## Verified on prior SHA ba11340
+- All 6 GitHub Actions workflows SUCCESS (ChatGPT verified on fb54f43; this SHA is newer).
+
+## This commit integrates #123
+- Capacity now comes only from Fleet `kapacitas`/`capacity`. Old `/driverCapacities` and `/drivers` mirrors cannot inflate or manufacture capacity.
+- Unicode plate lookalikes rejected before upper(). Original plate must match `^[A-Za-z0-9 -]{4,40}$`.
+- Missing capacity is invalid, never silently authorized as zero.
+- 220 positive/negative emulator checks reported by ChatGPT on the source SHA.
 
 ## Proven [T]
-- Synthetic backup/restore: file I/O, SHA parity, tamper rejection, revision conflict protection (4/4).
-- Two-browser synthetic sync test passes (3/3).
-- Post-import contract tests (6/6): gateOldSync, isPrimary, SHA match, rules recompute from original rendszam, capacity from Fleet, mirror writes closed.
+- Post-import contract tests (6/6).
+- Synthetic backup/restore (4/4).
 - Bridge runtime regressions pass.
-- Apps Script cutover plan is fail-closed (no destructive rollback).
-
-## Integrated
-- #119: Rules recompute eligibility from original rendszam; capacity from Fleet kapacitas; SHA fail-closed.
-- #120: fail-closed Apps Script rollback; nontrivial synthetic backup/restore.
 
 ## Nyitott
-- Real two-browser post-import Flotta→Depó UI chain with original Flotta HTML (separate from synthetic emulator browser workflow).
-- Claude duplicate DA/plate server-side hard-stop (separate track; not yet delivered for review).
+- Real two-browser post-import Flotta→Depó UI chain with original Flotta HTML.
+- Claude duplicate DA/plate server-side hard-stop (not yet proven; one of two duplicates was still bookable).
 - Full CI re-run on this new SHA.
 - Rules deploy, UID swap, real migration (after approval).
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
 2. Real two-browser post-import UI chain passes.
-3. Claude independent security review of duplicate identity hard-stop.
+3. Claude independent security review of duplicate identity hard-stop with emulator evidence.
 4. Separate Grok GO + ChatGPT GO + owner authorization.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
