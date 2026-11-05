@@ -7,6 +7,7 @@ on:
       - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
       - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
       - 'staging/imile-management/fleet/v1-post-import-two-browser.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-flotta-depo-e2e.mjs'
       - 'features/firestore-bridge.js'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'staging/imile-management/fleet/v1-two-browser-emulator.e2e.mjs'
       - 'staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs'
       - 'staging/imile-management/fleet/v1-post-import-two-browser.e2e.mjs'
+      - 'staging/imile-management/fleet/v1-flotta-depo-e2e.mjs'
       - 'features/firestore-bridge.js'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
 permissions:
@@ -39,6 +41,12 @@ jobs:
         run: npm install --prefix staging/imile-management/fleet --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.58.0
       - name: Install local headless Chromium – no paid service
         run: ./staging/imile-management/fleet/node_modules/.bin/playwright install --with-deps chromium
+      - name: Flotta to Depo E2E – localhost only
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only auth,firestore --project demo-imile-qa \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-flotta-depo-e2e.mjs"
       - name: Post-import two-browser original Fleet HTML – localhost only
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec \

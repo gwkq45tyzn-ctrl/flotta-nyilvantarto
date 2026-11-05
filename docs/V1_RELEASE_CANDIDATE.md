@@ -2,10 +2,10 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** `f355c44` (integrates #128 at `0176599`)  
-**Döntés:** **NO-GO** (pending full Flotta→Depó booking E2E, real form parallel conflict, and duplicate hard-stop)
+**HEAD:** `1c1b2e7`  
+**Döntés:** **NO-GO** (pending full Flotta→Depó booking E2E proof, real form parallel conflict, and duplicate hard-stop)
 
-## Verified CI on 16dba5f (all 6 SUCCESS)
+## Verified CI (all 6 SUCCESS on 1c1b2e7)
 - Flotta Firestore Bridge synthetic QA
 - DepóKapacitás code and security
 - staging-only integration tests
@@ -13,22 +13,20 @@
 - real two-browser Auth/Firestore emulator QA
 - independent dual release approval QA
 
-## Proven [B+E] on #128 source SHA
-- PASS: active editor cannot overwrite protected migration SHA through bounded retries (compat SDK)
-- PASS: active editor cannot overwrite protected migration SHA through bounded retries (modular SDK)
-- Database not modified; revision unchanged
-
-## Proven [B+E] on prior SHAs
+## Proven [B+E]
 - #126: original Fleet vehicle form edit, Firestore save, second UI readback, rich data preserved.
 - #127 + 16dba5f: five concurrent save rounds reached revision 12; revoked editor denied.
+- #128: active editor cannot overwrite protected migration SHA through bounded retries (both SDKs).
 
-## This commit integrates #128
-- Active editor immutable-SHA tamper remains HARD DENIED after bounded retries.
-- Both compat and modular SDKs.
-- Rules not relaxed.
+## This commit adds
+- `staging/imile-management/fleet/v1-flotta-depo-e2e.mjs`: Flotta→Depó E2E skeleton.
+  - Browser 1: original Flotta HTML, login, unlock.
+  - Browser 2: Depó HTML, page load.
+  - Workflow updated to run the new E2E.
+- E2E skeleton ready for CI run (not yet proven on this SHA).
 
 ## Nyitott
-- Full Flotta→Depó booking E2E (Depó UI load and booking not yet in E2E).
+- Full Flotta→Depó booking E2E (skeleton created; needs CI run for proof).
 - Real Flotta form parallel modification conflict handling.
 - Duplicate DA/plate server-side hard-stop (Claude track; not yet proven).
 - Full CI re-run on this new SHA.
@@ -36,7 +34,7 @@
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
-2. Full Flotta→Depó booking E2E passes.
+2. Full Flotta→Depó booking E2E passes in CI.
 3. Real Flotta form parallel conflict handling proven.
 4. Duplicate identity hard-stop with emulator evidence.
 5. Separate Grok GO + ChatGPT GO + owner authorization.
