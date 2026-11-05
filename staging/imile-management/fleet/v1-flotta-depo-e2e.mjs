@@ -98,7 +98,7 @@ try{
   server=createServer(async(req,res)=>{
     try{
       const pathname=new URL(req.url,origin).pathname;
-      if(pathname!=='/index.html'&&!allowed.test(pathname)){
+      if(pathname!=='/index.html'&&pathname!=='/depokapacitas/index.html'&&!allowed.test(pathname)){
         res.writeHead(404);res.end('QA file not allowed');return;
       }
       let source;
@@ -155,7 +155,7 @@ try{
     await depotPage.locator('#shell').waitFor({state:'visible',timeout:35000});
   }catch(error){
     const diagnostic=await depotPage.evaluate(()=>({
-      page:location.pathname,shellHidden:document.getElementById('shell')?.hidden,
+      page:location.pathname,body:document.body?.textContent?.slice(0,160),shellPresent:!!document.getElementById('shell'),shellHidden:document.getElementById('shell')?.hidden,
       denied:document.getElementById('denied')?.hidden===false,
       login:document.getElementById('login')?.hidden===false,
       setup:document.getElementById('setup')?.hidden===false,
