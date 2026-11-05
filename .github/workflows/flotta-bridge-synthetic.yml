@@ -9,6 +9,8 @@ on:
       - 'features/migration-size-probe*'
       - 'features/fleet-backup-parity*'
       - 'features/v1-synthetic-backup-restore.test.mjs'
+      - 'features/v1-post-import-contract.test.mjs'
+      - 'features/v1-two-browser-post-import.test.mjs'
       - 'docs/APPS_SCRIPT_CUTOVER_PLAN.md'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
@@ -21,6 +23,8 @@ on:
       - 'features/migration-size-probe*'
       - 'features/fleet-backup-parity*'
       - 'features/v1-synthetic-backup-restore.test.mjs'
+      - 'features/v1-post-import-contract.test.mjs'
+      - 'features/v1-two-browser-post-import.test.mjs'
       - 'docs/APPS_SCRIPT_CUTOVER_PLAN.md'
       - 'index.html'
       - '.github/workflows/flotta-bridge-synthetic.yml'
@@ -59,3 +63,7 @@ jobs:
         run: node --test features/fleet-backup-parity.test.mjs
       - name: Physical synthetic backup roundtrip, corruption and rollback freshness hard-stop
         run: node --test features/v1-synthetic-backup-restore.test.mjs
+      - name: Post-import structural contracts (NOT a browser UI E2E test)
+        run: |
+          node --test features/v1-post-import-contract.test.mjs
+          node --test features/v1-two-browser-post-import.test.mjs
