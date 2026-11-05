@@ -9,6 +9,7 @@
  */
 import {createHash} from 'node:crypto';
 import {analyze,canonical} from './migration-size-probe.mjs';
+import {planSharedMigration} from './shared-master-adapter.mjs';
 
 export const FLEET_ARRAY_KEYS=Object.freeze([
   'vehicles','fuelCards','drivers','contacts'
@@ -77,5 +78,108 @@ export function auditOriginalFleetRestore(originalBackup,proposedRestoredDocumen
     ownerAuthorized:false,
     deployAuthorized:false,
     notice:'Only offline JSON four-array parity; requires private real backup, actual restore drill, SHA approval, and live Rules before GO'
+  };
+}
+
+
+/**
+ * Synthetic/offline parity of the ACTUAL canonical /flottaSharedState/current
+ * shape written by features/firestore-bridge.js. The bridge appends one
+ * deterministic normalizedPlate to each rich vehicle and adds the protected
+ * migrationSourceSha256; raw four-array backup parity alone cannot compare
+ * this document directly and would reject an otherwise correct projection.
+ *
+ * The derived field MUST NOT mask a changed original record, history, fuel
+ * card, driver, or contact. No cloud reads, restoration, or owner approval.
+ */
+export function auditProjectedCanonicalFleetRestore(originalBackup,canonicalDocument,options={}){
+  const reasons=[];
+  const original=extract(originalBackup,{},reasons);
+  if(!plain(canonicalDocument)){
+    return {
+      status:'BLOCKED',reasons:[...new Set([...reasons,'invalid_canonical_document'])],
+      sourceBackupObtained:false,restoreToLiveVerified:false,
+      serverApprovalVerified:false,ownerAuthorized:false,deployAuthorized:false
+    };
+  }
+  const allowed=[...FLEET_ARRAY_KEYS,'revision','migrationSourceSha256','updatedAt','updatedBy'];
+  if(Object.keys(canonicalDocument).some(k=>!allowed.includes(k)))
+    reasons.push('unexpected_canonical_document_field');
+
+  const canonicalVehicles=canonicalDocument.vehicles;
+  const restoredVehicles=[];
+  if(!Array.isArray(canonicalVehicles))reasons.push('missing_or_invalid_vehicles');
+  else for(let i=0;i<canonicalVehicles.length;i++){
+    const vehicle=canonicalVehicles[i];
+    const source=original?.vehicles?.[i];
+    if(!plain(vehicle)||!plain(source)){
+      reasons.push('invalid_vehicle_projection');continue;
+    }
+    // Only ASCII characters understood equally by JS and Firestore Rules.
+    // Hidden Unicode case folding must never be silently "normalized".
+    const raw=source.rendszam;
+    const expected=typeof raw==='string'&&/^[A-Za-z0-9 -]{4,40}$/.test(raw)
+      ?raw.replace(/[ -]/g,'').toUpperCase():null;
+    if(!expected||!/^[A-Z0-9]{4,12}$/.test(expected)){
+      reasons.push('invalid_original_plate_for_projection');
+    }else if(vehicle.normalizedPlate!==expected){
+      reasons.push('derived_plate_mismatch');
+    }
+    if(!Object.hasOwn(vehicle,'normalizedPlate'))
+      reasons.push('missing_derived_plate');
+    const clean={...vehicle};
+    // Compare every source-owned field, including history and optional rich
+    // fields. Remove ONLY the bridge-owned field when it did not exist before.
+    if(!Object.hasOwn(source,'normalizedPlate'))delete clean.normalizedPlate;
+    restoredVehicles.push(clean);
+  }
+
+  const plainRestored={
+    vehicles:restoredVehicles,
+    fuelCards:canonicalDocument.fuelCards,
+    drivers:canonicalDocument.drivers,
+    contacts:canonicalDocument.contacts,
+    revision:canonicalDocument.revision,
+    updatedAt:canonicalDocument.updatedAt,
+    updatedBy:canonicalDocument.updatedBy
+  };
+  const parity=auditOriginalFleetRestore(originalBackup,plainRestored,options);
+  const sourceHash=parity.payloadSha256;
+  if(!sourceHash||canonicalDocument.migrationSourceSha256!==sourceHash)
+    reasons.push('protected_migration_source_sha_mismatch');
+  if(original){
+    // A perfectly preserved source may still be unusable for Depot booking:
+    // duplicates and unknown status remain a separate pre-cutover STOP.
+    try{
+      const mapping=planSharedMigration(original);
+      if(!mapping.ready)reasons.push('unresolved_original_master_mapping');
+    }catch(_){reasons.push('invalid_original_master_mapping');}
+  }
+
+  let canonicalDocumentSizeEstimate=null;
+  try{
+    const checked=analyze({
+      vehicles:canonicalDocument.vehicles,fuelCards:canonicalDocument.fuelCards,
+      drivers:canonicalDocument.drivers,contacts:canonicalDocument.contacts,
+      revision:canonicalDocument.revision,
+      migrationSourceSha256:canonicalDocument.migrationSourceSha256,
+      // Safe placeholders: native Firestore Timestamp/actual UID must still
+      // be checked by the privileged importer against the live document size.
+      updatedAt:'SYNTHETIC_TIMESTAMP_PLACEHOLDER',
+      updatedBy:'SYNTHETIC_UID_PLACEHOLDER'
+    });
+    canonicalDocumentSizeEstimate=checked.firestoreDocumentBytes;
+    if(checked.stop)reasons.push('canonical_document_size_or_schema_stop');
+  }catch(_){reasons.push('canonical_document_size_or_schema_stop');}
+
+  const all=[...new Set([...parity.reasons,...reasons])];
+  return {
+    ...parity,
+    status:all.length?'BLOCKED':'PARITY_MATCHED_OFFLINE',
+    reasons:all,
+    canonicalDocumentSizeEstimate,
+    projectedPlateCount:restoredVehicles.length,
+    nativeTimestampAndUIDSizeVerified:false,
+    notice:'Offline exact source fields plus derived plate and source SHA; not proof of a live backup, Firestore write, restore, Rules publication or owner GO'
   };
 }
