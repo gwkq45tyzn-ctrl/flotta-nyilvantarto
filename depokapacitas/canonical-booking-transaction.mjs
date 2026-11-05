@@ -62,10 +62,10 @@ export async function commitCanonicalDepotBooking({
     if(!check.ready)throw Error('BOOKING_BLOCKED: '+check.code);
     const fleetData=fleet.exists()?fleet.data():{};
     const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').trim().toUpperCase()===driverId);
-    // Canonical Flotta is the fallback when no per-day Depot capacity exists.
-    // Do not dereference an absent legacy Depot mirror.
-    const rawCapacity=capacity.exists()?capacity.data()?.capacity:
-      (fleetDriver?.kapacitas??fleetDriver?.capacity??(driver.exists()?driver.data()?.capacity:undefined));
+    // Canonical Flotta capacity is the only booking authority.
+    // Old /driverCapacities and /drivers are mutable legacy mirrors and may
+    // not inflate or manufacture a missing Fleet capacity.
+    const rawCapacity=fleetDriver?.kapacitas??fleetDriver?.capacity;
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
