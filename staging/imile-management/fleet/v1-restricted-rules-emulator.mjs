@@ -235,6 +235,88 @@ try{
     await setDoc(fleet(ctx.firestore()),fleetData(2));
     await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});
   });
+
+  // P0 ADVERSARIAL ACCEPTANCE CONTRACT (LOCAL FIRESTORE EMULATOR):
+  // Ordinary UI booking guard is NOT a server-side hard-stop. An authenticated
+  // editor can call Firestore directly; Rules must independently DENY *every*
+  // ambiguous normalized DA/plate booking, even if a different source row is
+  // apparently eligible. A failed acceptance assertion below is intentional
+  // evidence of an unresolved release blocker, NEVER a green release signal.
+  const identityP0Failures=[];
+  async function mustDenyIdentityP0(label,action){
+    try {
+      await action();
+      identityP0Failures.push(label);
+      console.error('P0 FAIL [E+SDK]: direct authorized Firestore SDK ALLOWED '+label);
+    } catch(e){
+      if(e.code!=='permission-denied')throw new Error(
+        'Unexpected failure in identity attack '+label+': '+e.message,{cause:e});
+      console.log('P0 PASS DENY [E+SDK]: '+label);
+    }
+  }
+  // 1) The protected Fleet document itself must reject duplicate normalized
+  // business identities on arbitrary direct-SDK writes, NOT only on app save.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),fleetData(2)));
+  await mustDenyIdentityP0('direct SDK editor inserts identical DA twice',
+    ()=>updateDoc(fleet(shared),{revision:3,drivers:[
+      {daCode:'TEST0001',status:'aktiv',kapacitas:50},
+      {daCode:'TEST0001',status:'aktiv',kapacitas:500}
+    ]}));
+  // Independently seed the hostile server snapshot with emulator privilege,
+  // to test booking Rules regardless of whether a future Fleet-update gate
+  // correctly rejects this source mutation.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(3),
+    drivers:[
+      {daCode:'TEST0001',status:'aktiv',kapacitas:50},
+      {daCode:'TEST0001',status:'aktiv',kapacitas:500}
+    ]
+  }));
+  await mustDenyIdentityP0('forged second DA index books 500 capacity',
+    ()=>bookFuture('2099-02-16',{driverIndex:1,capacity:500}));
+  // 2) Normalized mixed-case duplicate DA must also forbid selecting FIRST.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(3),
+    drivers:[
+      {daCode:'TEST0001',status:'aktiv',kapacitas:50},
+      {daCode:'test0001',status:'aktiv',kapacitas:500}
+    ]
+  }));
+  await mustDenyIdentityP0('mixed-case duplicate DA first row still books',
+    ()=>bookFuture('2099-02-17',{driverIndex:0,capacity:50}));
+  // 3) Duplicate normalized plate must not be bookable by selecting the
+  // second available record while the first original car is in service.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(3),
+    vehicles:[
+      {rendszam:'TEST0001',status:'szerviz',normalizedPlate:'TEST0001'},
+      {rendszam:'TEST-0001',status:'aktiv',normalizedPlate:'TEST0001'}
+    ]
+  }));
+  await mustDenyIdentityP0('forged second vehicle index bypasses service',
+    ()=>bookFuture('2099-02-18',{vehicleIndex:1,capacity:50}));
+  // 4) The exact source normalization collision must be rejected on an
+  // ordinary direct SDK master update even before an attacker can book.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),fleetData(2)));
+  await mustDenyIdentityP0('direct SDK editor inserts normalized duplicate plate',
+    ()=>updateDoc(fleet(shared),{revision:3,vehicles:[
+      {rendszam:'TEST0001',status:'szerviz',normalizedPlate:'TEST0001'},
+      {rendszam:'TEST-0001',status:'aktiv',normalizedPlate:'TEST0001'}
+    ]}));
+  // Clean up synthetic attack documents without touching live data, then
+  // verify ordinary signed-in eligible booking remains operational.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),fleetData(2)));
+  await expectPermission('P0 positive control: unique Fleet source still books',true,
+    ()=>bookFuture('2099-02-19',{capacity:50}));
+  // The evaluation must FAIL the GitHub security QA on an unprotected server.
+  // Showing P0 vulnerabilities as PASS ALLOW is not permission to release.
+  assert.equal(identityP0Failures.length,0,
+    'P0 RELEASE BLOCKER: Firestore Rules allowed '+identityP0Failures.length+
+    ' ambiguous DA/plate direct-SDK operation(s): '+identityP0Failures.join('; '));
+
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,
