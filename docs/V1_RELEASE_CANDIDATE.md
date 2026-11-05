@@ -2,10 +2,10 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** `c1af06b`  
-**Döntés:** **NO-GO** (pending full Flotta→Depó E2E proof and duplicate hard-stop)
+**HEAD:** `c49fa46` (integrates #126 at `3ba0fba`)  
+**Döntés:** **NO-GO** (pending concurrent write fix, Depó booking E2E, and duplicate hard-stop)
 
-## Verified CI (all 6 SUCCESS on c1af06b)
+## Verified CI on c1af06b (all 6 SUCCESS)
 - Flotta Firestore Bridge synthetic QA
 - DepóKapacitás code and security
 - staging-only integration tests
@@ -13,28 +13,34 @@
 - real two-browser Auth/Firestore emulator QA
 - independent dual release approval QA
 
-## Proven [B+E]
-- Two original Fleet browsers unlock after approved import.
-- Both browsers load rich approved source snapshot.
-- Parallel writes converge at revision 4 (synthetic browser test).
-- Offline client refuses to report successful write.
-- Revoked editor role hard-denied.
-- Pre-import is read-only, no Apps Script calls.
+## Proven [B+E] on #126 source SHA
+- PASS: original Fleet vehicle form edit persisted to REAL Firestore emulator with all rich data intact
+- PASS: second independent original Fleet UI reflects edit without reload
+- PASS: both browsers unlocked after approved import
+- PASS: both browsers loaded rich approved source snapshot
+- PASS: logout re-locks
 
-## This commit adds
-- Post-import E2E extended with Flotta modification sync to second browser.
-- Modification via UI save path, verification in second browser.
+## Known issue
+- Synthetic concurrent write test (v1-two-browser-emulator.e2e.mjs) fails with permission-denied. Server revision stays at 3 instead of 4. This is a separate synthetic test, not the original Fleet UI path. Rules are not relaxed.
+
+## This commit integrates #126
+- Real original Fleet vehicle form edit (not localStorage mutation).
+- Firestore server-side save verified.
+- Second UI readback without reload.
+- Rich data (history, capacity, fuel cards, contacts, SHA) preserved.
 
 ## Nyitott
-- Full Flotta→Depó E2E: modification → save → Depó appearance → booking (E2E extended but not yet CI-proven).
+- Concurrent write permission-denied in synthetic test (needs real cause investigation).
+- Full Flotta→Depó booking E2E (Depó UI load and booking not yet in E2E).
 - Duplicate DA/plate server-side hard-stop (Claude track; not yet proven).
 - Full CI re-run on this new SHA.
 - Rules deploy, UID swap, real migration (after approval).
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
-2. Full Flotta→Depó E2E passes in CI.
-3. Duplicate identity hard-stop with emulator evidence.
-4. Separate Grok GO + ChatGPT GO + owner authorization.
+2. Concurrent write issue fixed or proven non-blocking.
+3. Full Flotta→Depó booking E2E passes.
+4. Duplicate identity hard-stop with emulator evidence.
+5. Separate Grok GO + ChatGPT GO + owner authorization.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
