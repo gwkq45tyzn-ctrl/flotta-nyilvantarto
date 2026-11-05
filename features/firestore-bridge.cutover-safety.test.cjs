@@ -33,7 +33,7 @@ function mockBridge({importVerified = false, forgeLocal = false, failTransaction
   const mockUser = {uid:'synthetic-test-uid',email:SHARED_EMAIL};
   let originalSaves=0, remoteWrites=0, uiUnlocked=false;
   let localSnapshot = {
-    vehicles:[{id:'test-car',km:100}],
+    vehicles:[{id:'test-car',rendszam:'TEST0001',status:'aktiv',km:100}],
     fuelCards:[],drivers:[],contacts:[]
   };
   const nativePromise = Promise;
