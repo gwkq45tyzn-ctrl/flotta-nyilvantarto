@@ -280,6 +280,7 @@
     writeInFlight = true;
     const draft = snapshot();
     const draftKey = JSON.stringify(draft);
+    let nonRetryableIdentityError = false;
     try {
       assertUniqueIdentityForSave(draft);
       const newRev = await db.runTransaction(async (tx) => {
@@ -329,6 +330,10 @@
       }
     } catch (e) {
       localDirty = true;
+      // Invalid source data will not become valid by silently retrying the
+      // same snapshot. Preserve local changes and report the exact blocker.
+      nonRetryableIdentityError = /^(?:INVALID_CANONICAL_|INVALID_OR_DUPLICATE_CANONICAL_)/.test(e.message || '');
+      if (nonRetryableIdentityError) requeueCount = 0;
       if (e.message === 'REVISION_CONFLICT') {
         status('Ütközés: másik gépen módosították az adatot. Frissítsd az oldalt, vagy exportáld a helyi állapotot.', true);
       } else {
@@ -338,7 +343,7 @@
     } finally {
       writeInFlight = false;
       // If a newer edit arrived while we were writing, push the latest snapshot
-      if (localDirty && isPrimary() && auth && auth.currentUser && requeueCount < MAX_REQUEUE) {
+      if (!nonRetryableIdentityError && localDirty && isPrimary() && auth && auth.currentUser && requeueCount < MAX_REQUEUE) {
         requeueCount++;
         Promise.resolve().then(() => pushTransactional());
       } else if (requeueCount >= MAX_REQUEUE) {
