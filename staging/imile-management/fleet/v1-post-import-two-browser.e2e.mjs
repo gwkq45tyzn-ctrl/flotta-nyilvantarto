@@ -187,6 +187,79 @@ try{
   await page2.waitForFunction(()=>document.getElementById('km')?.value==='12345',null,{timeout:10000});
   assert.equal(await page2.locator('#modal.active #km').inputValue(),'12345');
   console.log('PASS [B+E]: second independent original Fleet UI reflects edit without reload');
+
+  // P0 RED-TEAM: both ORIGINAL Fleet vehicle forms are edited against the
+  // same rich record. Client B starts an edit BEFORE A saves a different field.
+  // Once A's server update arrives, the stale B form must NEVER silently
+  // overwrite A's unrelated note. Either merge correctly using server source,
+  // or refuse B's stale save and preserve B's pending km value for recovery.
+  await page2.locator('#modal.active button[onclick="closeModal()"]').click();
+  await page2.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
+  const staleNote=await page2.locator('#modal.active #megjegyzes').inputValue();
+  await page2.locator('#modal.active #km').fill('22222');
+
+  await page1.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
+  await page1.locator('#modal.active #megjegyzes').fill('KEEP_A_EDIT');
+  await page1.locator('#modal.active #vehicleForm button[type="submit"]').click();
+
+  await page2.waitForFunction(()=>{
+    try{
+      const raw=JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}');
+      return raw.revision===3&&raw.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT';
+    }catch{return false;}
+  },null,{timeout:15000});
+  // If the remote event refreshed the in-memory Fleet but NOT the open
+  // editing modal, the form still holds a stale value for the other field.
+  assert.equal(await page2.locator('#modal.active #megjegyzes').inputValue(),
+    staleNote,'Stale B modal must be reproducibly open for negative QA');
+  assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222');
+  await page2.locator('#modal.active #vehicleForm button[type="submit"]').click();
+
+  await page2.waitForFunction(()=>{
+    const sync=document.getElementById('syncStatus')?.textContent||'';
+    let cache;
+    try{cache=JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}');}
+    catch{cache={};}
+    return cache.revision>=4
+      || /Ütközés|Mentési hiba|Túl sok újrapróbálkozás/.test(sync);
+  },null,{timeout:20000});
+  let afterConflict;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    afterConflict=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+  });
+  assert.ok(afterConflict.exists());
+  const persistedAfter=afterConflict.data();
+  console.log('REAL RICH FORM STALE-EDIT DIAGNOSTIC (synthetic): '+
+    JSON.stringify({serverRevision:persistedAfter.revision,
+      preservedForeignNote:persistedAfter.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT',
+      secondKmOnServer:persistedAfter.vehicles?.[0]?.km===22222}));
+  // Failure here is an actual release blocker, not an emulator-only test
+  // flake: A's committed note must not be reverted by B's stale edit form.
+  assert.equal(persistedAfter.vehicles[0].megjegyzes,'KEEP_A_EDIT',
+    'P0 SILENT LOST UPDATE: stale original Fleet form B overwrote A committed note');
+  if(persistedAfter.revision===3){
+    const recovery=await page2.evaluate(()=>{
+      try {
+        const d=JSON.parse(localStorage.getItem('flotta_stale_vehicle_draft_v1')||'{}');
+        return {id:d.id,km:d.fields?.km,note:d.fields?.megjegyzes,
+          message:document.getElementById('syncStatus')?.textContent};
+      } catch{return null;}
+    });
+    assert.equal(recovery?.id,'fleet-qa-vehicle-1',
+      'Rejected B edit must keep original vehicle identity in separate recovery draft');
+    assert.equal(recovery?.km,'22222',
+      'Rejected stale B edit must preserve pending km 22222 for recovery/export');
+    assert.match(recovery?.message||'',/Ütközés|helyi piszkozat/i,
+      'Conflicted save must visibly warn operator, not falsely report success');
+    assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222',
+      'Original stale modal must retain typed input after denied submit');
+    assert.equal(persistedAfter.vehicles[0].km,12345,
+      'No stale B km was silently saved after conflict');
+    console.log('PASS [B+E]: stale original Fleet form HARD STOP; foreign committed note intact, local km draft preserved');
+  }else{
+    assert.equal(persistedAfter.vehicles[0].km,22222);
+    console.log('PASS [B+E]: concurrent real Fleet rich form edits merged without losing A note');
+  }
   await page1.locator('#flottaLogout').click();
   await page1.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: logout re-locks');
