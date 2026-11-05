@@ -61,6 +61,19 @@ function bookFuture(date){
   });
   return b.commit();
 }
+// RED TEAM: direct SDK batch with arbitrary selected Fleet indices, unlike UI.
+function bookCustomFuture(date,{driverIndex=0,vehicleIndex=0,capacity=50}={}){
+  const bookingId=date+'__TEST0001';
+  const batch=writeBatch(shared);
+  batch.set(doc(shared,'bookings',bookingId),{
+    date,vehicleId:'TEST0001',driverId:'TEST0001',
+    district:'1',status:'planned',capacity,driverIndex,vehicleIndex
+  });
+  batch.set(doc(shared,'driverClaims',date+'__TEST0001'),{
+    date,driverId:'TEST0001',bookingId
+  });
+  return batch.commit();
+}
 const locations=[
   ['users',uid],
   ['drivers','TEST0001'],
@@ -211,6 +224,54 @@ try{
     await setDoc(doc(db,'driverCapacities','TEST0001'),{capacity:50});
     await setDoc(doc(db,'drivers','TEST0001'),driver('TEST0001'));
   });
+  // Unicode case-folding must NEVER authorize visually different raw IDs.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),{...fleetData(2),
+      vehicles:[{rendszam:'TE\\u017fT0001',status:'aktiv',normalizedPlate:'TEST0001'}]}));
+  await expectPermission('Unicode long-s raw plate cannot impersonate ASCII plate',false,
+    ()=>bookCustomFuture('2099-01-11'));
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),{...fleetData(2),
+      drivers:[{daCode:'TE\\u017fT0001',status:'aktiv',kapacitas:50}]}));
+  await expectPermission('Unicode long-s raw DA cannot impersonate ASCII DA',false,
+    ()=>bookCustomFuture('2099-01-12'));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(fleet(ctx.firestore()),{...fleetData(2),
+      drivers:[{daCode:'TEST0001',status:'aktiv'}]});
+    await deleteDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'));
+  });
+  await expectPermission('no declared Fleet capacity and no override cannot book zero',false,
+    ()=>bookCustomFuture('2099-01-13',{capacity:0}));
+
+  // Unresolved P0 proof: the restricted Rules STILL allow an editor to write
+  // duplicate DA rows; a forged caller-selected index inflates capacity.
+  // This red-team witness deliberately asserts ALLOW, to make the residual
+  // vulnerability observable rather than falsely claiming an identity fix.
+  const duplicated=[{daCode:'TEST0001',status:'aktiv',kapacitas:50},
+    {daCode:'TEST0001',status:'aktiv',kapacitas:500}];
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),fleetData(2)));
+  await expectPermission('P0 RED-TEAM: direct SDK can still insert duplicate DA records',true,
+    ()=>updateDoc(fleet(shared),{revision:3,drivers:duplicated}));
+  await expectPermission('P0 RED-TEAM: duplicate selected high-capacity index still books',true,
+    ()=>bookCustomFuture('2099-01-14',{driverIndex:1,capacity:500}));
+  console.error('RELEASE NO-GO: direct SDK duplicate DA rows and 500-capacity booking remain possible');
+  // P0 second witness: a duplicated car can point booking to the AVAILABLE
+  // second row even when the first identical original plate is in service.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(3),
+    vehicles:[
+      {rendszam:'TEST0001',status:'szerviz',normalizedPlate:'TEST0001'},
+      {rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}
+    ]
+  }));
+  await expectPermission('P0 RED-TEAM: duplicate plate second row bypasses first service status',true,
+    ()=>bookCustomFuture('2099-01-15',{driverIndex:0,vehicleIndex:1,capacity:50}));
+  console.error('RELEASE NO-GO: duplicate license plates can also bypass the first record service status');
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(fleet(ctx.firestore()),fleetData(2));
+    await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});
+  });
+
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,

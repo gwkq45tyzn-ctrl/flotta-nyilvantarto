@@ -246,6 +246,30 @@
     return { drivers, vehicles };
   }
 
+  // UI preflight only: direct SDK writers still require independent Rules
+  // protection. Never call this proof of server-side array uniqueness.
+  function assertUniqueIdentityForSave(draft) {
+    const plates = new Set(), das = new Set();
+    for (const vehicle of (draft.vehicles || [])) {
+      const raw = vehicle?.rendszam;
+      if (typeof raw !== 'string' || !/^[A-Za-z0-9 -]+$/.test(raw))
+        throw new Error('INVALID_CANONICAL_PLATE_CHARACTERS');
+      const id = raw.replace(/[ -]/g, '').toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(id) || plates.has(id))
+        throw new Error('INVALID_OR_DUPLICATE_CANONICAL_PLATE');
+      plates.add(id);
+    }
+    for (const driver of (draft.drivers || [])) {
+      const raw = driver?.daCode;
+      if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]+$/.test(raw))
+        throw new Error('INVALID_CANONICAL_DA_CHARACTERS');
+      const id = raw.toUpperCase();
+      if (!/^[A-Z0-9_-]{4,40}$/.test(id) || das.has(id))
+        throw new Error('INVALID_OR_DUPLICATE_CANONICAL_DA');
+      das.add(id);
+    }
+  }
+
   async function pushTransactional() {
     if (applyingRemote || !auth.currentUser || !isPrimary()) return;
     if (typeof snapshot !== 'function') return;
@@ -256,7 +280,9 @@
     writeInFlight = true;
     const draft = snapshot();
     const draftKey = JSON.stringify(draft);
+    let nonRetryableIdentityError = false;
     try {
+      assertUniqueIdentityForSave(draft);
       const newRev = await db.runTransaction(async (tx) => {
         const ref = db.doc(SHARED_STATE);
         const snap = await tx.get(ref);
@@ -267,7 +293,8 @@
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
         const projected = projectStrictMasters(draft);
-        const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
+        const norm=s=>typeof s==='string' && /^[A-Za-z0-9 -]+$/.test(s)
+          ? s.replace(/[ -]/g,'').toUpperCase() : '';
         const payload = {
           vehicles: (draft.vehicles||[]).map(v=>({...v,normalizedPlate:norm(v.rendszam)})),
           fuelCards: draft.fuelCards || [],
@@ -303,6 +330,10 @@
       }
     } catch (e) {
       localDirty = true;
+      // Invalid source data will not become valid by silently retrying the
+      // same snapshot. Preserve local changes and report the exact blocker.
+      nonRetryableIdentityError = /^(?:INVALID_CANONICAL_|INVALID_OR_DUPLICATE_CANONICAL_)/.test(e.message || '');
+      if (nonRetryableIdentityError) requeueCount = 0;
       if (e.message === 'REVISION_CONFLICT') {
         status('Ütközés: másik gépen módosították az adatot. Frissítsd az oldalt, vagy exportáld a helyi állapotot.', true);
       } else {
@@ -312,7 +343,7 @@
     } finally {
       writeInFlight = false;
       // If a newer edit arrived while we were writing, push the latest snapshot
-      if (localDirty && isPrimary() && auth && auth.currentUser && requeueCount < MAX_REQUEUE) {
+      if (!nonRetryableIdentityError && localDirty && isPrimary() && auth && auth.currentUser && requeueCount < MAX_REQUEUE) {
         requeueCount++;
         Promise.resolve().then(() => pushTransactional());
       } else if (requeueCount >= MAX_REQUEUE) {

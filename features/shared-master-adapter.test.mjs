@@ -67,4 +67,17 @@ const unknownStatus=planSharedMigration({
 assert.equal(unknownStatus.ready,false);
 assert.equal(unknownStatus.drivers[0].active,false);
 assert.throws(()=>planSharedMigration({vehicles:[],drivers:[]}),/four arrays required/);
+// Unicode case folding is dangerous: dotless-i (U+0131) uppercases to I,
+// long-s (U+017F) uppercases to S, creating hidden ASCII identity collisions.
+for(const rawPlate of ['ABC\u00a0123','ABC\u2013123','ABC\u0131123','AB\u017f123']){
+  assert.equal(fleetVehicleToDepo({...snapshot.vehicles[0],rendszam:rawPlate}),null,
+    'Unicode/non-ASCII plate rejected: '+rawPlate);
+}
+for(const rawDA of ['DA0\u01311','DA\u017f01','DA\u00a0001']){
+  assert.equal(fleetDriverToDepo({...snapshot.drivers[0],daCode:rawDA}),null,
+    'Unicode/non-ASCII DA rejected: '+rawDA);
+}
+assert.equal(fleetVehicleToDepo({...snapshot.vehicles[0],rendszam:'abc- 123'}).id,'ABC123');
+assert.equal(fleetDriverToDepo({...snapshot.drivers[0],daCode:'da001'}).id,'DA001');
+
 console.log('shared-master canonical, identity, lossless and schema tests passed');
