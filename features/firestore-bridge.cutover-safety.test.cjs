@@ -64,7 +64,7 @@ function mockBridge({importVerified = false, forgeLocal = false, failTransaction
               status:'approved',approvedUid:mockUser.uid,sourceSha256:'a'.repeat(64)
             })};
           if(name==='flottaSharedState/current')
-            return {exists:importVerified,data:()=>({...localSnapshot,revision:1})};
+            return {exists:importVerified,data:()=>({...localSnapshot,revision:1,migrationSourceSha256:'a'.repeat(64)})};
           throw Error('Unexpected server read: '+name);
         },
         onSnapshot(){return ()=>{};}

@@ -148,6 +148,7 @@
       const fleet = await db.doc(SHARED_STATE).get({ source: 'server' });
       const data = fleet.exists ? fleet.data() : null;
       if (!data || !Number.isSafeInteger(data.revision) || data.revision < 1 ||
+          data.migrationSourceSha256 !== policy.sourceSha256 ||
           !['vehicles','drivers','fuelCards','contacts'].every(k => Array.isArray(data[k])))
         return false;
       if (!memberVerified || !auth.currentUser ||
@@ -277,9 +278,10 @@
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy: auth.currentUser.uid
         };
-        if (!payload.migrationSourceSha256) {
-          // Synthetic test harnesses may not seed the SHA. Preserve it when present.
-          delete payload.migrationSourceSha256;
+        if (!/^[a-f0-9]{64}$/.test(payload.migrationSourceSha256)) {
+          // A missing source identity is a hard STOP, even in synthetic tests.
+          // Do not remove this field to make a test harness pass.
+          throw new Error('MISSING_MIGRATION_SOURCE');
         }
         tx.set(ref, payload);
         // S7: flottaSharedState is the single canonical source.

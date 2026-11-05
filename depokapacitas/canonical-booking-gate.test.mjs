@@ -71,24 +71,28 @@ test('a changed Fleet revision from another browser aborts',()=>{
   a.expectedFleetRevision=7;
   assert.equal(assess(a).ready,true);
 });
-test('out-of-band Depot driver and vehicle changes cannot be booked',()=>{
+test('out-of-band legacy Depot mirrors cannot override canonical Fleet eligibility',()=>{
   const a=params();
   a.depotDriver.name='STALE';
-  assert.equal(reasons(a),'driver_depot_projection_drift');
-  a.depotDriver=params().depotDriver;
-  a.depotVehicle.status='Szerviz';
-  assert.equal(reasons(a),'vehicle_depot_projection_drift');
-  a.depotVehicle=params().depotVehicle;
-  a.depotVehicle.extraHistory='must not be in strict projection';
-  assert.equal(reasons(a),'vehicle_depot_projection_drift');
+  assert.equal(reasons(a),'server_read_parity_ready');
+  a.depotVehicle.status='Szerviz'; // A forged mirror cannot block an eligible Fleet car.
+  assert.equal(reasons(a),'server_read_parity_ready');
+  a.depotVehicle.extraHistory='must not enter canonical projection';
+  assert.equal(reasons(a),'server_read_parity_ready');
+  // Even a forged AVAILABLE mirror must not override a Fleet service stop.
+  a.fleet.vehicles[0].status='szerviz';
+  a.depotVehicle.status='Elérhető';
+  assert.equal(reasons(a),'ineligible_fleet_master');
 });
-test('Fleet master changes never silently match stale Depot mirror',()=>{
+test('Fleet master edits remain authoritative, regardless of stale Depot mirror',()=>{
   const a=params();
   a.fleet.vehicles[0].status='szerviz';
-  assert.equal(reasons(a),'vehicle_depot_projection_drift');
+  assert.equal(reasons(a),'ineligible_fleet_master');
   a.fleet=params().fleet;
   a.fleet.drivers[0].name='Updated in Fleet';
-  assert.equal(reasons(a),'driver_depot_projection_drift');
+  assert.equal(reasons(a),'server_read_parity_ready');
+  a.fleet.drivers[0].status='inaktiv';
+  assert.equal(reasons(a),'ineligible_fleet_master');
 });
 test('booked driver and car must exist and be eligible according to Fleet',()=>{
   const a=params();
@@ -112,8 +116,10 @@ test('missing or duplicate IDs and partial Fleet data are never valid',()=>{
   assert.equal(reasons(a),'invalid_full_fleet_snapshot');
   const b=params(); b.fleet.drivers.push({...b.fleet.drivers[0],id:'other'});
   assert.equal(reasons(b),'invalid_canonical_master_projection');
-  const c=params(); c.depotDriver=null;
-  assert.equal(reasons(c),'driver_depot_projection_drift');
+  const c=params(); c.depotDriver=null; c.depotVehicle=null;
+  assert.equal(reasons(c),'server_read_parity_ready');
+  c.fleet.drivers[0].status='inaktiv';
+  assert.equal(reasons(c),'ineligible_fleet_master');
 });
 test('rich history remains only in full Fleet, not in strict Depot docs',()=>{
   const a=params();
