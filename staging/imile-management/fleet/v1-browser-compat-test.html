@@ -24,7 +24,7 @@
       const script=document.createElement('script');script.src=src;
       script.onload=resolve;script.onerror=reject;document.head.append(script);
     });
-    let login,subscribe,increment,readServer;
+    let login,subscribe,increment,readServer,readEditorStatus;
     const ready=()=>{
       // A listener cannot silently turn a failed or in-flight write into
       // a "connected-server" success state, or re-enable an in-flight button.
@@ -36,20 +36,32 @@
     };
     const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     async function boundedConfirmedRetry(writeOnce) {
-      // Synthetic QA only: distinguish a confirmed concurrent revision change
-      // from an actual Firestore authorization denial. UI revision is not proof
-      // because onSnapshot may have advanced it before Save was clicked.
+      // The separate pre-attempt read is NOT a safe conflict baseline.
+      // A rival transaction may commit before it, while this client had
+      // already read the older version inside its write transaction.
+      // Compare ONLY against the revision the rejected transaction read.
+      // This cannot convert a revoked permission into a successful write:
+      // each retry still goes through Firestore Rules, and a current server
+      // editor profile is independently required before retrying.
       for(let attempt=0;attempt<4;attempt++){
-        const before=await readServer();
-        try{return await writeOnce();}
+        let transactionReadRevision=null;
+        const recordRead=(value)=>{
+          if(!Number.isSafeInteger(value)||value<1)
+            throw Error('Invalid Fleet revision read during transaction');
+          transactionReadRevision=value;
+        };
+        try{return await writeOnce(recordRead);}
         catch(error){
           if(!['permission-denied','aborted'].includes(error?.code)||attempt===3)
             throw error;
-          // A revoked role, invalid auth token or other denied write MUST NOT
-          // be relabeled as an optimistic-lock conflict. Fail closed unless
-          // the server itself demonstrably advanced during this attempt.
-          const after=await readServer();
-          if(after<=before)throw error;
+          if(!Number.isSafeInteger(transactionReadRevision))
+            throw error;
+          const [after,stillEditor]=await Promise.all([readServer(),readEditorStatus()]);
+          // A denied transaction is NEVER success, even if another client
+          // advanced the server; retry only when the version it READ is
+          // demonstrably stale AND this caller is still allowed to edit.
+          if(!stillEditor||after<=transactionReadRevision)
+            throw error;
           $('state').textContent='retrying-conflict';
           await sleep(50*(attempt+1));
         }
@@ -74,10 +86,19 @@
           if(!snap.exists)throw Error('Missing Fleet');
           return Number(snap.data().revision);
         };
-        increment=()=>boundedConfirmedRetry(()=>db.runTransaction(async tx=>{
+        readEditorStatus=async()=>{
+          const uid=auth.currentUser?.uid;
+          if(!uid)return false;
+          const user=await db.collection('users').doc(uid).get({source:'server'});
+          return user.exists&&user.data()?.active===true
+            && ['admin','editor'].includes(user.data()?.role);
+        };
+        increment=()=>boundedConfirmedRetry(recordRead=>db.runTransaction(async tx=>{
           const snap=await tx.get(ref);
           if(!snap.exists)throw Error('Missing Fleet');
-          const current=snap.data(),next=Number(current.revision)+1;
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          const next=Number(current.revision)+1;
           tx.set(ref,{...current,revision:next});
           return next;
         }));
@@ -100,10 +121,19 @@
           if(!snap.exists())throw Error('Missing Fleet');
           return Number(snap.data().revision);
         };
-        increment=()=>boundedConfirmedRetry(()=>fire.runTransaction(db,async tx=>{
+        readEditorStatus=async()=>{
+          const uid=auth.currentUser?.uid;
+          if(!uid)return false;
+          const user=await fire.getDocFromServer(fire.doc(db,'users',uid));
+          return user.exists()&&user.data()?.active===true
+            && ['admin','editor'].includes(user.data()?.role);
+        };
+        increment=()=>boundedConfirmedRetry(recordRead=>fire.runTransaction(db,async tx=>{
           const snap=await tx.get(ref);
           if(!snap.exists())throw Error('Missing Fleet');
-          const current=snap.data(),next=Number(current.revision)+1;
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          const next=Number(current.revision)+1;
           tx.set(ref,{...current,revision:next});
           return next;
         }));
