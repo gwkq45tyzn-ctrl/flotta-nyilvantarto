@@ -10,7 +10,7 @@ import {once} from 'node:events';
 import {randomBytes,createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,setDoc} from 'firebase/firestore';
+import {doc,setDoc,Timestamp} from 'firebase/firestore';
 
 const host='127.0.0.1',port=8127,projectId='demo-imile-qa';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
@@ -59,7 +59,8 @@ try{
     const db=ctx.firestore();
     await setDoc(doc(db,'users',result.localId),{name:'SYNTHETIC FLEET ADMIN',active:true,role:'admin'});
     await setDoc(doc(db,'flottaMigrationApproval','current'),{
-      status:'approved',approvedUid:result.localId,sourceSha256:sourceSha
+      status:'approved',approvedUid:result.localId,sourceSha256:sourceSha,
+      approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
     });
     await setDoc(doc(db,'flottaSharedState','current'),fleetData);
   });
