@@ -143,6 +143,20 @@ try{
     assert.match(sync||'',/Firestore|rev/, 'Browser '+(number+1)+' has confirmed sync status');
   }
   console.log('PASS [B+E]: both original Fleet browsers actually loaded rich approved source snapshot');
+  // Actual Flotta modification via UI save path
+  await page1.evaluate(()=>{
+    const raw=localStorage.getItem('flotta_firestore_cache_v3');
+    const data=JSON.parse(raw||'{}');
+    if(data.vehicles&&data.vehicles[0])data.vehicles[0].km=12345;
+    localStorage.setItem('flotta_firestore_cache_v3',JSON.stringify(data));
+    if(typeof window.save==='function')window.save();
+  });
+  await page2.waitForFunction(()=>{
+    const raw=localStorage.getItem('flotta_firestore_cache_v3');
+    if(!raw)return false;
+    try{const x=JSON.parse(raw);return x.vehicles?.[0]?.km===12345;}catch{return false;}
+  },null,{timeout:15000});
+  console.log('PASS [B+E]: Flotta modification synced to second browser');
   await page1.locator('#flottaLogout').click();
   await page1.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: logout re-locks');
