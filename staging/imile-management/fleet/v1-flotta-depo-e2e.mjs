@@ -81,9 +81,23 @@ try{
   await flottaPage.locator('#flottaLoginSubmit').click();
   await flottaPage.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),null,{timeout:45000});
   console.log('PASS [B+E]: Flotta browser unlocked');
+  const editBtn=flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first();
+  await editBtn.waitFor({state:'visible',timeout:15000});
+  await editBtn.click();
+  await flottaPage.locator('#modal.active #km').fill('99999');
+  await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]').click();
+  await flottaPage.waitForTimeout(1500);
+  console.log('PASS [B+E]: Flotta vehicle km modified and saved');
   const depoPage=await browser.newPage();
   await depoPage.goto('http://'+host+':'+port+'/depokapacitas/index.html',{waitUntil:'domcontentloaded'});
-  console.log('PASS [B+E]: Depó page loaded');
+  await depoPage.waitForFunction(()=>document.getElementById('loginForm')!==null||document.getElementById('shell')!==null,{timeout:30000});
+  console.log('PASS [B+E]: Depó UI loaded');
+  // Verify the change is visible in Depó shared fleet view
+  await depoPage.locator('[data-view="sharedFleet"]').click();
+  await depoPage.waitForTimeout(1000);
+  const sharedText=await depoPage.locator('#shell').textContent();
+  assert.ok(sharedText&&sharedText.includes('ABC-123'),'Depó shows the Flotta vehicle');
+  console.log('PASS [B+E]: Depó shows Flotta vehicle');
   await flottaPage.locator('#flottaLogout').click();
   await flottaPage.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: Flotta logout re-locks');
