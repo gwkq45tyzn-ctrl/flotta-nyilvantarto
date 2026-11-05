@@ -36,8 +36,8 @@ async function createLocalEmulatorUser(){
     throw Error('Could not seed LOCAL Auth emulator: '+String(data.error?.message||response.status));
   return data.localId;
 }
-const wait=async(page,fn,description)=>{
-  try{await page.waitForFunction(fn,null,{timeout:45000});}
+const wait=async(page,fn,description,arg=null)=>{
+  try{await page.waitForFunction(fn,arg,{timeout:45000});}
   catch(error){
     const status=await page.locator('#state').textContent().catch(()=>'<not available>');
     throw Error(description+' failed, UI status='+status,{cause:error});
@@ -142,9 +142,9 @@ try{
       !document.getElementById('save')?.disabled)));
     await Promise.all([compat.locator('#save').click(),modular.locator('#save').click()]);
     try{
-      await Promise.all([compat,modular].map(page=>wait(page,()=> 
-        document.getElementById('revision')?.textContent===String(expected),
-        'repeated concurrent transaction round '+round)));
+      await Promise.all([compat,modular].map(page=>wait(page,revision=> 
+        document.getElementById('revision')?.textContent===String(revision),
+        'repeated concurrent transaction round '+round,expected)));
     }catch(error){
       const actual=await getDoc(doc(db,'flottaSharedState','current'));
       const states=await Promise.all([compat,modular].map(async page=>({
