@@ -57,13 +57,12 @@ service cloud.firestore {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId, driverIndex) {
-      let capacity = get(/databases/$(database)/documents/driverCapacities/$(driverId));
       let original = getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[driverIndex];
-      // No capacity field is NOT a zero-capacity authorization. Reject it.
-      // A legacy explicit per-driver override retains the old V1 semantics.
-      return capacity != null ? capacity.data.capacity
-        : (original.keys().hasAny(['kapacitas']) ? original.kapacitas
-          : (original.keys().hasAny(['capacity']) ? original.capacity : null));
+      // V1 Fleet is the only source of booking capacity. Legacy standalone
+      // driverCapacities are not authoritative and cannot inflate a booking.
+      // Missing data fails closed; never turn absence into capacity zero.
+      return original.keys().hasAny(['kapacitas']) ? original.kapacitas
+        : (original.keys().hasAny(['capacity']) ? original.capacity : null);
     }
     // The *privileged immutable migration approval*, not a browser-written
     // Fleet index, pins which record may authorize a booking by business ID.
