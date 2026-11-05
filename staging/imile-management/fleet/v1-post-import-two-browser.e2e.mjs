@@ -27,6 +27,11 @@ const allowed={
 const rulesRaw=await readFile(new URL('depokapacitas/firestore-v1-restricted.rules',root),'utf8');
 assert.ok(rulesRaw.includes('REPLACE_WITH_REAL_SHARED_UID'));
 const bridgeRaw=await readFile(new URL(allowed['/features/firestore-bridge.js'],root),'utf8');
+const configPattern=/const FIREBASE_CONFIG = \{[\s\S]*?\n  \};/;
+assert.match(bridgeRaw,configPattern,'Unexpected Fleet config format, block cloud fallback');
+const emulatorAnchor='db = initializedDb;';
+assert.ok(bridgeRaw.includes(emulatorAnchor),'Bridge injection point changed: STOP');
+
 
 const fleetData={
   vehicles:[{rendszam:'ABC-123',status:'aktiv',normalizedPlate:'ABC123',history:[{date:'2026-01-01',note:'synthetic'}]}],
@@ -58,13 +63,15 @@ try{
     });
     await setDoc(doc(db,'flottaSharedState','current'),fleetData);
   });
-  const localBridge=bridgeRaw.replace(
-    /const FIREBASE_CONFIG = \{[\s\S]*?\n  \};/,
-    `const FIREBASE_CONFIG = {apiKey:"fake",authDomain:"demo",projectId:"${projectId}"};`
-  ).replace(
-    'firebase.initializeApp(FIREBASE_CONFIG);',
-    `firebase.initializeApp(FIREBASE_CONFIG);firebase.auth().useEmulator('http://127.0.0.1:9099');firebase.firestore().useEmulator('${host}',8787);`
-  );
+  // Same emulator injection as existing passing original-Fleet browser test.
+  // A test must never silently fall back to a real cloud project.
+  const localBridge=bridgeRaw.replace(configPattern,
+    `const FIREBASE_CONFIG = {apiKey:'fake-api-key',authDomain:'localhost',projectId:'${projectId}',appId:'1:123:web:local-fleet'};`
+  ).replace(emulatorAnchor,emulatorAnchor+
+    "\n      auth.useEmulator('http://127.0.0.1:9099');"+
+    "\n      db.useEmulator('127.0.0.1',8787);");
+  assert.ok(localBridge.includes("auth.useEmulator('http://127.0.0.1:9099')"));
+  assert.ok(localBridge.includes("db.useEmulator('127.0.0.1',8787)"));
   server=createServer(async(req,res)=>{
     try{
       const pathname=new URL(req.url,'http://'+host+':'+port).pathname;
@@ -80,18 +87,61 @@ try{
   const ctx2=await browser.newContext();
   const page1=await ctx1.newPage();
   const page2=await ctx2.newPage();
-  for(const page of [page1,page2]){
+  for(const [number,page] of [page1,page2].entries()){
+    const pageErrors=[],consoleErrors=[],failedRequests=[];
+    page.on('pageerror',error=>pageErrors.push(String(error.message).slice(0,250)));
+    page.on('console',message=>{
+      if(message.type()==='error')consoleErrors.push(message.text().slice(0,250));
+    });
+    page.on('requestfailed',request=>failedRequests.push({
+      url:request.url().split('?')[0].slice(0,160),
+      error:request.failure()?.errorText?.slice(0,140)
+    }));
     await page.goto('http://'+host+':'+port+'/index.html',{waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>typeof window.fleetSimpleLogin==='function',{timeout:30000});
+    await page.waitForFunction(()=>typeof window.fleetSimpleLogin==='function'
+      && String(window.fleetSimpleLogin).includes('signInWithEmailAndPassword'),null,{timeout:30000});
     await page.locator('#flottaUsername').fill('imilemanagement');
     await page.locator('#flottaPassword').fill(password);
     await page.locator('#flottaLoginSubmit').click();
-    await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),null,{timeout:45000});
+    try {
+      await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),null,{timeout:45000});
+    } catch(error) {
+      // Local synthetic identities only. Never log passwords or tokens.
+      const diagnostic=await page.evaluate(()=>({
+        sdk:!!window.firebase,
+        loginHandlerPatched:String(window.fleetSimpleLogin).includes('signInWithEmailAndPassword'),
+        authEmulatorUser:!!window.firebase?.auth?.()?.currentUser,
+        status:document.getElementById('syncStatus')?.textContent?.slice(0,250),
+        loginError:document.getElementById('flottaLoginMessage')?.textContent?.slice(0,250),
+        buttonDisabled:document.getElementById('flottaLoginSubmit')?.disabled
+      }));
+      console.error('FAIL [B+E]: original Fleet login '+(number+1),JSON.stringify({
+        diagnostic,pageErrors,consoleErrors,failedRequests
+      }));
+      throw error;
+    }
   }
   console.log('PASS [B+E]: two browsers unlocked after approved import');
-  const status1=await page1.locator('#syncStatus').textContent();
-  assert.ok(status1&&status1.length>0,'Browser 1 has sync status');
-  console.log('PASS [B+E]: post-import sync status present');
+  // A status label alone is NOT a data-loading proof: inspect actual approved
+  // source snapshot in both independent original-Fleet browser contexts.
+  for(const [number,page] of [page1,page2].entries()){
+    await page.waitForFunction(()=>{
+      const raw=localStorage.getItem('flotta_firestore_cache_v3');
+      if(!raw)return false;
+      try{
+        const x=JSON.parse(raw);
+        return x.revision===1
+          && x.vehicles?.[0]?.rendszam==='ABC-123'
+          && x.vehicles?.[0]?.history?.[0]?.note==='synthetic'
+          && x.drivers?.[0]?.kapacitas===80
+          && x.fuelCards?.[0]?.id==='FC001'
+          && x.contacts?.[0]?.id==='CT001';
+      }catch{return false;}
+    },null,{timeout:15000});
+    const sync=await page.locator('#syncStatus').textContent();
+    assert.match(sync||'',/Firestore|rev/, 'Browser '+(number+1)+' has confirmed sync status');
+  }
+  console.log('PASS [B+E]: both original Fleet browsers actually loaded rich approved source snapshot');
   await page1.locator('#flottaLogout').click();
   await page1.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: logout re-locks');
