@@ -167,6 +167,28 @@ try{
   }
   const finalRevision=4+2*stressRounds;
 
+  // Adversarial negative: still-active admin/editor tries to mutate immutable
+  // canonical migration provenance. The new unconditional *bounded* client
+  // retry path must NEVER turn a genuine Rules rejection into a write.
+  for(const [mode,page] of [['compat',compat],['modular',modular]]){
+    assert.equal(await page.locator('#invalid').isEnabled(),true,
+      'Synthetic negative button must be available to an authenticated editor');
+    await page.locator('#invalid').click();
+    await wait(page,()=>
+      document.getElementById('state')?.textContent
+        ?.startsWith('write-error: permission-denied'),
+      mode+' active-editor protected source SHA mutation must be denied');
+    const source=await getDoc(doc(db,'flottaSharedState','current'));
+    assert.equal(source.data().revision,finalRevision,
+      'Forbidden '+mode+' mutation must NOT advance revision');
+    assert.equal(source.data().migrationSourceSha256,'e'.repeat(64),
+      'Forbidden '+mode+' mutation must NOT alter trusted source SHA');
+    assert.equal(await page.locator('#state').textContent(),'write-error: permission-denied',
+      'Denied write must not be reported as success');
+    console.log('PASS [B+E]: '+mode+
+      ' active editor immutable-SHA tamper remains HARD DENIED after bounded retries');
+  }
+
   // Offline must never give a false positive that a write was confirmed.
   await ctxModular.setOffline(true);
   await modular.locator('#save').click();
