@@ -255,6 +255,18 @@ try{
   await expectPermission('P0 RED-TEAM: duplicate selected high-capacity index still books',true,
     ()=>bookCustomFuture('2099-01-14',{driverIndex:1,capacity:500}));
   console.error('RELEASE NO-GO: direct SDK duplicate DA rows and 500-capacity booking remain possible');
+  // P0 second witness: a duplicated car can point booking to the AVAILABLE
+  // second row even when the first identical original plate is in service.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(3),
+    vehicles:[
+      {rendszam:'TEST0001',status:'szerviz',normalizedPlate:'TEST0001'},
+      {rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}
+    ]
+  }));
+  await expectPermission('P0 RED-TEAM: duplicate plate second row bypasses first service status',true,
+    ()=>bookCustomFuture('2099-01-15',{driverIndex:0,vehicleIndex:1,capacity:50}));
+  console.error('RELEASE NO-GO: duplicate license plates can also bypass the first record service status');
   await env.withSecurityRulesDisabled(async ctx=>{
     await setDoc(fleet(ctx.firestore()),fleetData(2));
     await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});
