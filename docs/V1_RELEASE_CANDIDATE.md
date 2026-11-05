@@ -2,27 +2,32 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** (this commit)  
-**Döntés:** **NO-GO** (pending concurrent stress test proof, full Flotta→Depó booking E2E, and duplicate hard-stop)
+**HEAD:** `f355c44` (integrates #128 at `0176599`)  
+**Döntés:** **NO-GO** (pending full Flotta→Depó booking E2E, real form parallel conflict, and duplicate hard-stop)
 
-## Verified CI on e49b351 (5/6 SUCCESS)
-- Flotta Firestore Bridge synthetic QA: SUCCESS
-- DepóKapacitás code and security: SUCCESS
-- staging-only integration tests: SUCCESS
-- restricted one-account Rules and migration QA: SUCCESS
-- independent dual release approval QA: SUCCESS
-- real two-browser Auth/Firestore emulator QA: FAIL (concurrent stress round)
+## Verified CI on 16dba5f (all 6 SUCCESS)
+- Flotta Firestore Bridge synthetic QA
+- DepóKapacitás code and security
+- staging-only integration tests
+- restricted one-account Rules and migration QA
+- real two-browser Auth/Firestore emulator QA
+- independent dual release approval QA
 
-## Known issue (fixed in this commit)
-- Concurrent stress test: one client got permission-denied. Pre-retry check saw server revision 10 while the other client had already advanced to 11. Expected revision 12 was not created.
-- Fix: on permission-denied, if still editor, always retry. The next transaction re-reads the current server revision. A revoked role is still hard-denied. Rules not relaxed.
+## Proven [B+E] on #128 source SHA
+- PASS: active editor cannot overwrite protected migration SHA through bounded retries (compat SDK)
+- PASS: active editor cannot overwrite protected migration SHA through bounded retries (modular SDK)
+- Database not modified; revision unchanged
 
 ## Proven [B+E] on prior SHAs
 - #126: original Fleet vehicle form edit, Firestore save, second UI readback, rich data preserved.
-- #127: five concurrent save rounds reached revisions 4/6/8/10/12 (before the stress failure).
+- #127 + 16dba5f: five concurrent save rounds reached revision 12; revoked editor denied.
+
+## This commit integrates #128
+- Active editor immutable-SHA tamper remains HARD DENIED after bounded retries.
+- Both compat and modular SDKs.
+- Rules not relaxed.
 
 ## Nyitott
-- Concurrent stress test proof on this new SHA (fix applied, needs CI run).
 - Full Flotta→Depó booking E2E (Depó UI load and booking not yet in E2E).
 - Real Flotta form parallel modification conflict handling.
 - Duplicate DA/plate server-side hard-stop (Claude track; not yet proven).
@@ -31,8 +36,8 @@
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
-2. Concurrent stress test passes multiple rounds.
-3. Full Flotta→Depó booking E2E passes.
+2. Full Flotta→Depó booking E2E passes.
+3. Real Flotta form parallel conflict handling proven.
 4. Duplicate identity hard-stop with emulator evidence.
 5. Separate Grok GO + ChatGPT GO + owner authorization.
 
