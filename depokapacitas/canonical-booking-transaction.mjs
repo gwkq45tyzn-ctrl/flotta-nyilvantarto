@@ -70,6 +70,10 @@ export async function commitCanonicalDepotBooking({
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
     const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
+    const driverMatches=(fleetData.drivers||[]).filter(d=>norm(d.daCode)===driverId);
+    const vehicleMatches=(fleetData.vehicles||[]).filter(v=>norm(v.rendszam)===vehicleId);
+    if(driverMatches.length!==1)throw Error('BOOKING_BLOCKED: duplicate_or_missing_driver');
+    if(vehicleMatches.length!==1)throw Error('BOOKING_BLOCKED: duplicate_or_missing_vehicle');
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>norm(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>norm(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
