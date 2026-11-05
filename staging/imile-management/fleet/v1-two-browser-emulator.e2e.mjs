@@ -82,6 +82,10 @@ try{
   const pageErrors=[];
   for(const [mode,page]of [['compat',compat],['modular',modular]]){
     page.on('pageerror',error=>pageErrors.push(mode+': '+error.message));
+    page.on('console',message=>{
+      if(message.text().startsWith('QA_RETRY_DECISION'))
+        console.log('QA '+mode+' '+message.text());
+    });
     await page.goto('http://'+host+':'+port+'/v1-browser-compat-test.html?mode='+mode,
       {waitUntil:'domcontentloaded'});
     await wait(page,()=>
