@@ -48,16 +48,15 @@ const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehi
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
-function bookFuture(date){
-  const bookingId=date+'__TEST0001';
+function bookFuture(date,{vehicleId='TEST0001',driverId='TEST0001',capacity=50,driverIndex=0,vehicleIndex=0}={}){
+  const bookingId=date+'__'+vehicleId;
   const b=writeBatch(shared);
   b.set(doc(shared,'bookings',bookingId),{
-    date,vehicleId:'TEST0001',driverId:'TEST0001',
-    district:'1',status:'planned',capacity:50,
-    driverIndex:0,vehicleIndex:0
+    date,vehicleId,driverId,district:'1',status:'planned',capacity,
+    driverIndex,vehicleIndex
   });
-  b.set(doc(shared,'driverClaims',date+'__TEST0001'),{
-    date,driverId:'TEST0001',bookingId
+  b.set(doc(shared,'driverClaims',date+'__'+driverId),{
+    date,driverId,bookingId
   });
   return b.commit();
 }
@@ -210,6 +209,31 @@ try{
     const db=ctx.firestore();
     await setDoc(doc(db,'driverCapacities','TEST0001'),{capacity:50});
     await setDoc(doc(db,'drivers','TEST0001'),driver('TEST0001'));
+  });
+  // L3: non-ASCII lookalikes must not normalize into an authorized ASCII plate.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),
+    vehicles:[{rendszam:'TEST\u01310001',normalizedPlate:'TESTI0001',status:'aktiv'}]
+  }));
+  await expectPermission('Unicode dotless-i plate may not impersonate TESTI0001',false,
+    ()=>bookFuture('2099-01-12',{vehicleId:'TESTI0001'}));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),fleetData(2)));
+  // L4: an editor-writable deprecated mirror cannot inflate canonical capacity.
+  await expectPermission('legacy capacity mirror can be changed but never authorizes larger booking',true,
+    ()=>updateDoc(doc(shared,'driverCapacities','TEST0001'),{capacity:500}));
+  await expectPermission('forged mirror capacity 500 cannot book a Fleet-50 courier',false,
+    ()=>bookFuture('2099-01-13',{capacity:500}));
+  await expectPermission('Fleet kapacitas 50 remains bookable even if legacy mirror says 500',true,
+    ()=>bookFuture('2099-01-13',{capacity:50}));
+  // L4: absent canonical capacity must DENY rather than silently become zero.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),drivers:[{daCode:'TEST0001',status:'aktiv'}]
+  }));
+  await expectPermission('missing canonical driver capacity cannot be manufactured by mirror or zero',false,
+    ()=>bookFuture('2099-01-14',{capacity:0}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(fleet(ctx.firestore()),fleetData(2));
+    await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});
   });
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
