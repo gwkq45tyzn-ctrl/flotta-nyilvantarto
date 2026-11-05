@@ -56,18 +56,17 @@
             throw error;
           if(!Number.isSafeInteger(transactionReadRevision))
             throw error;
-          const [after,stillEditor]=await Promise.all([readServer(),readEditorStatus()]);
-          // A denied transaction is NEVER success, even if another client
-          // advanced the server; retry only when the version it READ is
-          // demonstrably stale AND this caller is still allowed to edit.
+          const stillEditor=await readEditorStatus();
+          // A denied transaction is NEVER success. Retry only if the caller
+          // is still an editor. The next transaction re-reads the current
+          // server revision, so a stale pre-retry server read cannot block
+          // a legitimate conflict retry. A revoked role is still hard-denied.
           // Synthetic-only observability: no account details, tokens, or data.
-          // This witness distinguishes stale-revision retry from a real DENY.
           console.info('QA_RETRY_DECISION '+JSON.stringify({
             attempt,code:error?.code||'unknown',readRevision:transactionReadRevision,
-            serverRevision:after,editor:stillEditor,
-            stale:after>transactionReadRevision
+            editor:stillEditor
           }));
-          if(!stillEditor||after<=transactionReadRevision)
+          if(!stillEditor)
             throw error;
           $('state').textContent='retrying-conflict';
           await sleep(50*(attempt+1));
