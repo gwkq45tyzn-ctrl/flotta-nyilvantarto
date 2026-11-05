@@ -67,5 +67,10 @@ jobs:
             "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
       - name: Staging deployment remains disabled
         run: |
-          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          # Pin either the audited original Fleet or the exact P0 stale-modal
+          # fail-closed hardening. Any other Fleet modification fails CI.
+          case "$(git rev-parse HEAD:index.html)" in
+            4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88|4a65b180c85a99e3fb18476573ce88385644aa0b) ;;
+            *) echo "Unreviewed original Fleet modification" >&2; exit 1 ;;
+          esac
           echo "Browser QA used localhost only; no Firebase deploy step exists."
