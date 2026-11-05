@@ -64,15 +64,27 @@ export async function commitCanonicalDepotBooking({
     const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').trim().toUpperCase()===driverId);
     // Canonical Flotta is the fallback when no per-day Depot capacity exists.
     // Do not dereference an absent legacy Depot mirror.
-    const rawCapacity=capacity.exists()?capacity.data()?.capacity:
-      (fleetDriver?.kapacitas??fleetDriver?.capacity??(driver.exists()?driver.data()?.capacity:undefined));
+    // Source of truth is Flotta, never mutable legacy /driverCapacities
+    // nor /drivers mirrors, even if those stale documents still exist.
+    const rawCapacity=fleetDriver?.kapacitas??fleetDriver?.capacity;
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
-    const driverIndex=(fleetData.drivers||[]).findIndex(d=>norm(d.daCode)===driverId);
-    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>norm(v.rendszam)===vehicleId);
+    const normCode=s=>typeof s==='string'&&/^[A-Za-z0-9_-]{4,40}$/.test(s.trim())
+      ?s.trim().toUpperCase():null;
+    const normPlate=s=>typeof s==='string'&&/^[A-Za-z0-9 -]{4,32}$/.test(s.trim())
+      ?s.trim().replace(/[ -]/g,'').toUpperCase():null;
+    const driverIndex=(fleetData.drivers||[]).findIndex(d=>normCode(d.daCode)===driverId);
+    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normPlate(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
+    // Server Rules independently bind these indices to the immutable
+    // migration approval. This client check only improves feedback.
+    if(approval.exists()){
+      const proof=approval.data();
+      if(proof.bookingDriverIndexes?.[driverId]!==driverIndex||
+         proof.bookingVehicleIndexes?.[vehicleId]!==vehicleIndex)
+        throw Error('BOOKING_BLOCKED: unapproved_identity_index');
+    }
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
