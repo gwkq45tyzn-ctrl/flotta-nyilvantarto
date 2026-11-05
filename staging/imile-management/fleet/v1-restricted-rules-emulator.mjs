@@ -43,7 +43,7 @@ const anonymous=env.unauthenticatedContext().firestore();
 const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
-const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
+const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z')),bookingDriverIndexes:{TEST0001:0},bookingVehicleIndexes:{TEST0001:0}};
 const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[{rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}],drivers:[{daCode:'TEST0001',status:'aktiv',kapacitas:50}],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
