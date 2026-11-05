@@ -131,12 +131,44 @@ try{
   assert.equal(confirmed.data().revision,4);
   console.log('PASS [B+E]: parallel writes converged at revision 4; no lost update');
 
+  // Repeat the exact overlapping compat + modular transaction on a single
+  // real emulator instance. One green race is insufficient for a historically
+  // intermittent permission-denied bug. Each loop MUST produce 2 distinct
+  // confirmed revisions; a rejected write never counts as a pass.
+  const stressRounds=4;
+  for(let round=1;round<=stressRounds;round++){
+    const expected=4+2*round;
+    await Promise.all([compat,modular].map(page=>page.waitForFunction(()=>
+      !document.getElementById('save')?.disabled)));
+    await Promise.all([compat.locator('#save').click(),modular.locator('#save').click()]);
+    try{
+      await Promise.all([compat,modular].map(page=>wait(page,()=> 
+        document.getElementById('revision')?.textContent===String(expected),
+        'repeated concurrent transaction round '+round)));
+    }catch(error){
+      const actual=await getDoc(doc(db,'flottaSharedState','current'));
+      const states=await Promise.all([compat,modular].map(async page=>({
+        state:await page.locator('#state').textContent(),
+        revision:await page.locator('#revision').textContent()
+      })));
+      console.error('STRESS QA DIAGNOSTIC (synthetic only): '+
+        JSON.stringify({round,expected,serverRevision:actual.data()?.revision,states}));
+      throw error;
+    }
+    const confirmedRound=await getDoc(doc(db,'flottaSharedState','current'));
+    assert.equal(confirmedRound.data().revision,expected,
+      'Both concurrent writes must persist, no lost update on round '+round);
+    console.log('PASS [B+E]: repeated concurrent transaction '+round+'/'+stressRounds+
+      ' converged at server revision '+expected);
+  }
+  const finalRevision=4+2*stressRounds;
+
   // Offline must never give a false positive that a write was confirmed.
   await ctxModular.setOffline(true);
   await modular.locator('#save').click();
   await wait(modular,()=>document.getElementById('state')?.textContent==='blocked-offline',
     'offline refusal');
-  assert.equal(await compat.locator('#revision').textContent(),'4');
+  assert.equal(await compat.locator('#revision').textContent(),String(finalRevision));
   await ctxModular.setOffline(false);
   console.log('PASS [B+E]: offline client refuses to report successful write');
 
@@ -151,7 +183,7 @@ try{
     const snapshot=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
     revisionBeforeRevocation=snapshot.data()?.revision;
   });
-  assert.equal(revisionBeforeRevocation,4,'Baseline revision must already be 4');
+  assert.equal(revisionBeforeRevocation,finalRevision,'Baseline revision must include all stress rounds');
   await compat.locator('#save').click();
   await wait(compat,()=>document.getElementById('state')?.textContent
       ?.startsWith('write-error: permission-denied'),
