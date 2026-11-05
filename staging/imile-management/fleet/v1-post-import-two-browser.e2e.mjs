@@ -163,9 +163,12 @@ try{
       return v.revision===2 && v.vehicles?.[0]?.km===12345;
     }catch{return false;}
   },null,{timeout:20000});
-  const persisted=await env.withSecurityRulesDisabled(async ctx=>
-    getDoc(doc(ctx.firestore(),'flottaSharedState','current'))
-  );
+  // rules-unit-testing.withSecurityRulesDisabled is scoped for execution;
+  // it does NOT promise to return the callback's snapshot result.
+  let persisted;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    persisted=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+  });
   assert.equal(persisted.exists(),true,'Server has canonical Fleet document');
   assert.equal(persisted.data().revision,2,'Server revision advanced after REAL original-UI save');
   assert.equal(persisted.data().vehicles[0].km,12345,'Server saved vehicle km');
