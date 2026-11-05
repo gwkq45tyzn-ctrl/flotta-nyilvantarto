@@ -30,7 +30,7 @@ function makeHarness({ importVerified = false, sourceShaMismatch = false } = {})
 
   let unlocked = false;
   let uploads = 0;
-  let fleet = { vehicles: [{ id: 'synthetic-v1', km: 0 }], drivers: [], fuelCards: [], contacts: [] };
+  let fleet = { vehicles: [{ id: 'synthetic-v1', rendszam: 'TEST-0001', status: 'aktiv', km: 0 }], drivers: [], fuelCards: [], contacts: [] };
   let remote = {
     ...structuredClone(fleet),
     revision: importVerified ? 1 : 0,
@@ -139,6 +139,9 @@ function makeHarness({ importVerified = false, sourceShaMismatch = false } = {})
     isUnlocked: () => unlocked,
     save: () => context.save(),
     setKm(km) { fleet.vehicles[0].km = km; },
+    setPlate(plate) { fleet.vehicles[0].rendszam = plate; },
+    addVehicle(vehicle) { fleet.vehicles.push(vehicle); },
+    addDriver(driver) { fleet.drivers.push(driver); },
     getRemoteKm: () => remote.vehicles[0].km,
     getRemoteSha: () => remote.migrationSourceSha256,
     stripRemoteSha() { delete remote.migrationSourceSha256; },
@@ -195,4 +198,45 @@ test('missing server Fleet SHA after verification cannot be silently removed by 
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.getRemoteKm(), 0, 'Missing source SHA must abort before commit');
   assert.equal(h.pending(), true, 'Latest local change must remain recoverable on failed write');
+});
+
+test('duplicate normalized plates never reach the new bridge save transaction', async () => {
+  const h=makeHarness({importVerified:true});
+  await h.login();
+  h.addVehicle({id:'different-internal',rendszam:'test0001',status:'aktiv'});
+  h.save();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.uploadCount(),0);
+  assert.match(h.status(),/DUPLICATE_CANONICAL_PLATE/);
+  assert.equal(h.pending(),true);
+});
+
+test('duplicate normalized DA codes never reach the new bridge save transaction', async () => {
+  const h=makeHarness({importVerified:true});
+  await h.login();
+  h.addDriver({id:'first',daCode:'DA0001',status:'aktiv',kapacitas:50});
+  h.addDriver({id:'second',daCode:'da0001',status:'aktiv',kapacitas:500});
+  h.save();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.uploadCount(),0);
+  assert.match(h.status(),/DUPLICATE_CANONICAL_DA/);
+});
+
+test('Unicode plates and Unicode-folding DA codes are denied before write', async () => {
+  for (const value of ['TEST\u00a00001','TEST\u20130001','TEST\u01310001','TE\u017fT0001']) {
+    const h=makeHarness({importVerified:true});
+    await h.login();
+    h.setPlate(value);
+    h.save();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(h.uploadCount(),0,value);
+    assert.match(h.status(),/INVALID_CANONICAL_PLATE_CHARACTERS/,value);
+  }
+  const h=makeHarness({importVerified:true});
+  await h.login();
+  h.addDriver({id:'dotless',daCode:'DA0\u01311',status:'aktiv',kapacitas:50});
+  h.save();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.uploadCount(),0);
+  assert.match(h.status(),/INVALID_CANONICAL_DA_CHARACTERS/);
 });
