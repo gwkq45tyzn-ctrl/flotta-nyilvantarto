@@ -2,40 +2,36 @@
 
 **Ág:** `grok/v1-integrated`  
 **PR:** #114  
-**HEAD:** (this commit)  
-**Döntés:** **NO-GO** (pending real post-import UI chain proof and duplicate hard-stop)
+**HEAD:** `523aae5` (integrates #125 at `056489e`)  
+**Döntés:** **NO-GO** (pending duplicate hard-stop and full CI re-run on this SHA)
 
-## Verified CI (all 6 SUCCESS on 01feac4)
-- Flotta Firestore Bridge synthetic QA
-- DepóKapacitás code and security
-- staging-only integration tests
-- restricted one-account Rules and migration QA
-- real two-browser Auth/Firestore emulator QA
-- independent dual release approval QA
+## Verified CI on #125 source SHA (056489e)
+- Two independent Chromium contexts against local Auth and Firestore: SUCCESS
+- Staging – offline schema and web checks: SUCCESS
 
-## This commit adds
-- `staging/imile-management/fleet/v1-post-import-two-browser.e2e.mjs`: real post-import two-browser E2E skeleton using original index.html against local Auth/Firestore emulators.
-- Seeds approved migration gate and Fleet snapshot with matching SHA.
-- Two independent browser contexts log in and unlock.
-- Workflow updated to run the new E2E.
+## Proven [B+E] on #125
+- PASS: two original Fleet browsers unlocked after approved import
+- PASS: both browsers loaded rich approved source snapshot
+- PASS: logout re-locks
+- PASS: parallel writes converged at revision 4; no lost update
+- PASS: offline client refuses to report successful write
+- PASS: revoked editor role hard-denied without changing Fleet revision
+- PASS: pre-import is read-only, no Apps Script calls
 
-## Proven [T]
-- Post-import contract tests (6/6) – source structure only.
-- Two-browser post-import contract tests (6/6) – source structure only.
-- Synthetic backup/restore (4/4).
-- Existing original Fleet browser E2E proves pre-import read-only and login unlock.
-- New post-import two-browser E2E skeleton ready for CI run (not yet proven on this SHA).
+## This commit integrates #125
+- Post-import two-browser E2E uses original working emulator initialization.
+- Detailed diagnostics on unlock failure.
+- Both browsers verify actual Flotta snapshot.
+- Workflow order adjusted to capture failures.
 
 ## Nyitott
-- Real post-import two-browser UI chain proof (E2E skeleton created; needs CI run).
 - Duplicate DA/plate server-side hard-stop (Claude track; not yet proven).
-- Full CI re-run on this new SHA.
+- Full CI re-run on this new SHA (523aae5).
 - Rules deploy, UID swap, real migration (after approval).
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
-2. Real post-import two-browser UI chain passes in CI.
-3. Duplicate identity hard-stop with emulator evidence.
-4. Separate Grok GO + ChatGPT GO + owner authorization.
+2. Duplicate identity hard-stop with emulator evidence.
+3. Separate Grok GO + ChatGPT GO + owner authorization.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
