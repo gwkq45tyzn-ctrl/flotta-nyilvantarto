@@ -43,18 +43,18 @@ const anonymous=env.unauthenticatedContext().firestore();
 const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
-const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
+const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z')),bookingDriverIndexes:{TEST0001:0},bookingVehicleIndexes:{TEST0001:0}};
 const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[{rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}],drivers:[{daCode:'TEST0001',status:'aktiv',kapacitas:50}],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
-function bookFuture(date){
+function bookFuture(date,{driverIndex=0,vehicleIndex=0,capacity=50}={}){
   const bookingId=date+'__TEST0001';
   const b=writeBatch(shared);
   b.set(doc(shared,'bookings',bookingId),{
     date,vehicleId:'TEST0001',driverId:'TEST0001',
-    district:'1',status:'planned',capacity:50,
-    driverIndex:0,vehicleIndex:0
+    district:'1',status:'planned',capacity,
+    driverIndex,vehicleIndex
   });
   b.set(doc(shared,'driverClaims',date+'__TEST0001'),{
     date,driverId:'TEST0001',bookingId
@@ -211,6 +211,60 @@ try{
     await setDoc(doc(db,'driverCapacities','TEST0001'),{capacity:50});
     await setDoc(doc(db,'drivers','TEST0001'),driver('TEST0001'));
   });
+  // Adversarial direct SDK identity/capacity probes. The trusted migration
+  // approval fixes which record index is eligible for each normalized key.
+  // Full-array duplicate Fleet writes are still a separate unresolved gate.
+  const duplicateDrivers=[{daCode:'TEST0001',status:'aktiv',kapacitas:50},
+    {daCode:'TEST0001',status:'aktiv',kapacitas:500}];
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),drivers:duplicateDrivers
+  }));
+  await expectPermission('duplicate DA cannot choose a second higher-capacity index',false,
+    ()=>bookFuture('2099-01-10',{driverIndex:1,capacity:500}));
+  await expectPermission('original trusted DA index remains bookable',true,
+    ()=>bookFuture('2099-01-11'));
+  await expectPermission('canonical Fleet 50 capacity rejects legacy override 500',false,
+    ()=>bookFuture('2099-01-12',{capacity:500}));
+  await expectPermission('browser cannot swap trusted index to duplicate',false,
+    ()=>updateDoc(migrationGate(shared),{bookingDriverIndexes:{TEST0001:1}}));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),vehicles:[
+      {rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'},
+      {rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}
+    ]
+  }));
+  await expectPermission('duplicate plate cannot choose second forged vehicle index',false,
+    ()=>bookFuture('2099-01-13',{vehicleIndex:1}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(fleet(db),{...fleetData(2),vehicles:[
+      {rendszam:'TEſT0001',status:'aktiv',normalizedPlate:'TEST0001'}]});
+  });
+  await expectPermission('non-ASCII long-s plate identity denied before upper()',false,
+    ()=>bookFuture('2099-01-14'));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),vehicles:[
+      {rendszam:'TEST\u00a00001',status:'aktiv',normalizedPlate:'TEST0001'}]
+  }));
+  await expectPermission('NBSP plate identity denied before upper()',false,
+    ()=>bookFuture('2099-01-15'));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
+    ...fleetData(2),drivers:[{daCode:'TEST0001',status:'aktiv'}]
+  }));
+  await expectPermission('missing capacity is NOT a bookable default zero',false,
+    ()=>bookFuture('2099-01-16',{capacity:0}));
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(fleet(db),fleetData(2));
+    await setDoc(migrationGate(db),{...approvedGate,
+      bookingDriverIndexes:{},bookingVehicleIndexes:{TEST0001:0}});
+  });
+  await expectPermission('missing immutable driver index denies all booking',false,
+    ()=>bookFuture('2099-01-17'));
+  await env.withSecurityRulesDisabled(ctx=>setDoc(migrationGate(ctx.firestore()),approvedGate));
+  await expectPermission('restored approved proof allows fresh canonical booking',true,
+    ()=>bookFuture('2099-01-18'));
+
   await expectPermission('approval cannot be revoked by browser',false,
     ()=>updateDoc(migrationGate(shared),{status:'revoked'}));
   await expectPermission('stale Fleet revision fails',false,

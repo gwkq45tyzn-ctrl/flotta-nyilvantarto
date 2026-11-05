@@ -57,13 +57,30 @@ service cloud.firestore {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId, driverIndex) {
-      let capacity = get(/databases/$(database)/documents/driverCapacities/$(driverId));
       let original = getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[driverIndex];
-      // A missing legacy Depot mirror must not be required for booking.
-      // The same selected canonical Flotta driver is used for eligibility.
-      return capacity != null ? capacity.data.capacity
-        : (original.keys().hasAny(['kapacitas']) ? original.kapacitas
-          : (original.keys().hasAny(['capacity']) ? original.capacity : 0));
+      // Fleet is sole authority, not writable legacy capacity mirrors.
+      // Missing capacity is denied rather than converted to zero.
+      return original.keys().hasAny(['kapacitas']) ? original.kapacitas
+        : (original.keys().hasAny(['capacity']) ? original.capacity : null);
+    }
+    // Immutable approval is privileged-seeded; a browser cannot move this
+    // booking eligibility index to a duplicate high-capacity Fleet entry.
+    // This is NOT a proof of global uniqueness in mutable legacy arrays.
+    function trustedBookingDriverIndex(driverId, index) {
+      let p = get(/databases/$(database)/documents/flottaMigrationApproval/current).data;
+      return p.keys().hasAny(['bookingDriverIndexes'])
+        && p.bookingDriverIndexes is map
+        && p.bookingDriverIndexes.keys().hasAny([driverId])
+        && p.bookingDriverIndexes[driverId] is int
+        && p.bookingDriverIndexes[driverId] == index;
+    }
+    function trustedBookingVehicleIndex(vehicleId, index) {
+      let p = get(/databases/$(database)/documents/flottaMigrationApproval/current).data;
+      return p.keys().hasAny(['bookingVehicleIndexes'])
+        && p.bookingVehicleIndexes is map
+        && p.bookingVehicleIndexes.keys().hasAny([vehicleId])
+        && p.bookingVehicleIndexes[vehicleId] is int
+        && p.bookingVehicleIndexes[vehicleId] == index;
     }
 
     // New independent Attendance PWA. Separate self-service courier principal,
@@ -491,16 +508,23 @@ service cloud.firestore {
         // eligible entry. Forged lists or mirrors cannot bypass this.
         && request.resource.data.driverIndex is int
         && request.resource.data.driverIndex >= 0
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].daCode == request.resource.data.driverId
+        && trustedBookingDriverIndex(request.resource.data.driverId,request.resource.data.driverIndex)
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].daCode is string
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].daCode.matches('^[A-Za-z0-9_-]{4,40}$')
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].daCode.upper() == request.resource.data.driverId
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.driverIndex].status in ['aktiv','aktív']
         && request.resource.data.vehicleIndex is int
         && request.resource.data.vehicleIndex >= 0
+        && trustedBookingVehicleIndex(request.resource.data.vehicleId,request.resource.data.vehicleIndex)
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].normalizedPlate == request.resource.data.vehicleId
         // The normalized field is browser-writable in the rich legacy Fleet.
         // Recompute eligibility from the ORIGINAL plate at booking time.
         // A forged normalizedPlate must never authorize another vehicle.
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam is string
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
+        // Restrict raw ID to ASCII before upper() to prevent dotless-i,
+        // long-s and NBSP normalization aliases.
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.matches('^[A-Za-z0-9 -]{4,32}$')
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[ -]','').upper() == request.resource.data.vehicleId
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)

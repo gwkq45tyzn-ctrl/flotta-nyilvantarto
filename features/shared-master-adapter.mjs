@@ -6,8 +6,8 @@
  */
 const clone=x=>JSON.parse(JSON.stringify(x));
 const str=x=>typeof x==='string'?x.trim():'';
-const plate=x=>str(x).replace(/[\s-]/g,'').toUpperCase();
-const code=x=>str(x).toUpperCase();
+const plate=x=>{const t=str(x);return /^[A-Za-z0-9 -]{4,32}$/.test(t)?t.replace(/[ -]/g,'').toUpperCase():'';};
+const code=x=>{const t=str(x);return /^[A-Za-z0-9_-]{4,40}$/.test(t)?t.toUpperCase():'';};
 const plateOK=x=>/^[A-Z0-9]{4,12}$/.test(x);
 const codeOK=x=>/^[A-Z0-9_-]{4,40}$/.test(x);
 const statuses=Object.freeze(['Elérhető','Szerviz','Leállított']);

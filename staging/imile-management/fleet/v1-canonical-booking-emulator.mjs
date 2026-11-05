@@ -45,7 +45,8 @@ function fleet(){
 }
 const approval={
   status:'approved',approvedUid:uid,sourceSha256:digest,
-  approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
+  approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z')),
+  bookingDriverIndexes:{DA0001:0},bookingVehicleIndexes:{ABC123:0}
 };
 const book=(date='2099-01-01',extra={})=>
   commitCanonicalDepotBooking({
