@@ -175,7 +175,7 @@ test('derived plate spoof, missing plate, changed original plate and Unicode loo
     x=>{x.vehicles[0].normalizedPlate='FORGED123';},
     x=>{delete x.vehicles[0].normalizedPlate;},
     x=>{x.vehicles[0].rendszam='XYZ-456';},
-    x=>{x.vehicles[0].rendszam='ABC\\u0131123';}
+    x=>{x.vehicles[0].rendszam='ABCı123';}
   ];
   for(const mutate of mutations){
     const canonical=projectedDocument(source);
@@ -183,7 +183,7 @@ test('derived plate spoof, missing plate, changed original plate and Unicode loo
     assert.equal(auditProjectedCanonicalFleetRestore(source,canonical).status,'BLOCKED');
   }
   const unicodeSource=canonicalReadySource();
-  unicodeSource.vehicles[0].rendszam='AB\\u0131123';
+  unicodeSource.vehicles[0].rendszam='ABı123';
   const unicodeCanonical=projectedDocument(unicodeSource);
   reason(auditProjectedCanonicalFleetRestore(unicodeSource,unicodeCanonical),
     'invalid_original_plate_for_projection');
