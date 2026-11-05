@@ -2375,12 +2375,7 @@
       populateSelects();
     }
 
-    // Original Fleet form: pin the exact rich record at modal-open time.
-    // A remote onSnapshot may refresh the canonical arrays without updating
-    // the already-open form. Never let that stale form silently revert a peer.
-    let vehicleModalBaseline = null;
     function openModal(id = null) {
-      vehicleModalBaseline = null;
       populateSelects();
       document.getElementById('modal').classList.add('active');
       document.getElementById('vehicleForm').reset();
@@ -2389,7 +2384,6 @@
       if (id) {
         const v = vehicles.find(x => x.id === id);
         if (!v) return;
-        vehicleModalBaseline = { id: v.id, serialized: JSON.stringify(v) };
         document.getElementById('modalTitle').textContent = 'Jármű szerkesztése';
         document.getElementById('editId').value = v.id;
         document.getElementById('rendszam').value = v.rendszam || '';
@@ -2415,7 +2409,6 @@
     }
 
     function closeModal() {
-      vehicleModalBaseline = null;
       document.getElementById('modal').classList.remove('active');
     }
 
@@ -2449,35 +2442,6 @@
 
       // Track status change date and log history
       const existing = vehicles.find(v => v.id === id);
-      // P0 concurrent real rich-form guard. The Firestore revision in the
-      // bridge protects writes racing during a transaction; it cannot detect
-      // a form opened BEFORE a now-confirmed remote update. Never overwrite
-      // the peer's committed fields using this old form, even if its current
-      // local Firestore revision is up to date. Keep both the modal draft and
-      // an independent recovery copy; do not call save() on a stale form.
-      if (vehicleModalBaseline && vehicleModalBaseline.id === id &&
-          JSON.stringify(existing || null) !== vehicleModalBaseline.serialized) {
-        const localDraft = snapshot();
-        const localIndex = localDraft.vehicles.findIndex(v => v.id === id);
-        if (localIndex >= 0) localDraft.vehicles[localIndex] = {...existing, ...data, history: JSON.parse(JSON.stringify(existing.history || []))};
-        try {
-          // This legacy pending slot supports the existing JSON export flow.
-          // Do not destroy an earlier unsynced snapshot if one already exists.
-          if (!localStorage.getItem(PENDING_KEY))
-            localStorage.setItem(PENDING_KEY, JSON.stringify(localDraft));
-          // Separate immutable-for-this-attempt recovery record. The bridge
-          // does not automatically publish this key to canonical Firestore.
-          localStorage.setItem('flotta_stale_vehicle_backup_v1', JSON.stringify({
-            id, baseline: JSON.parse(vehicleModalBaseline.serialized),
-            latest: existing, attempted: data, capturedAt: new Date().toISOString()
-          }));
-        } catch (storageError) {
-          console.error('Stale vehicle recovery storage unavailable', storageError);
-        }
-        statusMessage('Ütközés: ezt a járművet időközben más módosította. A mentést letiltottuk; a szerkesztő és a helyi másolat megmaradt. Frissítsd az adatokat, majd vidd át a változtatásaidat.', true);
-        return;
-      }
-
       // Preserve older attributes (e.g. handover dates) when editing a vehicle.
       if (existing) Object.entries(existing).forEach(([key,value])=>{if(!(key in data))data[key]=value;});
       data.utolsoLezartSzervizIdopont=existing?.utolsoLezartSzervizIdopont||null;

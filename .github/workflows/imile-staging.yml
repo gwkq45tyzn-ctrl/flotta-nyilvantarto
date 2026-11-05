@@ -135,14 +135,9 @@ jobs:
         run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
       - name: Az eredeti Flotta teljes felületének sértetlensége
         run: |
-          # Exact blob allowlist: original approved Fleet, or the narrowly
-          # patched original Fleet with P0 stale-rich-modal fail-closed guard.
-          # Every other edit to the full original Fleet must fail CI and need
-          # independent audit. This does NOT approve a production deployment.
-          case "$(git rev-parse HEAD:index.html)" in
-            4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88|4a65b180c85a99e3fb18476573ce88385644aa0b) ;;
-            *) echo "Unreviewed original Fleet modification" >&2; exit 1 ;;
-          esac
+          # Compare the original full Fleet blob from the reviewed Grok+QA base,
+          # not the older main (which predates the safe Firestore script order).
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
           node --check features/firestore-bridge.js
 
       - name: Szűkített Flotta + Depó V1 offline csomag – biztonsági regresszió

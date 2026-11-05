@@ -238,15 +238,24 @@ try{
   assert.equal(persistedAfter.vehicles[0].megjegyzes,'KEEP_A_EDIT',
     'P0 SILENT LOST UPDATE: stale original Fleet form B overwrote A committed note');
   if(persistedAfter.revision===3){
-    const pending=await page2.evaluate(()=>{
-      try{
-        const x=JSON.parse(localStorage.getItem('flotta_pending_v16')||'{}');
-        return x.vehicles?.[0]?.km;
-      }catch{return null;}
+    const recovery=await page2.evaluate(()=>{
+      try {
+        const d=JSON.parse(localStorage.getItem('flotta_stale_vehicle_draft_v1')||'{}');
+        return {id:d.id,km:d.fields?.km,note:d.fields?.megjegyzes,
+          message:document.getElementById('syncStatus')?.textContent};
+      } catch{return null;}
     });
-    assert.equal(pending,22222,
+    assert.equal(recovery?.id,'fleet-qa-vehicle-1',
+      'Rejected B edit must keep original vehicle identity in separate recovery draft');
+    assert.equal(recovery?.km,'22222',
       'Rejected stale B edit must preserve pending km 22222 for recovery/export');
-    console.log('PASS [B+E]: stale real Fleet form refused; unsaved B edit preserved locally');
+    assert.match(recovery?.message||'',/Ütközés|helyi piszkozat/i,
+      'Conflicted save must visibly warn operator, not falsely report success');
+    assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222',
+      'Original stale modal must retain typed input after denied submit');
+    assert.equal(persistedAfter.vehicles[0].km,12345,
+      'No stale B km was silently saved after conflict');
+    console.log('PASS [B+E]: stale original Fleet form HARD STOP; foreign committed note intact, local km draft preserved');
   }else{
     assert.equal(persistedAfter.vehicles[0].km,22222);
     console.log('PASS [B+E]: concurrent real Fleet rich form edits merged without losing A note');

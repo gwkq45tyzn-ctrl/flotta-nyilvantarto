@@ -41,6 +41,12 @@
   let currentRevision = 0;
   let writeInFlight = false;
   let localDirty = false;
+  // Keep the original Fleet modal's baseline separate from the canonical
+  // Firestore snapshot. A stale open form must never overwrite a later,
+  // independently committed field from another browser.
+  let vehicleEditGuardPatched = false;
+  let openVehicleEdit = null;
+  const STALE_VEHICLE_DRAFT = 'flotta_stale_vehicle_draft_v1';
   let requeueCount = 0;
   const MAX_REQUEUE = 3;
 
@@ -339,7 +345,63 @@
       };
   }
 
+  function patchVehicleEditGuard() {
+    if (vehicleEditGuardPatched || typeof window.editVehicle !== 'function' ||
+        typeof window.closeModal !== 'function' ||
+        typeof snapshot !== 'function') return;
+    const form = document.getElementById('vehicleForm');
+    if (!form) return;
+    const originalEdit = window.editVehicle;
+    const originalClose = window.closeModal;
+    // The original click handler calls editVehicle(id). Capture the exact rich
+    // in-memory vehicle that the operator began editing (not a cache label).
+    window.editVehicle = function(id) {
+      const current = snapshot().vehicles.find(v => v.id === id);
+      openVehicleEdit = current
+        ? {id, record:JSON.stringify(current), revision:currentRevision}
+        : null;
+      return originalEdit.apply(this,arguments);
+    };
+    window.closeModal = function() {
+      openVehicleEdit = null;
+      return originalClose.apply(this,arguments);
+    };
+    // Capturing submit runs BEFORE the original inline
+    // onsubmit="saveVehicle(event)" writes a full rich Fleet snapshot.
+    // On conflict it must STOP that original handler entirely.
+    form.addEventListener('submit',function(event) {
+      const id = document.getElementById('editId')?.value;
+      if (!id || !openVehicleEdit || openVehicleEdit.id !== id) return;
+      const now = snapshot().vehicles.find(v => v.id === id);
+      if (now && JSON.stringify(now) === openVehicleEdit.record) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const fields = {};
+      for (const input of form.querySelectorAll('input[id],select[id],textarea[id]')) {
+        fields[input.id] = input.value;
+      }
+      // Keep this form draft explicitly SEPARATE from flotta_pending_v16:
+      // that legacy key represents a whole Fleet snapshot and must never
+      // be allowed to replay a stale vehicle into the canonical document.
+      let saved = false;
+      try {
+        localStorage.setItem(STALE_VEHICLE_DRAFT,JSON.stringify({
+          id,fields,openedRevision:openVehicleEdit.revision,
+          currentRevision,savedAt:new Date().toISOString()
+        }));
+        saved = true;
+      } catch (_) {}
+      status(saved
+        ? 'Ütközés: ezt az autót másik gépen módosították. A mentés letiltva; a megnyitott űrlap és a helyi piszkozat megőrizve. Az adatokat egyeztesd újranyitás előtt.'
+        : 'Ütközés: ezt az autót másik gépen módosították. A mentés letiltva; az űrlapot ne zárd be, másold ki a beírt adatokat.',
+        true);
+    },true);
+    vehicleEditGuardPatched = true;
+  }
+
   function patchSave() {
+    patchVehicleEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
     savePatched = true;
