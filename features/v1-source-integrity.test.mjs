@@ -8,11 +8,13 @@ const targets = [
   {
     path: 'depokapacitas/firestore-v1-restricted.rules',
     minBytes: 1000,
+    minExecutableChars: 120,
     patterns: [/rules_version\s*=\s*['"]2['"]/, /service\s+cloud\.firestore\s*\{/, /match\s+\/databases\/\{database\}\/documents\s*\{/],
   },
   {
     path: 'features/firestore-bridge.js',
     minBytes: 1000,
+    minExecutableChars: 80,
     patterns: [/(?:firebase|firestore|flotta|bridge)/i, /(?:function\s+\w+\s*\(|=>|class\s+\w+)/],
   },
 ];
@@ -28,6 +30,8 @@ function validateSource(target, source) {
   assert.ok(bytes >= target.minBytes, `${target.path}: suspiciously short (${bytes} bytes)`);
   assert.doesNotMatch(source.trim(), /^(?:PLACEHOLDER|PLACEHOLDER_BRIDGE_CONTENT_WILL_BE_REPLACED_IN_NEXT_IF_NEEDED|TODO_REPLACE_ME)$/i);
   const executable = executableText(source);
+  const meaningfulChars = executable.replace(/\s/g, '').length;
+  assert.ok(meaningfulChars >= target.minExecutableChars, `${target.path}: insufficient executable content (${meaningfulChars} chars)`);
   for (const pattern of target.patterns) assert.match(executable, pattern, `${target.path}: missing required executable structure outside comments`);
 }
 
@@ -55,7 +59,7 @@ test('source-integrity negative controls: padded placeholders and misleading com
 test('source-integrity positive controls: executable synthetic structures are accepted', () => {
   const padding = ' '.repeat(1100);
   validateSource(targets[0], `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /x/{id} { allow read, write: if false; } } }${padding}`);
-  validateSource(targets[1], `export function firestoreBridge() { return false; }${padding}`);
+  validateSource(targets[1], `export function firestoreBridge() { const flotta = { vehicles: [], drivers: [], revision: 0 }; return { firestore: flotta, bridge: true }; }${padding}`);
 });
 
 test('source-integrity negative controls: padded commented-out real-looking structures fail closed', () => {
@@ -64,4 +68,10 @@ test('source-integrity negative controls: padded commented-out real-looking stru
   assert.throws(() => validateSource(targets[1], `/* export function firestoreBridge() { return true; } */${padding}`));
   assert.throws(() => validateSource(targets[0], `// rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { } }\n${padding}`));
   assert.throws(() => validateSource(targets[1], `// export function firestoreBridge() { return true; }\n${padding}`));
+});
+
+test('source-integrity negative controls: truncated executable prefixes padded to threshold fail closed', () => {
+  const padding = ' '.repeat(2000);
+  assert.throws(() => validateSource(targets[0], `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { } }${padding}`));
+  assert.throws(() => validateSource(targets[1], `export function firestoreBridge() { return true; }${padding}`));
 });
