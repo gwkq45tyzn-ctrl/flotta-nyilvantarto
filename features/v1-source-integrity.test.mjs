@@ -29,6 +29,8 @@ function validateSource(target, source) {
   const bytes = Buffer.byteLength(source, 'utf8');
   assert.ok(bytes >= target.minBytes, `${target.path}: suspiciously short (${bytes} bytes)`);
   assert.doesNotMatch(source.trim(), /^(?:PLACEHOLDER|PLACEHOLDER_BRIDGE_CONTENT_WILL_BE_REPLACED_IN_NEXT_IF_NEEDED|TODO_REPLACE_ME)$/i);
+  assert.doesNotMatch(source, /^(?:<{7}|={7}|>{7})(?:\s|$)/m, `${target.path}: unresolved merge conflict marker`);
+  assert.doesNotMatch(source, /\u0000|\u200b|\ufeff(?!^)/u, `${target.path}: hidden control/zero-width character`);
   const executable = executableText(source);
   const meaningfulChars = executable.replace(/\s/g, '').length;
   assert.ok(meaningfulChars >= target.minExecutableChars, `${target.path}: insufficient executable content (${meaningfulChars} chars)`);
@@ -74,4 +76,19 @@ test('source-integrity negative controls: truncated executable prefixes padded t
   const padding = ' '.repeat(2000);
   assert.throws(() => validateSource(targets[0], `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { } }${padding}`));
   assert.throws(() => validateSource(targets[1], `export function firestoreBridge() { return true; }${padding}`));
+});
+
+
+test('source-integrity negative controls: merge conflicts and hidden characters fail closed', () => {
+  const padding = ' '.repeat(1200);
+  const validRules = `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /x/{id} { allow read, write: if false; } } }${padding}`;
+  const validBridge = `export function firestoreBridge() { const flotta = { vehicles: [], drivers: [], revision: 0 }; return { firestore: flotta, bridge: true }; }${padding}`;
+  for (const marker of ['<<<<<<< HEAD', '=======', '>>>>>>> feature']) {
+    assert.throws(() => validateSource(targets[0], validRules + '\n' + marker));
+    assert.throws(() => validateSource(targets[1], validBridge + '\n' + marker));
+  }
+  for (const hidden of ['\u0000', '\u200b']) {
+    assert.throws(() => validateSource(targets[0], validRules + hidden));
+    assert.throws(() => validateSource(targets[1], validBridge + hidden));
+  }
 });
