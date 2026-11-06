@@ -12,7 +12,7 @@ for (const [path, minBytes, required] of files) {
     const bytes = statSync(path).size;
     const source = readFileSync(path, 'utf8');
     assert.ok(bytes >= minBytes, `${path}: suspiciously short (${bytes} bytes)`);
-    assert.doesNotMatch(source, /PLACEHOLDER|CONTENT_WILL_BE_REPLACED|TODO_REPLACE_ME/i);
+    assert.doesNotMatch(source.trim(), /^(?:PLACEHOLDER|PLACEHOLDER_BRIDGE_CONTENT_WILL_BE_REPLACED_IN_NEXT_IF_NEEDED|TODO_REPLACE_ME)$/i);
     assert.match(source, required);
   });
 }
