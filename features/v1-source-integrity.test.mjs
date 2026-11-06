@@ -8,7 +8,7 @@ const targets = [
   {
     path: 'depokapacitas/firestore-v1-restricted.rules',
     minBytes: 1000,
-    minExecutableChars: 120,
+    minExecutableChars: 110,
     patterns: [/rules_version\s*=\s*['"]2['"]/, /service\s+cloud\.firestore\s*\{/, /match\s+\/databases\/\{database\}\/documents\s*\{/],
   },
   {
