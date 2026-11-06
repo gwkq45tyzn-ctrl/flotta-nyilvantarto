@@ -194,6 +194,36 @@ try {
                 {drivers:heavyNext.drivers,identity:heavyNext.identity,
                  lastChange:{driverIndex:0}});
   assert.equal((await getDoc(target)).data().vehicles[0].history[0].note.length,800000);
+
+  // S1-S4-inspired stress: unlike a large *unrelated* vehicle sidecar,
+  // this actually forces list-range equality over ~120 rich DRIVER records
+  // with a 740KB nested history in a record outside the changed index.
+  // First and final index edits probe both range-boundary branches.
+  const richDrivers=base();
+  richDrivers.drivers=Array.from({length:120},(_,i)=>({
+    daCode:'DA'+String(10000+i),
+    name:'SYNTHETIC DRIVER '+i,
+    history:[{event:'original',at:i}]
+  }));
+  richDrivers.drivers[80].history[0].note='H'.repeat(740000);
+  richDrivers.identity.daCnt=Object.fromEntries(
+    richDrivers.drivers.map(d=>[d.daCode,1]));
+  richDrivers.lastChange={driverIndex:0};
+  await seed(richDrivers);
+  const first=clone(richDrivers);
+  first.drivers[0].name='EDITED FIRST WITH LARGE SUFFIX';
+  await allowed('large 120-driver suffix range proof with 740KB history',
+    {drivers:first.drivers,identity:first.identity,lastChange:{driverIndex:0}});
+  const last=clone(first);
+  last.drivers[119].name='EDITED LAST WITH LARGE PREFIX';
+  await allowed('large 120-driver prefix range proof with 740KB history',
+    {drivers:last.drivers,identity:last.identity,lastChange:{driverIndex:119},
+     revision:3});
+  const finalDoc=(await getDoc(target)).data();
+  assert.equal(finalDoc.drivers[80].history[0].note.length,740000);
+  assert.equal(finalDoc.drivers[119].name,'EDITED LAST WITH LARGE PREFIX');
+  console.log('S1-S4 BOUNDED PASS: 120 driver rows, 740KB nested history, '+
+              'prefix and suffix Rules range checks on local emulator');
   console.log('CAPABILITY PASS: Firestore Rules range proof + count-map diff compile, '+
               'enforce one row and preserve large rich sidecars on local emulator');
   console.log('NOT PROVEN: global Fleet identity under legacy writers, trusted bootstrap, '+
