@@ -287,6 +287,19 @@ try {
   await denied('non-ASCII dotless-i business DA',
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
 
+  // Additional Unicode lookalike and compatibility forms must fail closed
+  // even if the direct SDK caller supplies a plausible new counter key.
+  await seed();
+  x=base(); x.drivers[0].daCode='D\\u0410-0001'; // Cyrillic capital A
+  x.identity.daCnt={'DA-0001':0,DA0002:1,'D\\u0410-0001':1};
+  await denied('Cyrillic A lookalike DA rejected by server Rules',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  await seed();
+  x=base(); x.drivers[0].daCode='\\uFF24\\uFF21-0001'; // fullwidth D A
+  x.identity.daCnt={'DA-0001':0,DA0002:1,'\\uFF24\\uFF21-0001':1};
+  await denied('fullwidth Unicode DA rejected by server Rules',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+
   // Stale update after a successful identity change must fail rather than
   // clobbering the next writer's current counters.
   await seed();
