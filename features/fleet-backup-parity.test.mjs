@@ -249,3 +249,47 @@ test('canonical restore projection audit never returns raw customer-like fields'
     assert.equal(JSON.stringify(result).includes(privateValue),false);
   }
 });
+
+test('canonical parity blocks row reordering and duplicate-row replacement without losing rich history',()=>{
+  const source=canonicalReadySource();
+  source.vehicles.push({id:'source-car-2',rendszam:'DEF-456',status:'aktiv',
+    history:[{event:'inspection',details:{km:321}}]});
+  source.drivers.push({id:'source-driver-2',daCode:'DA0002',status:'aktiv',
+    kapacitas:20,history:[{event:'start',at:'synthetic'}]});
+  const clean=projectedDocument(source);
+  assert.equal(auditProjectedCanonicalFleetRestore(source,clean).status,
+    'PARITY_MATCHED_OFFLINE');
+  for(const mutate of [
+    x=>{x.vehicles.reverse();},
+    x=>{x.drivers.reverse();},
+    x=>{x.vehicles[1]=copy(x.vehicles[0]);},
+    x=>{x.drivers[1]=copy(x.drivers[0]);},
+    x=>{x.vehicles[1].history[0].details.km=322;},
+    x=>{x.drivers[1].history[0].at='tampered';}
+  ]){
+    const candidate=copy(clean);
+    mutate(candidate);
+    const audit=auditProjectedCanonicalFleetRestore(source,candidate);
+    assert.equal(audit.status,'BLOCKED',JSON.stringify(audit.reasons));
+  }
+  assert.deepEqual(source.vehicles[1].history,[{event:'inspection',details:{km:321}}]);
+});
+
+test('canonical parity rejects truncated or malformed rich arrays rather than partial restoration',()=>{
+  const source=canonicalReadySource(),clean=projectedDocument(source);
+  for(const mutate of [
+    x=>{x.vehicles=null;},
+    x=>{x.drivers={0:x.drivers[0]};},
+    x=>{x.fuelCards=null;},
+    x=>{x.contacts=null;},
+    x=>{x.vehicles[0]=null;},
+    x=>{x.vehicles=[];}
+  ]){
+    const candidate=copy(clean);
+    mutate(candidate);
+    const audit=auditProjectedCanonicalFleetRestore(source,candidate);
+    assert.equal(audit.status,'BLOCKED',JSON.stringify(audit.reasons));
+    assert.equal(audit.restoreToLiveVerified,false);
+    assert.equal(audit.ownerAuthorized,false);
+  }
+});
