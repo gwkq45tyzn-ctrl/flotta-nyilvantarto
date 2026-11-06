@@ -106,6 +106,12 @@ export function auditProjectedCanonicalFleetRestore(originalBackup,canonicalDocu
   if(Object.keys(canonicalDocument).some(k=>!allowed.includes(k)))
     reasons.push('unexpected_canonical_document_field');
 
+  // A parity result must not silently accept missing audit metadata.
+  if(!Object.hasOwn(canonicalDocument,'updatedAt') || canonicalDocument.updatedAt==null)
+    reasons.push('missing_canonical_updated_at');
+  if(typeof canonicalDocument.updatedBy!=='string'||!canonicalDocument.updatedBy.trim())
+    reasons.push('missing_or_invalid_canonical_updated_by');
+
   const canonicalVehicles=canonicalDocument.vehicles;
   const restoredVehicles=[];
   if(!Array.isArray(canonicalVehicles))reasons.push('missing_or_invalid_vehicles');
