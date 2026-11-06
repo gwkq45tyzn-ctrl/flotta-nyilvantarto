@@ -255,6 +255,29 @@ try {
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0},
                 vehicles:[{rendszam:'TEST0001',status:'service',history:[]}]});
 
+  // Rich driver history remains editable for a legitimate single-row change,
+  // but a direct SDK writer cannot use that edit to smuggle a separate
+  // top-level capacity or fuel-card change into the same request.
+  await seed();
+  x=base(); x.drivers[0].history.push({note:'synthetic history append'});
+  await allowed('legitimate same-driver history append preserves other rows',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  assert.equal((await getDoc(target)).data().drivers[0].history.length,2);
+  await seed();
+  x=base(); x.drivers[0].history.push({note:'attempted mixed mutation'});
+  await denied('driver history edit cannot smuggle capacity sidecar',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0},
+                capacity:{DA0002:999}});
+  await denied('driver history edit cannot smuggle fuelCards mutation',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0},
+                fuelCards:[{id:'FORGED'}]});
+  await seed();
+  x=base(); x.drivers[0].daCode='DA_0003';
+  x.identity.daCnt={'DA-0001':0,DA0002:1,DA_0003:1};
+  await denied('identity rename cannot smuggle arbitrary lastChange field',
+               {drivers:x.drivers,identity:x.identity,
+                lastChange:{driverIndex:0,vehicleIndex:0}});
+
   // Unicode case-folding cannot create a second ASCII business identity.
   await seed();
   x=base();x.drivers[0].daCode='DA\u0131001';
