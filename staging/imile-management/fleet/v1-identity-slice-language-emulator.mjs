@@ -54,7 +54,9 @@ service cloud.firestore {
         return before.drivers is list && after.drivers is list
           && before.identity.daCnt is map && after.identity.daCnt is map
           && after.identity.keys().hasOnly(['daCnt'])
-          && after.diff(before).affectedKeys().hasOnly(['drivers', 'identity', 'lastChange'])
+          && after.revision is int && before.revision is int
+          && after.revision == before.revision + 1
+          && after.diff(before).affectedKeys().hasOnly(['drivers', 'identity', 'lastChange', 'revision'])
           && sameOtherRows(oldList, newList, idx)
           && countTransition(before.identity.daCnt, after.identity.daCnt,
                              oldList[idx].daCode, newList[idx].daCode);
@@ -81,6 +83,7 @@ const base = () => ({
   vehicles: [{ rendszam: 'TEST0001', history: [] }],
   fuelCards: [{id:'SYNTHETIC'}],
   contacts: [{id:'SYNTHETIC'}],
+  revision: 1,
   identity: { daCnt: {'DA-0001':1, DA0002:1} },
   lastChange: {driverIndex:0}
 });
@@ -90,12 +93,13 @@ async function seed(value=base()) {
     setDoc(doc(ctx.firestore(), 'identitySliceProbes', 'synthetic'), value));
 }
 async function allowed(name, next) {
-  await updateDoc(target, next);
+  await updateDoc(target, {...next,revision:next.revision ?? 2});
   console.log('PASS ALLOW [E+SDK] ' + name);
 }
 async function denied(name, next, db=editor) {
   try {
-    await updateDoc(doc(db, 'identitySliceProbes', 'synthetic'), next);
+    await updateDoc(doc(db, 'identitySliceProbes', 'synthetic'),
+                    {...next,revision:next.revision ?? 2});
   } catch(err) {
     if(err.code === 'permission-denied') {
       console.log('PASS DENY [E+SDK] ' + name);
