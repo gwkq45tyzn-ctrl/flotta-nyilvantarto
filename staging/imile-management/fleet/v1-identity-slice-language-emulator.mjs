@@ -24,8 +24,11 @@ service cloud.firestore {
         return idx is int
           && idx >= 0 && idx < oldList.size()
           && oldList.size() == newList.size()
-          && oldList[0:idx] == newList[0:idx]
-          && oldList[idx + 1:oldList.size()] == newList[idx + 1:newList.size()];
+          // Firestore emulator treats empty [0:0] or [n:n] as an out-of-range
+          // error. Explicitly short-circuit BOTH boundary cases.
+          && (idx == 0 || oldList[0:idx] == newList[0:idx])
+          && (idx == oldList.size() - 1 ||
+              oldList[idx + 1:oldList.size()] == newList[idx + 1:newList.size()]);
       }
       function countTransition(oldCnt, newCnt, oldRaw, newRaw) {
         let oldKey = oldRaw.upper();
