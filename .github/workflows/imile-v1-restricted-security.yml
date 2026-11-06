@@ -8,6 +8,7 @@ on:
       - 'staging/imile-management/fleet/v1-canonical-booking-emulator.mjs'
       - 'staging/imile-management/fleet/v1-identity-slice-language-emulator.mjs'
       - 'depokapacitas/canonical-booking*.mjs'
+      - 'features/v1-source-integrity.test.mjs'
       - 'features/migration-manifest*'
       - 'features/fleet-migration-dryrun*'
       - 'depokapacitas/app.js'
@@ -41,6 +42,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Fail-closed source integrity guard (Rules and bridge must not be placeholders)
+        run: node --test features/v1-source-integrity.test.mjs
       - name: Verify offline source manifest nested SHA-256 and size gate
         run: node features/migration-manifest.test.mjs
       - name: Offline legacy/local/pending/backup reconciliation scenarios
