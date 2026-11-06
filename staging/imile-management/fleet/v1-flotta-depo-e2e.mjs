@@ -1,0 +1,247 @@
+/**
+ * REAL, isolated, original Flotta HTML -> actual Depo UI booking E2E.
+ * All reads/writes after synthetic privileged seed use ORIGINAL browser UIs.
+ * Auth/Firestore on local emulators only; no live project, deployment or import.
+ * Proves: genuine Fleet form edit; remote Depot onSnapshot readback; actual
+ * booking UI submits canonical two-document transaction under unchanged Rules.
+ */
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {createServer} from 'node:http';
+import {once} from 'node:events';
+import {randomBytes,createHash} from 'node:crypto';
+import {chromium} from 'playwright';
+import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
+import {doc,getDoc,setDoc,Timestamp} from 'firebase/firestore';
+
+const host='127.0.0.1',port=8128,projectId='demo-imile-qa';
+const origin='http://'+host+':'+port;
+const email='imilemanagement@imile-management-staging.firebaseapp.com';
+const password='QaOnly'+randomBytes(16).toString('hex')+'#';
+const root=new URL('../../../',import.meta.url);
+const rulesRaw=await readFile(new URL('depokapacitas/firestore-v1-restricted.rules',root),'utf8');
+assert.ok(rulesRaw.includes('REPLACE_WITH_REAL_SHARED_UID'),
+  'Real UID must never be wired into synthetic QA');
+
+const bridgeRaw=await readFile(new URL('features/firestore-bridge.js',root),'utf8');
+const bridgeConfigPattern=/const FIREBASE_CONFIG = \{[\s\S]*?\n  \};/;
+assert.match(bridgeRaw,bridgeConfigPattern,'Original Fleet Firebase config anchor changed: STOP');
+const bridgeAnchor='db = initializedDb;';
+assert.ok(bridgeRaw.includes(bridgeAnchor),'Fleet emulator injection anchor changed: STOP');
+const localBridge=bridgeRaw.replace(bridgeConfigPattern,
+  "const FIREBASE_CONFIG = {apiKey:'fake-api-key',authDomain:'localhost',projectId:'demo-imile-qa',appId:'1:123:web:local-fleet'};"
+).replace(bridgeAnchor,bridgeAnchor+
+  "\n      auth.useEmulator('http://127.0.0.1:9099');"+
+  "\n      db.useEmulator('127.0.0.1',8787);");
+assert.ok(localBridge.includes("db.useEmulator('127.0.0.1',8787)"));
+
+const depotAppRaw=await readFile(new URL('depokapacitas/app.js',root),'utf8');
+const depotInit='const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);';
+assert.ok(depotAppRaw.includes(depotInit),'Original Depot modular Firebase init changed: STOP');
+const localDepotApp=
+  "import {connectAuthEmulator} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';\n"+
+  "import {connectFirestoreEmulator} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';\n"+
+  depotAppRaw.replace(depotInit,depotInit+
+    "\n  connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});"+
+    "\n  connectFirestoreEmulator(db,'127.0.0.1',8787);");
+assert.ok(localDepotApp.includes("connectFirestoreEmulator(db,'127.0.0.1',8787)"));
+const localDepotConfig=
+  "export const firebaseConfig = {apiKey:'fake-api-key',authDomain:'localhost',"+
+  "projectId:'demo-imile-qa',appId:'1:123:web:local-depot'};";
+
+const fleetData={
+  vehicles:[{id:'fleet-qa-vehicle-1',rendszam:'ABC-123',gyartmany:'Ford',
+    modell:'Transit',km:5000,status:'aktiv',normalizedPlate:'ABC123',
+    history:[{date:'2026-01-01',note:'synthetic'}]}],
+  drivers:[{id:'fleet-qa-driver-1',daCode:'DA0001',name:'Synthetic',
+    status:'aktiv',kapacitas:80}],
+  fuelCards:[{id:'FC001',provider:'synthetic'}],
+  contacts:[{id:'CT001',name:'Synthetic Contact'}],
+  revision:1
+};
+const sourceSha=createHash('sha256').update(JSON.stringify(fleetData)).digest('hex');
+fleetData.migrationSourceSha256=sourceSha;
+
+let env,server,browser;
+const errors=[],blockedCloud=[];
+try{
+  const signup=await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email,password,returnSecureToken:true})
+  });
+  const result=await signup.json();
+  assert.ok(signup.ok&&result.localId,'Local synthetic Auth user must exist');
+  env=await initializeTestEnvironment({projectId,firestore:{host,port:8787,
+    rules:rulesRaw.replaceAll('REPLACE_WITH_REAL_SHARED_UID',result.localId)}});
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(doc(db,'users',result.localId),
+      {name:'SYNTHETIC FLEET ADMIN',active:true,role:'admin'});
+    await setDoc(doc(db,'flottaMigrationApproval','current'),{
+      status:'approved',approvedUid:result.localId,sourceSha256:sourceSha,
+      approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
+    });
+    await setDoc(doc(db,'flottaSharedState','current'),fleetData);
+  });
+  async function serverRead(path){
+    let snapshot;
+    await env.withSecurityRulesDisabled(async ctx=>{
+      snapshot=await getDoc(doc(ctx.firestore(),path));
+    });
+    assert.equal(snapshot.exists(),true,'Server document missing: '+path);
+    return snapshot.data();
+  }
+
+  // Serve only public original HTML/modules locally, and never real Firebase
+  // configuration, npm files, raw data exports, service credentials or Rules.
+  const allowed=/^\/(?:features|depokapacitas|staging\/imile-management)\/[A-Za-z0-9/_-]+\.(?:js|mjs|css)$/;
+  server=createServer(async(req,res)=>{
+    try{
+      const pathname=new URL(req.url,origin).pathname;
+      if(pathname!=='/index.html'&&pathname!=='/depokapacitas/index.html'&&!allowed.test(pathname)){
+        res.writeHead(404);res.end('QA file not allowed');return;
+      }
+      let source;
+      if(pathname==='/features/firestore-bridge.js')source=localBridge;
+      else if(pathname==='/depokapacitas/app.js')source=localDepotApp;
+      else if(pathname==='/depokapacitas/firebase-config.js')source=localDepotConfig;
+      else source=await readFile(new URL('.'+pathname,root),'utf8');
+      const type=pathname.endsWith('.html')?'text/html':
+        pathname.endsWith('.css')?'text/css':'text/javascript';
+      res.writeHead(200,{'Content-Type':type+'; charset=utf-8',
+        'Cache-Control':'no-store'});
+      res.end(source);
+    }catch(error){
+      res.writeHead(500);res.end('Local synthetic test asset error');
+    }
+  });
+  server.listen(port,host);await once(server,'listening');
+
+  browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+  const ctxFleet=await browser.newContext();
+  const ctxDepot=await browser.newContext();
+  // Fail closed if either browser ever attempts an actual cloud Auth/Firestore
+  // endpoint, even if the emulator SDK injection is accidentally removed.
+  for(const ctx of [ctxFleet,ctxDepot]){
+    await ctx.route('**/*',route=>{
+      const u=new URL(route.request().url());
+      const allowedHost=['127.0.0.1','localhost','www.gstatic.com',
+        'cdnjs.cloudflare.com'].includes(u.hostname);
+      if(!allowedHost){blockedCloud.push(u.origin);return route.abort();}
+      return route.continue();
+    });
+  }
+  const flottaPage=await ctxFleet.newPage();
+  const depotPage=await ctxDepot.newPage();
+  for(const [label,page] of [['Flotta',flottaPage],
+    ['Depo pre-auth session',depotPage]]){
+    page.on('pageerror',e=>errors.push(label+': '+String(e.message).slice(0,240)));
+    await page.goto(origin+'/index.html',{waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>typeof window.fleetSimpleLogin==='function'
+      && String(window.fleetSimpleLogin).includes('signInWithEmailAndPassword'),
+      null,{timeout:30000});
+    await page.locator('#flottaUsername').fill('imilemanagement');
+    await page.locator('#flottaPassword').fill(password);
+    await page.locator('#flottaLoginSubmit').click();
+    await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),
+      null,{timeout:45000});
+  }
+  console.log('PASS [B+E]: two isolated signed-in original Fleet sessions; Depot session prepared via real Firebase Auth');
+
+  // Same second browser context, authenticated via a real Fleet login before
+  // navigating to the original Depot UI. No fake shell/document injection.
+  await depotPage.goto(origin+'/depokapacitas/index.html',{waitUntil:'domcontentloaded'});
+  try{
+    await depotPage.locator('#shell').waitFor({state:'visible',timeout:35000});
+  }catch(error){
+    const diagnostic=await depotPage.evaluate(()=>({
+      page:location.pathname,body:document.body?.textContent?.slice(0,160),shellPresent:!!document.getElementById('shell'),shellHidden:document.getElementById('shell')?.hidden,
+      denied:document.getElementById('denied')?.hidden===false,
+      login:document.getElementById('login')?.hidden===false,
+      setup:document.getElementById('setup')?.hidden===false,
+      error:document.getElementById('loginError')?.textContent?.slice(0,180)
+    }));
+    console.error('FAIL [B+E]: actual Depot Auth/shell not ready',
+      JSON.stringify({diagnostic,errors,blockedCloud}));
+    throw error;
+  }
+  await depotPage.locator('#shell [data-view="sharedFleet"]').click();
+  await depotPage.waitForFunction(()=>
+    document.getElementById('content')?.textContent
+      ?.includes('Eredeti Flotta – szerverről visszaigazolt adat (rev 1)')
+    && document.getElementById('content')?.textContent?.includes('ABC123'),
+    null,{timeout:20000});
+  console.log('PASS [B+E]: actual original Depot UI shows server-confirmed Fleet rev 1 and normalized plate');
+
+  // Real user action in original Fleet form, while original Depot page is open.
+  await flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first()
+    .click();
+  await flottaPage.locator('#modal.active #km').fill('99999');
+  await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]')
+    .click();
+
+  await depotPage.waitForFunction(()=>
+    document.getElementById('content')?.textContent
+      ?.includes('Eredeti Flotta – szerverről visszaigazolt adat (rev 2)')
+    && document.getElementById('content')?.textContent?.includes('ABC123'),
+    null,{timeout:20000});
+  const persisted=await serverRead('flottaSharedState/current');
+  assert.equal(persisted.revision,2);
+  assert.equal(persisted.vehicles[0].km,99999);
+  assert.deepEqual(persisted.vehicles[0].history,fleetData.vehicles[0].history);
+  assert.deepEqual(persisted.fuelCards,fleetData.fuelCards);
+  assert.deepEqual(persisted.contacts,fleetData.contacts);
+  assert.equal(persisted.drivers[0].kapacitas,80);
+  assert.equal(persisted.migrationSourceSha256,sourceSha);
+  console.log('PASS [B+E]: original Fleet form saved km 99999, Depot original UI live updated rev 1 -> 2 without reload; rich canonical data intact');
+
+  // Real booking through original Depot planning UI; tomorrow is deliberate:
+  // same-day bookings additionally require a trusted Attendance clearance
+  // publisher, which this synthetic test cannot manufacture as a browser.
+  await depotPage.locator('#shell [data-view="planning"]').click();
+  await depotPage.locator('#content form[data-form="booking"]')
+    .waitFor({state:'visible',timeout:20000});
+  const today=await depotPage.locator('#datePick').inputValue();
+  assert.match(today,/^\d{4}-\d{2}-\d{2}$/);
+  const tomorrow=new Date(Date.parse(today+'T12:00:00Z')+86400000)
+    .toISOString().slice(0,10);
+  await depotPage.locator('#datePick').fill(tomorrow);
+  await depotPage.locator('#datePick').dispatchEvent('change');
+  const form=depotPage.locator('#content form[data-form="booking"]');
+  await form.locator('select[name="driverId"]').selectOption('DA0001');
+  await form.locator('select[name="vehicleId"]').selectOption('ABC123');
+  await form.locator('input[name="district"]').fill('IX');
+  await form.locator('select[name="status"]').selectOption('planned');
+  await form.locator('button[type="submit"]').click();
+
+  await depotPage.waitForFunction(()=>
+    document.getElementById('content')?.textContent
+      ?.includes('Napi foglalások · 1')
+    && document.getElementById('content')?.textContent?.includes('ABC123'),
+    null,{timeout:20000});
+  const saved=await serverRead('bookings/'+tomorrow+'__ABC123');
+  const claimed=await serverRead('driverClaims/'+tomorrow+'__DA0001');
+  assert.equal(saved.driverId,'DA0001');
+  assert.equal(saved.vehicleId,'ABC123');
+  assert.equal(saved.capacity,80,'Canonical source capacity; never legacy mirror');
+  assert.equal(saved.driverIndex,0);
+  assert.equal(saved.vehicleIndex,0);
+  assert.equal(saved.district,'IX');
+  assert.equal(claimed.bookingId,tomorrow+'__ABC123');
+  assert.equal(claimed.driverId,'DA0001');
+  const afterBooking=await serverRead('flottaSharedState/current');
+  assert.equal(afterBooking.revision,2,'Booking must not rewrite Fleet revision');
+  assert.equal(afterBooking.migrationSourceSha256,sourceSha);
+  assert.deepEqual(errors,[],'No hidden JS exceptions in actual app UIs');
+  assert.deepEqual(blockedCloud,[],'No real Firebase cloud/prod network access');
+  console.log('PASS [B+E]: ACTUAL Depot UI submitted next-day booking under unchanged Rules; Firestore canonical booking+claim verified at capacity 80, Fleet SHA unchanged');
+
+  await flottaPage.locator('#flottaLogout').click();
+  await flottaPage.waitForFunction(()=>
+    document.body.classList.contains('flotta-locked'),
+    null,{timeout:15000});
+}finally{
+  if(browser)await browser.close();
+  if(server)await new Promise(resolve=>server.close(resolve));
+  if(env)await env.cleanup();
+}

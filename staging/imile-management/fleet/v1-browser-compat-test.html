@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>LOCAL EMULATOR ONLY – iMile V1 browser QA</title></head>
+<body>
+  <h1>Local-only Firebase interoperability probe</h1>
+  <p>This page is NOT the iMile production application. It must never be deployed.</p>
+  <input id="email" value="imilemanagement@imile-management-staging.firebaseapp.com" readonly>
+  <input id="password" type="password" value="" autocomplete="off">
+  <button id="login">Sign in</button>
+  <button id="save" disabled>Increase revision</button>
+  <button id="invalid" disabled>Attempt protected SHA mutation (negative QA only)</button>
+  <p>SDK: <span id="sdk"></span></p>
+  <p>Auth: <span id="auth">waiting</span></p>
+  <p>Server revision: <span id="revision">-</span></p>
+  <p>State: <span id="state">loading</span></p>
+  <script type="module">
+    const $=id=>document.getElementById(id);
+    const params=new URLSearchParams(location.search);
+    const mode=params.get('mode');
+    if(!['compat','modular'].includes(mode))throw Error('Bad SDK test mode');
+    $('sdk').textContent=mode;
+    const config={apiKey:'fake-api-key',authDomain:'localhost',
+      projectId:'demo-imile-qa',appId:'1:123:web:local-browser-qa'};
+    const endpoint='https://www.gstatic.com/firebasejs/11.10.0/';
+    const load=src=>new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src=src;
+      script.onload=resolve;script.onerror=reject;document.head.append(script);
+    });
+    let login,subscribe,increment,incrementInvalid,readServer,readEditorStatus;
+    const ready=()=>{
+      // A listener cannot silently turn a failed or in-flight write into
+      // a "connected-server" success state, or re-enable an in-flight button.
+      const state=$('state').textContent;
+      if(['writing','retrying-conflict'].includes(state)||state.startsWith('write-error:'))
+        return;
+      $('state').textContent='connected-server';
+      $('save').disabled=false;
+      $('invalid').disabled=false;
+    };
+    const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function boundedConfirmedRetry(writeOnce) {
+      // The separate pre-attempt read is NOT a safe conflict baseline.
+      // A rival transaction may commit before it, while this client had
+      // already read the older version inside its write transaction.
+      // Compare ONLY against the revision the rejected transaction read.
+      // This cannot convert a revoked permission into a successful write:
+      // each retry still goes through Firestore Rules, and a current server
+      // editor profile is independently required before retrying.
+      for(let attempt=0;attempt<4;attempt++){
+        let transactionReadRevision=null;
+        const recordRead=(value)=>{
+          if(!Number.isSafeInteger(value)||value<1)
+            throw Error('Invalid Fleet revision read during transaction');
+          transactionReadRevision=value;
+        };
+        try{return await writeOnce(recordRead);}
+        catch(error){
+          if(!['permission-denied','aborted'].includes(error?.code)||attempt===3)
+            throw error;
+          if(!Number.isSafeInteger(transactionReadRevision))
+            throw error;
+          const stillEditor=await readEditorStatus();
+          // A denied transaction is NEVER success. Retry only if the caller
+          // is still an editor. The next transaction re-reads the current
+          // server revision, so a stale pre-retry server read cannot block
+          // a legitimate conflict retry. A revoked role is still hard-denied.
+          // Synthetic-only observability: no account details, tokens, or data.
+          console.info('QA_RETRY_DECISION '+JSON.stringify({
+            attempt,code:error?.code||'unknown',readRevision:transactionReadRevision,
+            editor:stillEditor
+          }));
+          if(!stillEditor)
+            throw error;
+          $('state').textContent='retrying-conflict';
+          await sleep(50*(attempt+1));
+        }
+      }
+      throw Error('No acknowledged transaction after bounded retries');
+    }
+    try{
+      if(mode==='compat'){
+        for(const f of ['firebase-app-compat.js','firebase-auth-compat.js','firebase-firestore-compat.js'])
+          await load(endpoint+f);
+        const app=firebase.initializeApp(config),auth=app.auth(),db=app.firestore();
+        auth.useEmulator('http://127.0.0.1:9099');
+        db.useEmulator('127.0.0.1',8787);
+        const ref=db.collection('flottaSharedState').doc('current');
+        login=(email,password)=>auth.signInWithEmailAndPassword(email,password);
+        subscribe=()=>ref.onSnapshot({includeMetadataChanges:true},snap=>{
+          if(!snap.exists||snap.metadata.fromCache||snap.metadata.hasPendingWrites)return;
+          $('revision').textContent=String(snap.data().revision);ready();
+        });
+        readServer=async()=>{
+          const snap=await ref.get({source:'server'});
+          if(!snap.exists)throw Error('Missing Fleet');
+          return Number(snap.data().revision);
+        };
+        readEditorStatus=async()=>{
+          const uid=auth.currentUser?.uid;
+          if(!uid)return false;
+          const user=await db.collection('users').doc(uid).get({source:'server'});
+          return user.exists&&user.data()?.active===true
+            && ['admin','editor'].includes(user.data()?.role);
+        };
+        increment=()=>boundedConfirmedRetry(recordRead=>db.runTransaction(async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists)throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          const next=Number(current.revision)+1;
+          tx.set(ref,{...current,revision:next});
+          return next;
+        }));
+        // Negative adversarial witness: fully authorized editor, CURRENT
+        // revision, but malicious change to immutable import source SHA.
+        // A retry of permission-denied MUST NOT make this write succeed.
+        incrementInvalid=()=>boundedConfirmedRetry(recordRead=>db.runTransaction(async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists)throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          tx.set(ref,{...current,revision:Number(current.revision)+1,
+            migrationSourceSha256:'f'.repeat(64)});
+          return 'forbidden';
+        }));
+      } else {
+        const appModule=await import(endpoint+'firebase-app.js');
+        const authModule=await import(endpoint+'firebase-auth.js');
+        const fire=await import(endpoint+'firebase-firestore.js');
+        const app=appModule.initializeApp(config),auth=authModule.getAuth(app);
+        const db=fire.getFirestore(app);
+        authModule.connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});
+        fire.connectFirestoreEmulator(db,'127.0.0.1',8787);
+        const ref=fire.doc(db,'flottaSharedState','current');
+        login=(email,password)=>authModule.signInWithEmailAndPassword(auth,email,password);
+        subscribe=()=>fire.onSnapshot(ref,{includeMetadataChanges:true},snap=>{
+          if(!snap.exists()||snap.metadata.fromCache||snap.metadata.hasPendingWrites)return;
+          $('revision').textContent=String(snap.data().revision);ready();
+        });
+        readServer=async()=>{
+          const snap=await fire.getDocFromServer(ref);
+          if(!snap.exists())throw Error('Missing Fleet');
+          return Number(snap.data().revision);
+        };
+        readEditorStatus=async()=>{
+          const uid=auth.currentUser?.uid;
+          if(!uid)return false;
+          const user=await fire.getDocFromServer(fire.doc(db,'users',uid));
+          return user.exists()&&user.data()?.active===true
+            && ['admin','editor'].includes(user.data()?.role);
+        };
+        increment=()=>boundedConfirmedRetry(recordRead=>fire.runTransaction(db,async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists())throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          const next=Number(current.revision)+1;
+          tx.set(ref,{...current,revision:next});
+          return next;
+        }));
+        incrementInvalid=()=>boundedConfirmedRetry(recordRead=>fire.runTransaction(db,async tx=>{
+          const snap=await tx.get(ref);
+          if(!snap.exists())throw Error('Missing Fleet');
+          const current=snap.data();
+          recordRead(Number(current.revision));
+          tx.set(ref,{...current,revision:Number(current.revision)+1,
+            migrationSourceSha256:'f'.repeat(64)});
+          return 'forbidden';
+        }));
+      }
+      $('state').textContent='login-needed';
+      $('login').onclick=async()=>{
+        $('state').textContent='signing-in';
+        try{
+          await login($('email').value,$('password').value);
+          $('auth').textContent='authenticated';
+          subscribe();
+        }catch(error){$('state').textContent='auth-error: '+String(error.code||error.message);}
+      };
+      $('save').onclick=async()=>{
+        if(!navigator.onLine){
+          $('state').textContent='blocked-offline';return;
+        }
+        $('save').disabled=true;$('state').textContent='writing';
+        try{
+          await increment();
+          $('state').textContent='write-confirmed';$('save').disabled=false;
+        }catch(error){
+          $('state').textContent='write-error: '+String(error.code||error.message);
+          $('save').disabled=false;
+        }
+      };
+      $('invalid').onclick=async()=>{
+        if(!navigator.onLine){
+          $('state').textContent='blocked-offline';return;
+        }
+        $('invalid').disabled=true;$('state').textContent='writing';
+        try{
+          await incrementInvalid();
+          $('state').textContent='write-confirmed-invalid';
+        }catch(error){
+          $('state').textContent='write-error: '+String(error.code||error.message);
+        }finally{
+          $('invalid').disabled=false;
+        }
+      };
+    }catch(error){$('state').textContent='sdk-error: '+String(error.message||error);}
+  </script>
+</body></html>

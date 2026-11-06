@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "purpose": "iMile Management NARROWED Flotta+Depó V1 production release – structural checks only, NEVER deployment authorization",
+  "releaseCandidate": {
+    "commitSha": null,
+    "webArtifactSha256": null,
+    "firestoreRulesSha256": null,
+    "migrationPlanSha256": null,
+    "targetFirebaseProject": null,
+    "targetEnvironment": "production",
+    "frozen": false,
+    "scope": "fleet-depot-v1",
+    "scopeManifestSha256": null,
+    "scopeManifestEvidenceUrl": null,
+    "excludedFeatures": [
+      "ofd-monitoring",
+      "in-hub-inventory",
+      "excel-reports",
+      "attendance-pwa",
+      "courier-auth",
+      "photo-upload"
+    ]
+  },
+  "auditors": {
+    "grok": {
+      "verdict": "PENDING",
+      "reviewedCandidateSha": null,
+      "reviewedArtifactSha256": null,
+      "reviewedRulesSha256": null,
+      "reviewedMigrationPlanSha256": null,
+      "reviewedAt": null,
+      "independentReportUrl": null,
+      "openCriticalIssues": [],
+      "gates": {
+        "S1": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S2": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S3": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S4": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S5": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S6": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S7": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S8": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S9": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S10": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S11": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S12": {
+          "result": "PENDING",
+          "evidence": []
+        }
+      },
+      "reviewedScopeManifestSha256": null
+    },
+    "chatgpt": {
+      "verdict": "PENDING",
+      "reviewedCandidateSha": null,
+      "reviewedArtifactSha256": null,
+      "reviewedRulesSha256": null,
+      "reviewedMigrationPlanSha256": null,
+      "reviewedAt": null,
+      "independentReportUrl": null,
+      "openCriticalIssues": [],
+      "gates": {
+        "S1": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S2": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S3": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S4": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S5": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S6": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S7": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S8": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S9": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S10": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S11": {
+          "result": "PENDING",
+          "evidence": []
+        },
+        "S12": {
+          "result": "PENDING",
+          "evidence": []
+        }
+      },
+      "reviewedScopeManifestSha256": null
+    }
+  },
+  "userAuthorization": {
+    "verdict": "PENDING",
+    "candidateSha": null,
+    "artifactSha256": null,
+    "rulesSha256": null,
+    "migrationPlanSha256": null,
+    "authorizedAt": null,
+    "approvalReference": null,
+    "scopeManifestSha256": null
+  },
+  "deployment": {
+    "status": "BLOCKED",
+    "scheduled": false,
+    "performed": false
+  }
+}

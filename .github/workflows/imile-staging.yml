@@ -1,0 +1,171 @@
+name: iMile Management – staging-only integration tests
+
+on:
+  push:
+    branches: ['staging/imile-management-integration']
+    paths:
+      - 'staging/imile-management/**'
+      - 'depokapacitas/**'
+      - '.github/workflows/imile-staging.yml'
+  pull_request:
+    paths:
+      - 'staging/imile-management/**'
+      - 'depokapacitas/**'
+      - '.github/workflows/imile-staging.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    name: Staging – offline schema and web checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Staging Firebase webkonfiguráció ellenőrzése
+        run: node depokapacitas/firebase-config.test.mjs
+      - name: Kötelező fájlok és Firebase klienskód ellenőrzése
+        run: node depokapacitas/tests/check.mjs
+      - name: Közös futár/autó törzs és duplikációs tesztek
+        run: node staging/imile-management/shared-records.test.mjs
+      - name: Közös adatbázis-összehasonlítás tesztelése
+        run: node staging/imile-management/shared-import-plan.test.mjs
+      - name: Éles Flotta-átállás előzetes adatvesztési kapui – csak helyben
+        run: |
+          node staging/imile-management/core-cutover-preflight.test.mjs
+          node --check staging/imile-management/core-cutover-preflight.mjs
+          node staging/imile-management/cutover-browser.integration.test.mjs
+          node --check staging/imile-management/cutover-app.mjs
+      - name: Szervizben lévő autók és inaktív futárok kizárása
+        run: node depokapacitas/capacity-eligibility.test.mjs
+      - name: Kerületi új/újrakézbesítendő csomagok és kapacitás ütközésellenőrzése
+        run: |
+          node depokapacitas/district-capacity.test.mjs
+          node depokapacitas/district-capacity.integration.test.mjs
+          node depokapacitas/next-day-forecast.test.mjs
+          node staging/imile-management/next-day.integration.test.mjs
+          node depokapacitas/parcel-source-adapter.test.mjs
+          node depokapacitas/source-health.test.mjs
+          node depokapacitas/parcel-preview.test.mjs
+      - name: Napi In-Hub és DA OFD riportmotor – adat- és UI-regresszió
+        run: |
+          node staging/imile-management/reports/report-core.test.mjs
+          node staging/imile-management/reports/report-statistics.test.mjs
+          node staging/imile-management/reports/inventory-statistics.test.mjs
+          node staging/imile-management/reports/xlsx-lite.test.mjs
+          node staging/imile-management/reports/report-integration.test.mjs
+          node --check staging/imile-management/reports/report-app.mjs
+          node --check staging/imile-management/reports/xlsx-lite.mjs
+          node --check staging/imile-management/reports/report-statistics.mjs
+          node --check staging/imile-management/reports/inventory-statistics.mjs
+      - name: V1 S7 kanonikus Flotta–Depó foglalás – szintetikus adateltérés- és jogosultsági STOP
+        run: |
+          node --test depokapacitas/canonical-booking-gate.test.mjs
+          node --test depokapacitas/canonical-booking-integration.test.mjs
+          node --check depokapacitas/app.js
+      - name: V1 S7 eredeti Flotta a Depó egyetlen operatív törzsforrása
+        run: |
+          node --test depokapacitas/canonical-source-health.test.mjs
+          node --test depokapacitas/canonical-source-health.integration.test.mjs
+          node --test depokapacitas/no-fallback.test.mjs
+      - name: Eredeti Flotta-törzs – csak olvasható szerveri előnézet
+        run: |
+          node depokapacitas/flotta-master-readonly.test.mjs
+          node depokapacitas/master-reconciliation.test.mjs
+      - name: Magyar, amerikai és Excel-dátumok tesztelése
+        run: node depokapacitas/import-dates.test.mjs
+      - name: Magyar CSV karakterkódolások ellenőrzése
+        run: node depokapacitas/import-encoding.test.mjs
+      - name: Importelőellenőrzés és duplikált rekordok tesztje
+        run: node depokapacitas/import-validation.test.mjs
+      - name: Google Attendance időpontok ellenőrzése
+        run: node depokapacitas/google-sync/timestamp.test.mjs
+      - name: Firestore szabályok kódszintű biztonsági ellenőrzése
+        run: node depokapacitas/rules-contract.test.mjs
+      - name: Naptári dátumok és Attendance időpontok validálása
+        run: node depokapacitas/rules-calendar.test.mjs
+      - name: Szintetikus kapacitás-, foglalás- és visszavonási tesztek
+        run: |
+          node staging/imile-management/qa/functional-flow.test.mjs
+          node staging/imile-management/qa/run-flow.test.mjs
+      - name: Közös Flotta-törzs létrehozásának és szerkesztésének tesztje
+        run: |
+          node staging/imile-management/fleet/master-data.test.mjs
+          node staging/imile-management/fleet/master-editor.test.mjs
+          node staging/imile-management/fleet/shared-capacity.integration.test.mjs
+          node staging/imile-management/fleet/operations.test.mjs
+          node staging/imile-management/fleet/availability.test.mjs
+          node staging/imile-management/fleet/core-readiness.integration.test.mjs
+      - name: Attendance-alapú automatikus autókiadás és visszavétel ellenőrzése
+        run: |
+          node staging/imile-management/attendance-handover.test.mjs
+          node staging/imile-management/attendance-integration.test.mjs
+      - name: Közös napi teendők és Flotta figyelmeztetések ellenőrzése
+        run: |
+          node staging/imile-management/central-alerts.test.mjs
+          node staging/imile-management/central-alerts.integration.test.mjs
+      - name: Közös belépés és izolált preview tesztje
+        run: |
+          node staging/imile-management/session-policy.test.mjs
+          node staging/imile-management/entry.test.mjs
+      - name: Fejlesztői JavaScript modulok ellenőrzése
+        run: |
+          node --check staging/imile-management/shared-records.mjs
+          node --check staging/imile-management/shared-import-plan.mjs
+          node --check staging/imile-management/fleet/master-data.mjs
+          node --check staging/imile-management/fleet/master-editor.mjs
+          node --check staging/imile-management/fleet/app.mjs
+      - name: Staging kiadási tiltások és Hosting preview-szabályok
+        run: node staging/imile-management/deploy-policy.test.mjs
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Firestore jogosultságok – izolált flottatesztek
+        run: |
+          npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/rules-emulator.mjs"
+      - name: OFD riportok verziózott auditja és szerepkörjogosultságok – emulátor
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec --only firestore --project demo-imile-fleet --config firebase.staging-emulator.json "node staging/imile-management/fleet/report-rules-emulator.mjs"
+      - name: Auth és Firestore szerepkörös Depó-próbák – csak helyi emulátor
+        run: npx --yes firebase-tools@15.34.2 emulators:exec --only auth,firestore --project demo-imile-qa --config firebase.depo-qa.json "node staging/imile-management/qa/run-depo-role-tests.mjs"
+      - name: Az eredeti Flotta teljes felületének sértetlensége
+        run: |
+          # Compare the original full Fleet blob from the reviewed Grok+QA base,
+          # not the older main (which predates the safe Firestore script order).
+          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          node --check features/firestore-bridge.js
+
+      - name: Szűkített Flotta + Depó V1 offline csomag – biztonsági regresszió
+        run: node --test staging/imile-management/build-v1-core.test.mjs
+      - name: V1 eredeti Flotta + Depó QA-forráscsomag összeállítása – NO-GO
+        run: node staging/imile-management/build-v1-core.mjs
+      - name: Szűkített V1 QA-csomag archiválása – NEM deployolható
+        uses: actions/upload-artifact@v4
+        with:
+          name: imile-v1-core-qa-NO-GO
+          path: candidate-imile-v1-core/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Izolált, letölthető staging webcsomag építése
+        run: node staging/imile-management/build-preview.mjs
+      - name: Ellenőrzött staging webcsomag archiválása
+        uses: actions/upload-artifact@v4
+        with:
+          name: imile-staging-preview
+          path: preview-imile-staging/
+          if-no-files-found: error
+          retention-days: 7
+      # V1 GO-FIRST FREEZE: CI is explicitly TEST + ARTIFACT only.
+      # Do not read deployment secrets or run Firebase CLI deploy here.
+      # Any future staging/live deployment requires a separate independently
+      # reviewed, explicitly owner-authorized release mechanism.
+      - name: V1 GO freeze – no automatic Firebase publish or Rules deploy
+        run: |
+          echo "PASS: staging CI produces a local preview artifact only."
+          echo "NO-GO: no Hosting or Firestore Rules deployment in this workflow."
+          echo "The user must separately authorize any future release."

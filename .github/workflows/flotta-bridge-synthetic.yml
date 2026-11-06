@@ -1,0 +1,69 @@
+name: Flotta Firestore Bridge - synthetic QA
+on:
+  push:
+    paths:
+      - 'features/firestore-bridge*'
+      - 'features/shared-master-adapter*'
+      - 'features/fleet-depo-canonical-transition*'
+      - 'features/s7-canonical-transaction*'
+      - 'features/migration-size-probe*'
+      - 'features/fleet-backup-parity*'
+      - 'features/v1-synthetic-backup-restore.test.mjs'
+      - 'features/v1-post-import-contract.test.mjs'
+      - 'features/v1-two-browser-post-import.test.mjs'
+      - 'docs/APPS_SCRIPT_CUTOVER_PLAN.md'
+      - 'index.html'
+      - '.github/workflows/flotta-bridge-synthetic.yml'
+  pull_request:
+    paths:
+      - 'features/firestore-bridge*'
+      - 'features/shared-master-adapter*'
+      - 'features/fleet-depo-canonical-transition*'
+      - 'features/s7-canonical-transaction*'
+      - 'features/migration-size-probe*'
+      - 'features/fleet-backup-parity*'
+      - 'features/v1-synthetic-backup-restore.test.mjs'
+      - 'features/v1-post-import-contract.test.mjs'
+      - 'features/v1-two-browser-post-import.test.mjs'
+      - 'docs/APPS_SCRIPT_CUTOVER_PLAN.md'
+      - 'index.html'
+      - '.github/workflows/flotta-bridge-synthetic.yml'
+permissions:
+  contents: read
+jobs:
+  bridge-qa:
+    name: Node 22 synthetic bridge and mapping tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Existing Flotta contract tests
+        run: node features/firestore-bridge.test.mjs
+      - name: Existing runtime regressions
+        run: node --test features/firestore-bridge.runtime-regressions.test.cjs
+      - name: Existing cutover safety
+        run: node --test features/firestore-bridge.cutover-safety.test.cjs
+      - name: Existing pre-import protection
+        run: node --test features/firestore-bridge.preimport-protect.test.cjs
+      - name: New two-browser and snapshot metadata regression tests
+        run: node --test features/firestore-bridge.two-browser-synthetic.test.cjs
+      - name: Server-verified Fleet role and pre-DOM legacy-session lockdown
+        run: node --test features/firestore-bridge.strict-auth.test.cjs
+      - name: Shared master mapping
+        run: node features/shared-master-adapter.test.mjs
+      - name: V1 original Fleet to canonical Depot atomic transition – fail-closed offline plan
+        run: node --test features/fleet-depo-canonical-transition.test.mjs
+      - name: Grok S7 strict dry-run and adversarial regressions – NO real apply
+        run: node --test features/s7-canonical-transaction.test.mjs
+      - name: Offline Fleet 1 MiB native document preflight + integrity regression
+        run: node --test features/migration-size-probe.test.mjs
+      - name: Full original four-array Fleet backup/restore SHA parity (offline synthetic)
+        run: node --test features/fleet-backup-parity.test.mjs
+      - name: Physical synthetic backup roundtrip, corruption and rollback freshness hard-stop
+        run: node --test features/v1-synthetic-backup-restore.test.mjs
+      - name: Post-import structural contracts (NOT a browser UI E2E test)
+        run: |
+          node --test features/v1-post-import-contract.test.mjs
+          node --test features/v1-two-browser-post-import.test.mjs
