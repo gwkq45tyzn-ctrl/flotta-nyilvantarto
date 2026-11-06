@@ -156,6 +156,43 @@ try{
     });
   });
 
+
+  // REAL EMULATOR P1: a legitimate business DA code may contain ASCII '-'.
+  // Rules validDriverCode() and shared-master-adapter.mjs allow the hyphen;
+  // only vehicle PLATES strip it. The canonical booking adapter must not
+  // incorrectly normalize a DA like a license plate and reject an eligible
+  // courier with BOOKING_BLOCKED: duplicate_or_missing_driver.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    const expanded=fleet();
+    expanded.drivers.push({
+      id:'fleet-local-driver-hyphen',
+      daCode:'DA-0002',name:'Synthetic Hyphen DA Driver',
+      agency:'SYNTHETIC',kapacitas:70,status:'aktiv',
+      history:[{type:'assignment',note:'synthetic'}]
+    });
+    await setDoc(doc(db,'flottaSharedState','current'),expanded);
+  });
+  const hyphenBooked=await commitCanonicalDepotBooking({
+    db:shared,sdk,uid,getCurrentUid:()=>uid,offline:false,
+    booking:{
+      date:'2099-01-10',driverId:'DA-0002',vehicleId:'ABC123',
+      district:'01',status:'planned'
+    }
+  });
+  assert.equal(hyphenBooked.committed,true,
+    'Valid ASCII hyphenated DA must book under Rules + canonical projection');
+  const hyphenBooking=await getDoc(doc(shared,'bookings','2099-01-10__ABC123'));
+  const hyphenClaim=await getDoc(doc(shared,'driverClaims','2099-01-10__DA-0002'));
+  assert.equal(hyphenBooking.exists(),true);
+  assert.equal(hyphenBooking.data().capacity,70);
+  assert.equal(hyphenBooking.data().driverId,'DA-0002');
+  assert.equal(hyphenClaim.data().bookingId,'2099-01-10__ABC123');
+  console.log('PASS [E]: legitimate hyphenated DA books exactly once and reserves its own claim');
+  passed++;
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(doc(ctx.firestore(),'flottaSharedState','current'),fleet()));
+
   await env.withSecurityRulesDisabled(ctx=>
     updateDoc(doc(ctx.firestore(),'flottaMigrationApproval','current'),{status:'revoked'}));
   await shouldReject('revoked server migration policy hard-stops booking',

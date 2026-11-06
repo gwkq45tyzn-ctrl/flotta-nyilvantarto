@@ -69,13 +69,20 @@ export async function commitCanonicalDepotBooking({
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
-    const driverMatches=(fleetData.drivers||[]).filter(d=>norm(d.daCode)===driverId);
-    const vehicleMatches=(fleetData.vehicles||[]).filter(v=>norm(v.rendszam)===vehicleId);
+    // DA business IDs and license plates have DIFFERENT normalization rules.
+    // DA codes may contain '_' or '-': only trim and uppercase ASCII letters.
+    // Removing '-' here falsely denies legitimate DA-0002 even though the
+    // canonical Fleet projection and Firestore Rules permit it.
+    const normDriver=s=>typeof s==='string' && /^[A-Za-z0-9_-]+$/.test(s.trim())
+      ?s.trim().toUpperCase():'';
+    const normVehicle=s=>typeof s==='string' && /^[A-Za-z0-9 -]+$/.test(s)
+      ?s.replace(/[ -]/g,'').toUpperCase():'';
+    const driverMatches=(fleetData.drivers||[]).filter(d=>normDriver(d.daCode)===driverId);
+    const vehicleMatches=(fleetData.vehicles||[]).filter(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverMatches.length!==1)throw Error('BOOKING_BLOCKED: duplicate_or_missing_driver');
     if(vehicleMatches.length!==1)throw Error('BOOKING_BLOCKED: duplicate_or_missing_vehicle');
-    const driverIndex=(fleetData.drivers||[]).findIndex(d=>norm(d.daCode)===driverId);
-    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>norm(v.rendszam)===vehicleId);
+    const driverIndex=(fleetData.drivers||[]).findIndex(d=>normDriver(d.daCode)===driverId);
+    const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
