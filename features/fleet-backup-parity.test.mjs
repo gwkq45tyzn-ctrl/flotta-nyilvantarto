@@ -250,6 +250,22 @@ test('canonical restore projection audit never returns raw customer-like fields'
   }
 });
 
+test('canonical audit fails closed when required audit metadata is absent or empty',()=>{
+  const source=canonicalReadySource(),clean=projectedDocument(source);
+  for(const [mutation,expected] of [
+    [x=>{delete x.updatedAt;},'missing_canonical_updated_at'],
+    [x=>{x.updatedAt=null;},'missing_canonical_updated_at'],
+    [x=>{delete x.updatedBy;},'missing_or_invalid_canonical_updated_by'],
+    [x=>{x.updatedBy='  ';},'missing_or_invalid_canonical_updated_by']
+  ]){
+    const candidate=copy(clean);
+    mutation(candidate);
+    const result=auditProjectedCanonicalFleetRestore(source,candidate);
+    assert.equal(result.status,'BLOCKED');
+    reason(result,expected);
+  }
+});
+
 test('canonical parity blocks row reordering and duplicate-row replacement without losing rich history',()=>{
   const source=canonicalReadySource();
   source.vehicles.push({id:'source-car-2',rendszam:'DEF-456',status:'aktiv',
