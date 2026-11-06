@@ -54,6 +54,8 @@ service cloud.firestore {
         return before.drivers is list && after.drivers is list
           && before.identity.daCnt is map && after.identity.daCnt is map
           && after.identity.keys().hasOnly(['daCnt'])
+          && after.lastChange is map
+          && after.lastChange.keys().hasOnly(['driverIndex'])
           && after.revision is int && before.revision is int
           && after.revision == before.revision + 1
           && after.diff(before).affectedKeys().hasOnly(['drivers', 'identity', 'lastChange', 'revision'])
