@@ -36,9 +36,9 @@ service cloud.firestore {
         return oldRaw.matches('^[A-Za-z0-9_-]{4,40}$')
           && newRaw.matches('^[A-Za-z0-9_-]{4,40}$')
           && (
-            (oldKey == newKey && oldCnt == newCnt)
+            (oldKey == newKey && oldCnt.get(oldKey, 0) == 1 && oldCnt == newCnt)
             || (oldKey != newKey
-              && oldCnt.get(oldKey, 0) > 0
+              && oldCnt.get(oldKey, 0) == 1
               && oldCnt.get(newKey, 0) == 0
               && newCnt.get(oldKey, 0) == oldCnt.get(oldKey, 0) - 1
               && newCnt.get(newKey, 0) == 1
@@ -142,6 +142,24 @@ try {
   x.identity.daCnt={'DA-0001':0,DA0002:999,DA_0003:1};
   await denied('forge unrelated DA count',
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+
+  // A known duplicate-count legacy seed must park BOTH rows.
+  // This does not establish trusted initial counters or global uniqueness.
+  const legacy=base();
+  legacy.drivers[1].daCode='da-0001';
+  legacy.identity.daCnt={'DA-0001':2};
+  await seed(legacy);
+  x=clone(legacy); x.drivers[0].name='FIRST DUPLICATE';
+  await denied('legacy duplicate first row cannot edit',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  x=clone(legacy); x.drivers[1].name='SECOND DUPLICATE';
+  await denied('legacy duplicate second row cannot edit',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:1}});
+  x=clone(legacy); x.drivers[0].daCode='DA_0003';
+  x.identity.daCnt={'DA-0001':1,DA_0003:1};
+  await denied('legacy duplicate cannot launder first identity by rename',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  await seed();
 
   // The claimed index must actually be the only modified array element.
   await seed();
