@@ -207,7 +207,7 @@ try {
   console.log('P0 COUNTEREXAMPLE [E+SDK]: both duplicate rows editable when seeded count lies; production NO-GO');
   await seed();
 
-  // The claimed index must actually be the only modified array element.
+  // NORMALIZATION PARITY COUNTEREXAMPLE: the isolated Rules use ASCII\n  // uppercase only. The V1 business requirement explicitly treats AAA1\n  // and aaa-1 as the SAME identity. Separate uppercase keys can therefore\n  // each be counted as 1 and both rows remain editable. This expected\n  // authorization demonstrates why a counter protocol is unsafe until\n  // its server normalization exactly matches the production identity rule.\n  const punctuationCollision=base();\n  punctuationCollision.drivers[0].daCode='AAA1';\n  punctuationCollision.drivers[1].daCode='aaa-1';\n  punctuationCollision.identity.daCnt={AAA1:1,'AAA-1':1};\n  await seed(punctuationCollision);\n  x=clone(punctuationCollision); x.drivers[0].name='PUNCTUATION FIRST';\n  await allowed('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 (first)',\n    {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});\n  x=clone(x); x.drivers[1].name='PUNCTUATION SECOND';\n  await allowed('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 (second)',\n    {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:1},revision:3});\n  console.log('P0 NORMALIZATION COUNTEREXAMPLE [E+SDK]: both AAA1/aaa-1 rows editable; NO-GO');\n  await seed();\n\n  // The claimed index must actually be the only modified array element.
   await seed();
   x=base();x.drivers[1].name='OTHER ROW CHANGED';
   await denied('forged first index while editing second row',
