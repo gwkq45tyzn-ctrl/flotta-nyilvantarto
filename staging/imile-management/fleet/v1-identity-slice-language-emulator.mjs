@@ -206,6 +206,35 @@ try {
   await denied('unauthorized UID cannot edit',
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}},intruder);
 
+  // Reject direct SDK attempts to change cardinality, bypass row proof,
+  // or turn a counted identity into an uncounted one. These are isolated
+  // Rules capability checks, not proof of trusted bootstrap.
+  await seed();
+  x=base(); x.drivers.push({daCode:'DA0003',name:'INSERTED',history:[]});
+  x.identity.daCnt.DA0003=1;
+  await denied('direct SDK appended driver cannot bypass one-row proof',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:2}});
+  await seed();
+  x=base(); x.drivers.pop();
+  x.identity.daCnt.DA0002=0;
+  await denied('direct SDK driver deletion cannot bypass one-row proof',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  await seed();
+  x=base(); x.drivers[0].name='EDIT WITH UNCOUNTED IDENTITY';
+  x.identity.daCnt['DA-0001']=0;
+  await denied('same DA edit cannot silently zero its identity counter',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  await seed();
+  x=base(); x.drivers[0].daCode='DA_0003';
+  x.identity.daCnt={'DA-0001':0,DA0002:1,DA_0003:1,EXTRA:1};
+  await denied('DA rename cannot introduce an unrelated positive identity',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  await seed();
+  x=base(); x.drivers[0].name='EDIT WITH VEHICLE STATUS SPOOF';
+  await denied('direct SDK vehicle service status mutation is not a driver edit',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0},
+                vehicles:[{rendszam:'TEST0001',status:'service',history:[]}]});
+
   // Unicode case-folding cannot create a second ASCII business identity.
   await seed();
   x=base();x.drivers[0].daCode='DA\u0131001';
