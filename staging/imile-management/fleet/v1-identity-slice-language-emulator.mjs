@@ -185,6 +185,26 @@ try {
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
   await seed();
 
+  // CRITICAL COUNTER-BOOTSTRAP COUNTEREXAMPLE: if a privileged seed or
+  // legacy writer publishes a FALSE count of 1 for TWO normalized-equal rows,
+  // this bounded Rules protocol ALLOWS either row to be edited. This is an
+  // intentionally expected exploit, NOT a passing production security gate.
+  // It proves that Rules cannot recover global truth from an untrusted map.
+  const poisoned=base();
+  poisoned.drivers[1].daCode='da-0001';
+  poisoned.identity.daCnt={'DA-0001':1};
+  await seed(poisoned);
+  x=clone(poisoned); x.drivers[0].name='POISONED FIRST DUPLICATE EDIT';
+  await allowed('EXPECTED UNSAFE: poisoned counter permits first duplicate',
+    {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+  x=clone(x); x.drivers[1].name='POISONED SECOND DUPLICATE EDIT';
+  await allowed('EXPECTED UNSAFE: poisoned counter permits second duplicate',
+    {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:1},revision:3});
+  assert.equal((await getDoc(target)).data().drivers[0].daCode,'DA-0001');
+  assert.equal((await getDoc(target)).data().drivers[1].daCode,'da-0001');
+  console.log('P0 COUNTEREXAMPLE [E+SDK]: both duplicate rows editable when seeded count lies; production NO-GO');
+  await seed();
+
   // The claimed index must actually be the only modified array element.
   await seed();
   x=base();x.drivers[1].name='OTHER ROW CHANGED';
