@@ -17,11 +17,18 @@ const targets = [
   },
 ];
 
+function executableText(source) {
+  // Heuristic structural gate, not a JS/Rules parser or security proof.
+  // Remove block and whole-line comments before checking required tokens.
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 function validateSource(target, source) {
   const bytes = Buffer.byteLength(source, 'utf8');
   assert.ok(bytes >= target.minBytes, `${target.path}: suspiciously short (${bytes} bytes)`);
   assert.doesNotMatch(source.trim(), /^(?:PLACEHOLDER|PLACEHOLDER_BRIDGE_CONTENT_WILL_BE_REPLACED_IN_NEXT_IF_NEEDED|TODO_REPLACE_ME)$/i);
-  for (const pattern of target.patterns) assert.match(source, pattern, `${target.path}: missing required executable structure`);
+  const executable = executableText(source);
+  for (const pattern of target.patterns) assert.match(executable, pattern, `${target.path}: missing required executable structure outside comments`);
 }
 
 for (const target of targets) {
@@ -49,4 +56,12 @@ test('source-integrity positive controls: executable synthetic structures are ac
   const padding = ' '.repeat(1100);
   validateSource(targets[0], `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /x/{id} { allow read, write: if false; } } }${padding}`);
   validateSource(targets[1], `export function firestoreBridge() { return false; }${padding}`);
+});
+
+test('source-integrity negative controls: padded commented-out real-looking structures fail closed', () => {
+  const padding = ' '.repeat(1200);
+  assert.throws(() => validateSource(targets[0], `/* rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { } } */${padding}`));
+  assert.throws(() => validateSource(targets[1], `/* export function firestoreBridge() { return true; } */${padding}`));
+  assert.throws(() => validateSource(targets[0], `// rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { } }\n${padding}`));
+  assert.throws(() => validateSource(targets[1], `// export function firestoreBridge() { return true; }\n${padding}`));
 });
