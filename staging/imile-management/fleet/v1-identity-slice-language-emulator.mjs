@@ -126,6 +126,30 @@ try {
                 {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
   assert.equal((await getDoc(target)).data().identity.daCnt.DA_0003,1);
 
+  // Boundary positive control: the last row can be edited without changing DA.
+  await seed();
+  x=base(); x.drivers[1].name='LEGITIMATE LAST ROW EDIT';
+  await allowed('legitimate final-index edit preserves identity',
+                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:1}});
+  assert.equal((await getDoc(target)).data().drivers[0].name,'SYNTHETIC FIRST');
+
+  // Same normalized identity with different ASCII case must not change counts.
+  await seed();
+  x=base(); x.drivers[0].daCode='da-0001';
+  await allowed('ASCII case-only identity edit preserves count',
+                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
+
+  // Counter data must be exact, and index/revision claims must be typed.
+  await seed();
+  x=base(); x.drivers[0].name='LEGITIMATE BUT WITH FORGED METADATA';
+  await denied('extra identity counter namespace injected',
+               {drivers:x.drivers,identity:{...x.identity,vehicleCnt:{}},
+                lastChange:{driverIndex:0}});
+  await denied('string index cannot select a row',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:'0'}});
+  await denied('revision jump cannot bypass stale writer protection',
+               {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0},revision:99});
+
   // A direct SDK writer may NOT rename a different DA into an existing key.
   await seed();
   x=base();x.drivers[1].daCode='da-0001';
