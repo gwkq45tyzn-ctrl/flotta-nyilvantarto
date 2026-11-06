@@ -254,8 +254,9 @@ test('canonical parity blocks row reordering and duplicate-row replacement witho
   const source=canonicalReadySource();
   source.vehicles.push({id:'source-car-2',rendszam:'DEF-456',status:'aktiv',
     history:[{event:'inspection',details:{km:321}}]});
-  source.drivers.push({id:'source-driver-2',daCode:'DA0002',status:'aktiv',
-    kapacitas:20,history:[{event:'start',at:'synthetic'}]});
+  source.drivers.push({...copy(source.drivers[0]),id:'source-driver-2',daCode:'DA0002',
+    name:'Synthetic Driver Two',status:'aktiv',kapacitas:20,
+    history:[{event:'start',at:'synthetic'}]});
   const clean=projectedDocument(source);
   assert.equal(auditProjectedCanonicalFleetRestore(source,clean).status,
     'PARITY_MATCHED_OFFLINE');
