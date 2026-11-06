@@ -13,7 +13,7 @@ import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 
 const projectId = 'demo-imile-identity-slice-capabilities';
-const rules = String.raw\`rules_version = '2';
+const rules = String.raw`rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /identitySliceProbes/{probeId} {
@@ -62,7 +62,7 @@ service cloud.firestore {
       allow update: if goodOwner() && boundedDriverEdit();
     }
   }
-}\`;
+}`;
 const env = await initializeTestEnvironment({
   projectId,
   firestore: { host: '127.0.0.1', port: 8787, rules }
