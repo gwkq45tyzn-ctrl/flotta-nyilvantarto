@@ -68,6 +68,26 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if goodOwner() && boundedDriverEdit();
     }
+    // ISOLATED BOOKING COUNTEREXAMPLE: a selected-row + caller-supplied
+    // count of 1 does NOT prove global uniqueness or trusted bootstrap.
+    // This deliberately weak synthetic gate is NEVER production Rules.
+    match /identitySliceBookings/{bookingId} {
+      function fleet() {
+        return get(/databases/$(database)/documents/identitySliceProbes/synthetic).data;
+      }
+      allow create: if request.auth != null
+        && request.auth.uid == 'synthetic-editor'
+        && request.resource.data.keys().hasOnly(['daCode', 'driverIndex'])
+        && request.resource.data.keys().hasAll(['daCode', 'driverIndex'])
+        && request.resource.data.daCode is string
+        && request.resource.data.driverIndex is int
+        && request.resource.data.driverIndex >= 0
+        && request.resource.data.driverIndex < fleet().drivers.size()
+        && fleet().drivers[request.resource.data.driverIndex].daCode.upper()
+           == request.resource.data.daCode.upper()
+        && fleet().identity.daCnt.get(request.resource.data.daCode.upper(), 0) == 1;
+      allow get, list, update, delete: if false;
+    }
   }
 }`;
 const env = await initializeTestEnvironment({
@@ -90,6 +110,22 @@ const base = () => ({
   lastChange: {driverIndex:0}
 });
 const clone = x => structuredClone(x);
+async function bookingAllowed(name, id, daCode, driverIndex) {
+  await setDoc(doc(editor, 'identitySliceBookings', id), {daCode, driverIndex});
+  console.log('PASS EXPECTED ALLOW [E+SDK BOOKING] ' + name);
+}
+async function bookingDenied(name, id, daCode, driverIndex) {
+  try {
+    await setDoc(doc(editor, 'identitySliceBookings', id), {daCode, driverIndex});
+  } catch (err) {
+    if (err.code === 'permission-denied') {
+      console.log('PASS DENY [E+SDK BOOKING] ' + name);
+      return;
+    }
+    throw Error('UNEXPECTED booking error ' + name + ': ' + err.message, {cause:err});
+  }
+  throw Error('UNSAFE BOOKING AUTHORIZED ' + name);
+}
 async function seed(value=base()) {
   await env.withSecurityRulesDisabled(ctx =>
     setDoc(doc(ctx.firestore(), 'identitySliceProbes', 'synthetic'), value));
@@ -112,6 +148,13 @@ async function denied(name, next, db=editor) {
   throw Error('UNEXPECTED DIRECT SDK AUTHORIZATION '+name);
 }
 try {
+  // Booking positive and forged-index negative controls against the same
+  // isolated Rules. These do not validate production booking security.
+  await seed();
+  await bookingAllowed('unique DA with correct row and count', 'unique-control', 'DA-0001', 0);
+  await bookingDenied('wrong selected index', 'wrong-index', 'DA-0001', 1);
+  await bookingDenied('missing normalized counter', 'missing-counter', 'MISSING', 0);
+
   // Valid non-identity change: preserving the rest of the array must work.
   await seed();
   let x=base(); x.drivers[0].name='EDITED SYNTHETIC FIRST';
@@ -175,6 +218,8 @@ try {
   legacy.drivers[1].daCode='da-0001';
   legacy.identity.daCnt={'DA-0001':2};
   await seed(legacy);
+  await bookingDenied('trusted duplicate count parks first DA', 'legacy-first', 'DA-0001', 0);
+  await bookingDenied('trusted duplicate count parks second DA', 'legacy-second', 'da-0001', 1);
   x=clone(legacy); x.drivers[0].name='FIRST DUPLICATE';
   await denied('legacy duplicate first row cannot edit',
                {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
@@ -196,6 +241,10 @@ try {
   poisoned.drivers[1].daCode='da-0001';
   poisoned.identity.daCnt={'DA-0001':1};
   await seed(poisoned);
+  await bookingAllowed('EXPECTED UNSAFE: false seed books first duplicate',
+    'poisoned-first', 'DA-0001', 0);
+  await bookingAllowed('EXPECTED UNSAFE: false seed books second duplicate',
+    'poisoned-second', 'da-0001', 1);
   x=clone(poisoned); x.drivers[0].name='POISONED FIRST DUPLICATE EDIT';
   await allowed('EXPECTED UNSAFE: poisoned counter permits first duplicate',
     {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
@@ -218,13 +267,17 @@ try {
   punctuationCollision.drivers[1].daCode='aaa-1';
   punctuationCollision.identity.daCnt={AAA1:1,'AAA-1':1};
   await seed(punctuationCollision);
+  await bookingAllowed('EXPECTED UNSAFE: AAA1 first duplicate booked',
+    'punctuation-first', 'AAA1', 0);
+  await bookingAllowed('EXPECTED UNSAFE: aaa-1 second duplicate booked',
+    'punctuation-second', 'aaa-1', 1);
   x=clone(punctuationCollision); x.drivers[0].name='PUNCTUATION FIRST';
   await allowed('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 (first)',
     {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:0}});
   x=clone(x); x.drivers[1].name='PUNCTUATION SECOND';
   await allowed('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 (second)',
     {drivers:x.drivers,identity:x.identity,lastChange:{driverIndex:1},revision:3});
-  console.log('P0 NORMALIZATION COUNTEREXAMPLE [E+SDK]: both AAA1/aaa-1 rows editable; NO-GO');
+  console.log('P0 NORMALIZATION COUNTEREXAMPLE [E+SDK]: both AAA1/aaa-1 rows editable AND bookable in isolated Rules; NO-GO');
   await seed();
 
   // The claimed index must actually be the only modified array element.
