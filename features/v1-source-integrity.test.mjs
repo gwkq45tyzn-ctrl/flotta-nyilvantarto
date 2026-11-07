@@ -105,3 +105,21 @@ test('P0 regression: punctuation collision SDK cases must remain executable, not
   assert.match(executable, /await allowed\('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 \(second\)'/);
   assert.doesNotMatch(source, /\\n\s*await allowed\('EXPECTED UNSAFE:/);
 });
+
+
+test('restricted CI PR path gate: identity SDK and source-integrity changes cannot silently skip QA', () => {
+  const workflow = readFileSync('.github/workflows/imile-v1-restricted-security.yml', 'utf8');
+  const prSection = workflow.match(/^  pull_request:\s*\n    paths:\s*\n((?:      - .*\n)+)/m);
+  assert.ok(prSection, 'restricted workflow must declare pull_request path filters');
+  const prPaths = [...prSection[1].matchAll(/^      - '([^']+)'/gm)].map(match => match[1]);
+  for (const required of [
+    'staging/imile-management/fleet/v1-identity-slice-language-emulator.mjs',
+    'features/v1-source-integrity.test.mjs',
+    '.github/workflows/imile-v1-restricted-security.yml',
+    'depokapacitas/firestore-v1-restricted.rules',
+  ]) {
+    assert.ok(prPaths.includes(required), 'restricted CI missing PR path trigger: ' + required);
+  }
+  assert.match(workflow, /run: node --test features\/v1-source-integrity\.test\.mjs/);
+  assert.match(workflow, /emulators:exec[\s\S]*?v1-identity-slice-language-emulator\.mjs/);
+});
