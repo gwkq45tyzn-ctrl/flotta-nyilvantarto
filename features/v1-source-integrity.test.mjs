@@ -92,3 +92,16 @@ test('source-integrity negative controls: merge conflicts and hidden characters 
     assert.throws(() => validateSource(targets[1], validBridge + hidden));
   }
 });
+
+
+test('P0 regression: punctuation collision SDK cases must remain executable, not commented out', () => {
+  // This guards the previously observed escaped-newline bug that made a green
+  // emulator run silently skip both AAA1/aaa-1 adversarial writes.
+  const source = readFileSync('staging/imile-management/fleet/v1-identity-slice-language-emulator.mjs', 'utf8');
+  const executable = executableText(source);
+  assert.match(executable, /punctuationCollision\.drivers\[0\]\.daCode\s*=\s*'AAA1'/);
+  assert.match(executable, /punctuationCollision\.drivers\[1\]\.daCode\s*=\s*'aaa-1'/);
+  assert.match(executable, /await allowed\('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 \(first\)'/);
+  assert.match(executable, /await allowed\('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 \(second\)'/);
+  assert.doesNotMatch(source, /\\\\n\s*await allowed\('EXPECTED UNSAFE:/);
+});
