@@ -103,5 +103,5 @@ test('P0 regression: punctuation collision SDK cases must remain executable, not
   assert.match(executable, /punctuationCollision\.drivers\[1\]\.daCode\s*=\s*'aaa-1'/);
   assert.match(executable, /await allowed\('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 \(first\)'/);
   assert.match(executable, /await allowed\('EXPECTED UNSAFE: AAA1 counted separately from aaa-1 \(second\)'/);
-  assert.doesNotMatch(source, /\\\\n\s*await allowed\('EXPECTED UNSAFE:/);
+  assert.doesNotMatch(source, /\\n\s*await allowed\('EXPECTED UNSAFE:/);
 });
