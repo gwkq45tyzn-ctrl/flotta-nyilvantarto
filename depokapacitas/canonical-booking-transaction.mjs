@@ -86,6 +86,9 @@ export async function commitCanonicalDepotBooking({
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
+    // Identity claims required by Rules for booking.
+    tx.set(db.doc('flottaDriverClaims/'+driverId),{sourceIndex:driverIndex,revision:fleetData.revision||0});
+    tx.set(db.doc('flottaVehicleClaims/'+vehicleId),{sourceIndex:vehicleIndex,revision:fleetData.revision||0});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.
