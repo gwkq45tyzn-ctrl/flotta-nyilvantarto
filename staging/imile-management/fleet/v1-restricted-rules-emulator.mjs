@@ -58,6 +58,11 @@ function bookFuture(date,{vehicleId='TEST0001',driverId='TEST0001',capacity=50,d
   b.set(doc(shared,'driverClaims',date+'__'+driverId),{
     date,driverId,bookingId
   });
+  // The new restricted Rules require BOTH canonical identity claims in the
+  // SAME atomic batch. Their index+revision must match the trusted Fleet.
+  // This is NOT a global-uniqueness proof: the #133 hostile SDK tests remain.
+  b.set(doc(shared,'flottaDriverClaims',driverId),{sourceIndex:driverIndex,revision:2});
+  b.set(doc(shared,'flottaVehicleClaims',vehicleId),{sourceIndex:vehicleIndex,revision:2});
   return b.commit();
 }
 const locations=[
@@ -183,6 +188,12 @@ try{
     ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:null}));
   await expectPermission('approved original Fleet source admits atomic booking + claim',true,
     ()=>bookFuture('2099-01-01'));
+  const realDAClaim=await getDoc(doc(shared,'flottaDriverClaims','TEST0001'));
+  const realPlateClaim=await getDoc(doc(shared,'flottaVehicleClaims','TEST0001'));
+  assert.equal(realDAClaim.exists(),true,'DA claim must be committed atomically');
+  assert.equal(realPlateClaim.exists(),true,'Plate claim must be committed atomically');
+  assert.deepEqual(realDAClaim.data(),{sourceIndex:0,revision:2});
+  assert.deepEqual(realPlateClaim.data(),{sourceIndex:0,revision:2});
   // Valid plate normalization survives a hyphen in the canonical original.
   await env.withSecurityRulesDisabled(ctx=>
     setDoc(fleet(ctx.firestore()),{...fleetData(2),

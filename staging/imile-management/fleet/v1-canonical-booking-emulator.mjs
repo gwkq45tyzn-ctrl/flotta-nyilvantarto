@@ -105,6 +105,12 @@ try{
   assert.equal(claim.exists(),true);
   assert.equal(booked.data().driverId,claim.data().driverId);
   assert.equal(claim.data().bookingId,'2099-01-01__ABC123');
+  const driverIdentityClaim=await getDoc(doc(shared,'flottaDriverClaims','DA0001'));
+  const vehicleIdentityClaim=await getDoc(doc(shared,'flottaVehicleClaims','ABC123'));
+  assert.equal(driverIdentityClaim.exists(),true,'Identity DA claim must be atomically created');
+  assert.equal(vehicleIdentityClaim.exists(),true,'Identity vehicle claim must be atomically created');
+  assert.deepEqual(driverIdentityClaim.data(),{sourceIndex:0,revision:1});
+  assert.deepEqual(vehicleIdentityClaim.data(),{sourceIndex:0,revision:1});
   console.log('PASS [E]: actual committed canonical booking + driverClaim atomic pair');
   passed++;
 
@@ -188,6 +194,11 @@ try{
   assert.equal(hyphenBooking.data().capacity,70);
   assert.equal(hyphenBooking.data().driverId,'DA-0002');
   assert.equal(hyphenClaim.data().bookingId,'2099-01-10__ABC123');
+  const hyphenIdentityClaim=await getDoc(doc(shared,'flottaDriverClaims','DA-0002'));
+  assert.equal(hyphenIdentityClaim.exists(),true,'Hyphenated DA must preserve the hyphen in claim ID');
+  assert.deepEqual(hyphenIdentityClaim.data(),{sourceIndex:1,revision:1});
+  assert.equal((await getDoc(doc(shared,'flottaDriverClaims','DA0002'))).exists(),false,
+    'Stripped DA business identity must never be created');
   console.log('PASS [E]: legitimate hyphenated DA books exactly once and reserves its own claim');
   passed++;
   await env.withSecurityRulesDisabled(ctx=>

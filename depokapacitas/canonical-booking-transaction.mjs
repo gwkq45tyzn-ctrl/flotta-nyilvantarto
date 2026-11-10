@@ -34,6 +34,8 @@ export async function commitCanonicalDepotBooking({
   const refs={
     booking:sdk.doc(db,'bookings',bookingId),
     driverClaim:sdk.doc(db,'driverClaims',driverKey),
+    driverIdentityClaim:sdk.doc(db,'flottaDriverClaims',driverId),
+    vehicleIdentityClaim:sdk.doc(db,'flottaVehicleClaims',vehicleId),
     driver:sdk.doc(db,'drivers',driverId),
     vehicle:sdk.doc(db,'vehicles',vehicleId),
     capacity:sdk.doc(db,'driverCapacities',driverId),
@@ -87,8 +89,8 @@ export async function commitCanonicalDepotBooking({
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
     // Identity claims required by Rules for booking.
-    tx.set(db.doc('flottaDriverClaims/'+driverId),{sourceIndex:driverIndex,revision:fleetData.revision||0});
-    tx.set(db.doc('flottaVehicleClaims/'+vehicleId),{sourceIndex:vehicleIndex,revision:fleetData.revision||0});
+    tx.set(refs.driverIdentityClaim,{sourceIndex:driverIndex,revision:fleetData.revision});
+    tx.set(refs.vehicleIdentityClaim,{sourceIndex:vehicleIndex,revision:fleetData.revision});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.
