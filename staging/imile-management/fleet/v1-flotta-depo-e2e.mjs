@@ -262,6 +262,38 @@ try{
   assert.deepEqual(blockedCloud,[],'No real Firebase cloud/prod network access');
   console.log('PASS [B+E]: ACTUAL Depot UI submitted next-day booking under unchanged Rules; Firestore canonical booking+claim verified at capacity 80, Fleet SHA unchanged');
 
+  // POST-SEAL ACCEPTANCE: unlike the earlier pre-cutover edit, a sealed
+  // original Fleet edit must write live keyed master AND the second isolated
+  // real browser must read the updated master (not the archived old array).
+  // This intentionally exposes the remaining keyed listener/readback gap.
+  const secondFleetPage=await ctxDepot.newPage();
+  secondFleetPage.on('pageerror',e=>errors.push('Second Fleet: '+String(e.message).slice(0,240)));
+  await secondFleetPage.goto(origin+'/index.html',{waitUntil:'domcontentloaded'});
+  await secondFleetPage.waitForFunction(()=>
+    !document.body.classList.contains('flotta-locked'),
+    null,{timeout:35000});
+  console.log('PASS [B+E] second original Fleet browser authenticated after sealed import');
+
+  await flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
+  await flottaPage.locator('#modal.active #km').fill('100100');
+  await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]').click();
+  let serverKeyed;
+  for(let attempt=0;attempt<35;attempt++){
+    serverKeyed=await serverRead('flottaVehicles/ABC123');
+    if(serverKeyed.km===100100)break;
+    await new Promise(r=>setTimeout(r,200));
+  }
+  assert.equal(serverKeyed.km,100100,
+    'POST-SEAL: original HTML form must actually save KM 100100 in rich keyed server master');
+  assert.deepEqual(serverKeyed.history,fleetData.vehicles[0].history,
+    'POST-SEAL: original rich vehicle history must survive real HTML form save');
+  console.log('PASS [B+E] first browser original Fleet HTML form saved keyed KM 100100 with rich history');
+  await secondFleetPage.waitForFunction(()=>
+    typeof vehicles!=='undefined' &&
+    vehicles.some(v=>v.rendszam==='ABC-123'&&v.km===100100),
+    null,{timeout:12000});
+  console.log('PASS [B+E] SECOND signed-in original Fleet browser sees updated KEYED KM 100100 without reload');
+
   await flottaPage.locator('#flottaLogout').click();
   await flottaPage.waitForFunction(()=>
     document.body.classList.contains('flotta-locked'),
