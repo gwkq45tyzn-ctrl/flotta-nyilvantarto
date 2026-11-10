@@ -476,6 +476,9 @@ service cloud.firestore {
       // No direct SDK/old-client booking create before original Fleet import.
       allow create: if editor()
         && canonicalImportActive()
+        // Booking is impossible until a PRIVILEGED verified migration seals the
+        // canonical source. This flag is immutable to browser SDK clients.
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.get('sealed',false) == true
         && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity','driverIndex','vehicleIndex'])
         && validDay(request.resource.data.date)
         && sameDayOccupancy(request.resource.data)
