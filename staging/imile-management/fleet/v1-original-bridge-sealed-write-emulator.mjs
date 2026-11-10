@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {doc,getDoc,setDoc,runTransaction,Timestamp} from 'firebase/firestore';
+import {doc,getDoc,setDoc,updateDoc,runTransaction,Timestamp} from 'firebase/firestore';
 
 const uid='synthetic-imile-v1-admin-0000001',email='imilemanagement@imile-management-staging.firebaseapp.com';
 const sourceSha='b'.repeat(64);
@@ -115,6 +115,25 @@ try{
   failures.push('P0 RICH VEHICLE DATA LOSS FROM UNRELATED CONTACTS SAVE');
   console.error(failures.at(-1),keyedV);
  }else console.log('PASS [E+REAL BRIDGE] keyed vehicle rich data retained');
+ if(b.writes.some(p=>p.startsWith('flottaDrivers/')||p.startsWith('flottaVehicles/'))){
+  failures.push('P0 CONTACTS-ONLY SAVE REWROTE UNCHANGED KEYED MASTERS');
+  console.error(failures.at(-1),b.writes);
+ }else console.log('PASS [E+REAL BRIDGE] unrelated contact save never rewrites keyed masters');
+
+ // Another signed-in computer changed the driver's current keyed capacity to
+ // 80. A stale original UI draft based on the frozen archive (50) must not
+ // overwrite it with 70, even though it can edit different fields safely.
+ await reset();
+ await updateDoc(ref('flottaDrivers/DA0001'),{kapacitas:80});
+ const stale=fleet();stale.drivers[0].kapacitas=70;
+ const staleBrowser=runOriginalBridge(stale);
+ await staleBrowser.submit();
+ const afterStale=(await getDoc(ref('flottaDrivers/DA0001'))).data();
+ const archiveStale=(await getDoc(ref('flottaSharedState/current'))).data();
+ if(afterStale.kapacitas!==80 || archiveStale.revision!==1){
+  failures.push('P0 STALE FLEET UI OVERWROTE ANOTHER BROWSER KEYED CAPACITY OR SOURCE REVISION');
+  console.error(failures.at(-1),{capacity:afterStale.kapacitas,revision:archiveStale.revision});
+ }else console.log('PASS DENY [E+REAL BRIDGE] stale original UI draft cannot overwrite concurrent keyed capacity');
 
  await reset(false);
  const pre=fleet();pre.drivers[0].kapacitas=60;
