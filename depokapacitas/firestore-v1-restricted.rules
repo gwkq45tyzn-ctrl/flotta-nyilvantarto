@@ -952,12 +952,9 @@ service cloud.firestore {
         && request.resource.data.drivers is list
         && request.resource.data.fuelCards is list
         && request.resource.data.contacts is list
-        // Counter guard: reject bulk identity changes. Single-row uniqueness
-        // still requires one document per identity.
-        && request.resource.data.keys().hasAll(['identity'])
-        && request.resource.data.identity.keys().hasAll(['daCnt','plateCnt'])
-        && request.resource.data.identity.daCnt is map
-        && request.resource.data.identity.plateCnt is map;
+        // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
+        // True uniqueness requires one document per identity. See
+        // docs/STRUCTURAL_IDENTITY_MODEL.md.
         // S7: flottaSharedState is the single canonical source.
         // Mirror projection is best-effort and not required for the update.
         // The booking gate re-validates full parity against this document.
