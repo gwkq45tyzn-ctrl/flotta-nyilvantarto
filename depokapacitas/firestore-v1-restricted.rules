@@ -971,7 +971,10 @@ service cloud.firestore {
         && request.resource.data.revision is int
         && request.resource.data.revision == getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode is string
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.replace('[[:space:]-]','').upper() == normalizedDa;
+        // DA IDs keep '-' and '_' exactly; only ASCII source bytes are accepted.
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.matches('^[A-Za-z0-9_-]+$')
+        && validDriverCode(getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.upper())
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.upper() == normalizedDa;
       allow delete: if false;
     }
     match /flottaVehicleClaims/{normalizedPlate} {
