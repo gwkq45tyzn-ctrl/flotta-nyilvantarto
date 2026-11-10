@@ -124,7 +124,7 @@ try{
  // 80. A stale original UI draft based on the frozen archive (50) must not
  // overwrite it with 70, even though it can edit different fields safely.
  await reset();
- await updateDoc(ref('flottaDrivers/DA0001'),{kapacitas:80});
+ await updateDoc(ref('flottaDrivers/DA0001'),{kapacitas:80,revision:10});
  const stale=fleet();stale.drivers[0].kapacitas=70;
  const staleBrowser=runOriginalBridge(stale);
  await staleBrowser.submit();
