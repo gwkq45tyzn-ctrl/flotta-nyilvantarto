@@ -1,1 +1,59 @@
-CONTENT_FROM_FILE
+// V1-RESTRICTED CANDIDATE — NOT DEPLOYABLE AS WRITTEN.
+// Single-UID placeholder is deliberate; future courier/PWA features denied.
+// Generated from Grok full feature Rules at cb1ea15b58322a73e903f0535d49a88af73aca08.
+// Keep this separate from staging firestore.rules until two-agent independent GO.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // STAGING ONLY. No anonymous access or direct client self-registration.
+    function signedIn() {
+      // V1 internal portal is STRICTLY single account, not merely any active
+      // member or a matching email. UID stays intentionally unconfigured.
+      return request.auth != null
+        && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID'
+        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
+        && exists(userPath())
+        && get(userPath()).data.active == true
+        && get(userPath()).data.role in ['admin','editor','viewer'];
+    }
+    // ... (full rules truncated for this example; in real call full content would be here)
+    match /flottaDrivers/{normalizedDa} {
+      allow read: if member();
+      // V1 fail-closed: no client create of arbitrary keyed identities.
+      // Only trusted privileged migration may create; ordinary editor create is denied.
+      allow create: if false;
+      allow update: if editor()
+        && canonicalImportActive()
+        && resource != null
+        // Prevent data-loss overwrites: new doc must contain all previous keys.
+        && request.resource.data.keys().hasAll(resource.data.keys())
+        && request.resource.data.keys().hasAll(['daCode','status','kapacitas'])
+        && request.resource.data.daCode is string
+        && request.resource.data.daCode.matches('^[A-Za-z0-9_-]+$')
+        && request.resource.data.daCode.upper() == normalizedDa
+        && request.resource.data.status in ['aktiv','aktív','inaktiv','inaktív']
+        && request.resource.data.kapacitas is int
+        // If revision exists, it must increment.
+        && (!('revision' in resource.data) || (request.resource.data.revision is int && request.resource.data.revision == resource.data.revision + 1));
+      allow delete: if false;
+    }
+    match /flottaVehicles/{normalizedPlate} {
+      allow read: if member();
+      allow create: if false;
+      allow update: if editor()
+        && canonicalImportActive()
+        && resource != null
+        && request.resource.data.keys().hasAll(resource.data.keys())
+        && request.resource.data.keys().hasAll(['rendszam','status'])
+        && request.resource.data.rendszam is string
+        && request.resource.data.rendszam.matches('^[A-Za-z0-9 -]+$')
+        && request.resource.data.rendszam.replace('[[:space:]-]','').upper() == normalizedPlate
+        && request.resource.data.status in ['aktiv','aktív','szerviz','inaktiv','inaktív']
+        && (!('revision' in resource.data) || (request.resource.data.revision is int && request.resource.data.revision == resource.data.revision + 1));
+      allow delete: if false;
+    }
+
+    match /{path=**} { allow read, write: if false; }
+  }
+}
