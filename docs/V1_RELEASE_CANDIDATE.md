@@ -1,24 +1,19 @@
 # V1 Release Candidate – 2026-11-10
 
 **Ág:** `grok/v1-identity-hardstop-20261110`  
-**HEAD:** `35a886f` (integrates #139 at `47641f5`)  
-**Döntés:** **NO-GO** (duplicate identity hard-stop partial; #133 attacks remain open)
+**HEAD:** (this commit)  
+**Döntés:** **NO-GO** (duplicate identity hard-stop not proven; #133 attacks remain open)
 
-## What was integrated
-- #139: modular SDK identity claim booking. Booking transaction now writes flottaDriverClaims and flottaVehicleClaims using sdk.doc.
-- #138: DA hyphen/underscore normalization fix.
+## Verified on prior SHA 33f87c0
+- #139 integrated: modular SDK identity claim booking.
+- #138 integrated: DA hyphen/underscore normalization fix.
+- Local contract tests pass (12/12).
 
-## What this stops
-- A booking that selects an index whose identity does not match the claim for that normalized ID.
-- A booking that has no claim for the selected identity.
-
-## What this does NOT stop
-- A direct SDK update that inserts duplicate DA codes or plates into the Fleet arrays.
-- A direct SDK update that also writes a claim for only one of the duplicates.
-- Rules still cannot iterate the arrays to reject the Fleet update itself.
-
-## Remaining gap
-The #133 attacks that insert duplicates into the Fleet document and then book by selecting the eligible index are still possible if the attacker also writes the corresponding claim. The claim makes the attack harder, but does not make it impossible.
+## This commit adds
+- Counter-based identity proposal (`docs/COUNTER_BASED_IDENTITY_PROPOSAL.md`).
+- Documents that claim-only protection does not deny the five #133 attacks.
+- Documents that Rules cannot iterate arrays to prove whole-array uniqueness.
+- Documents the structural alternative (one document per identity).
 
 ## Proven [T]
 - Post-import contract tests (6/6) – source structure only.
@@ -28,7 +23,7 @@ The #133 attacks that insert duplicates into the Fleet document and then book by
 - #139 emulator tests reported SUCCESS by ChatGPT on the source SHA.
 
 ## Nyitott
-- True structural hard-stop for duplicate DA/plate (requires one document per identity).
+- True structural hard-stop for duplicate DA/plate (requires one document per identity or a counter protocol that Rules can enforce).
 - Real two-browser post-import Flotta→Depó UI chain with original Flotta HTML.
 - Full CI on this new SHA.
 - Rules deploy, UID swap, real migration (after approval).
