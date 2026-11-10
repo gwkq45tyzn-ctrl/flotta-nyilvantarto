@@ -46,7 +46,7 @@ const vehicleMaster={
   revision:7
 };
 const sourceFleet=()=>({
-  revision:1,migrationSourceSha256:digest,
+  revision:1,migrationSourceSha256:digest,sealed:true,
   vehicles:[{
     id:'vehicle-1',rendszam:'ABC-123',normalizedPlate:'ABC123',
     gyartmany:'Ford',modell:'Transit',status:'aktiv',
@@ -72,12 +72,14 @@ const booking=async(date)=>commitCanonicalDepotBooking({
   booking:{date,driverId:'DA0001',vehicleId:'ABC123',
     district:'01',status:'planned'}
 });
-async function seed({keyed}={}){
+async function seed({keyed,sealed=true}={}){
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async ctx=>{
     const admin=ctx.firestore();
     await setDoc(doc(admin,'users',uid),{name:'SYNTHETIC ADMIN',active:true,role:'admin'});
-    await setDoc(doc(admin,'flottaSharedState','current'),sourceFleet());
+    await setDoc(doc(admin,'flottaSharedState','current'),{
+      ...sourceFleet(),sealed
+    });
     await setDoc(doc(admin,'flottaMigrationApproval','current'),approval);
     // Legitimate old mirrored indexes are present. Their data cannot be
     // authoritative, but should not prevent a proper canonical booking.
@@ -118,6 +120,24 @@ try{
     errors.push('P1 FUNCTIONAL BLOCK: legally seeded canonical booking denied: '+(e.code||e.message));
     console.error(errors.at(-1));
   }
+  // Keyed masters alone cannot authorize a booking while trusted migration
+  // remains unsealed, even if both source documents exist.
+  await seed({keyed:true,sealed:false});
+  try{
+    await booking('2099-01-19');
+    errors.push('P0 CUTOVER BYPASS: unsealed source with keyed masters created a booking');
+    console.error(errors.at(-1));
+  }catch(e){
+    if(/BOOKING_BLOCKED: fleet_migration_not_sealed/.test(String(e.message||e)))
+      console.log('PASS DENY [E+SDK] approved but unsealed rich Fleet cannot book');
+    else {
+      errors.push('Unexpected unsealed booking failure: '+(e.code||e.message));
+      console.error(errors.at(-1));
+    }
+  }
+  assert.equal((await getDoc(doc(db,'bookings','2099-01-19__ABC123'))).exists(),false,
+    'Rejected unsealed booking MUST NOT create a booking document');
+
   // A missing canonical keyed source is a migration/cutover failure. It must
   // FAIL CLOSED, with no booking or synthetic "authority" created on demand.
   await seed({keyed:false});
