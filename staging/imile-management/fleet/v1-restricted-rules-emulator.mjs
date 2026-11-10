@@ -44,7 +44,7 @@ const user=(db,id)=>doc(db,'users',id);
 const fleet=db=>doc(db,'flottaSharedState','current');
 const migrationGate=db=>doc(db,'flottaMigrationApproval','current');
 const approvedGate={status:'approved',approvedUid:uid,sourceSha256:'f'.repeat(64),approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))};
-const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),vehicles:[{rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}],drivers:[{daCode:'TEST0001',status:'aktiv',kapacitas:50}],fuelCards:[],contacts:[]});
+const fleetData=(revision)=>({revision,migrationSourceSha256:'f'.repeat(64),sealed:true,vehicles:[{rendszam:'TEST0001',status:'aktiv',normalizedPlate:'TEST0001'}],drivers:[{daCode:'TEST0001',status:'aktiv',kapacitas:50}],fuelCards:[],contacts:[]});
 const driver=(id)=>({name:'SYNTHETIC DRIVER',daCode:id,vendor:'SYNTHETIC',
   capacity:50,active:true});
 const vehicle=(id)=>({plate:id,model:'SYNTHETIC CAR',status:'Elérhető'});
@@ -197,6 +197,14 @@ try{
     ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:'b'.repeat(64)}));
   await expectPermission('browser cannot strip the original Fleet import source SHA',false,
     ()=>updateDoc(fleet(shared),{revision:3,migrationSourceSha256:null}));
+  // Even an active approval + keyed records cannot be a booking authority
+  // while the trusted migration is not completed and sealed.
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),{...fleetData(2),sealed:false}));
+  await expectPermission('approved but unsealed Fleet snapshot refuses direct SDK booking',false,
+    ()=>bookFuture('2099-02-20'));
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(fleet(ctx.firestore()),fleetData(2)));
   await expectPermission('approved original Fleet source admits atomic booking + claim',true,
     ()=>bookFuture('2099-01-01'));
   const realDAClaim=await getDoc(doc(shared,'flottaDriverClaims','TEST0001'));
