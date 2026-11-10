@@ -66,7 +66,7 @@ async function reset(sealed=true){
 function runOriginalBridge(draft){
  const local=new Map([['flotta_firestore_primary','1'],['flotta_import_verified','1']]);
  const ui={textContent:'',style:{}},window={};
- const writes=[];
+ const writes=[],bridgeErrors=[];
  const adapter={
   doc:path=>({inner:doc(db,path),path}),
   runTransaction:fn=>runTransaction(db,tx=>fn({
@@ -79,11 +79,11 @@ function runOriginalBridge(draft){
   localStorage:{getItem:k=>local.get(k)??null,setItem:(k,v)=>local.set(k,String(v)),removeItem:k=>local.delete(k)},
   snapshot:()=>structuredClone(draft),
   firebase:{firestore:{FieldValue:{serverTimestamp:()=>Timestamp.fromDate(new Date('2026-11-10T00:00:00Z'))}}},
-  console:{error(){},warn(){},log(){}},Promise,setTimeout,clearTimeout,Date,Blob,URL,JSON
+  console:{error:(...args)=>bridgeErrors.push(args.map(e=>e?.message||String(e)).join(' | ')),warn(){},log(){}},Promise,setTimeout,clearTimeout,Date,Blob,URL,JSON
  });
  vm.runInContext(instrumented,sandbox,{filename:'ACTUAL/features/firestore-bridge.js'});
  window.__qaBridge.configure(adapter,uid,1);
- return {submit:()=>window.__qaBridge.submit(),writes,ui};
+ return {submit:()=>window.__qaBridge.submit(),writes,bridgeErrors,ui};
 }
 const failures=[];
 try{
@@ -93,7 +93,7 @@ try{
  const keyed=(await getDoc(ref('flottaDrivers/DA0001'))).data();
  if(keyed.kapacitas!==70){
   failures.push('P1 SEALED ORIGINAL DRIVER EDIT NOT SAVED TO KEYED MASTER');
-  console.error(failures.at(-1),'keyed capacity:',keyed.kapacitas,'attempted writes:',a.writes);
+  console.error(failures.at(-1),'keyed capacity:',keyed.kapacitas,'attempted writes:',a.writes,'bridgeErrors:',a.bridgeErrors);
  }else console.log('PASS [E+REAL BRIDGE] sealed driver edit persisted');
 
  await reset();
@@ -105,7 +105,7 @@ try{
  const keyedV=(await getDoc(ref('flottaVehicles/ABC123'))).data();
  if(archived.contacts[0].name!=='Updated original contact'){
   failures.push('P1 CONTACTS-ONLY SEALED SAVE FAILED');
-  console.error(failures.at(-1));
+  console.error(failures.at(-1),'bridgeErrors:',b.bridgeErrors,'attempted:',b.writes);
  }else console.log('PASS [E+REAL BRIDGE] contacts-only edit saved');
  if(!keyedD.history||!keyedD.extra||!keyedD.name){
   failures.push('P0 RICH DRIVER DATA LOSS FROM UNRELATED CONTACTS SAVE');
@@ -122,7 +122,7 @@ try{
  const preResult=(await getDoc(ref('flottaSharedState/current'))).data();
  if(preResult.drivers[0].kapacitas!==60){
   failures.push('P1 LEGAL PRE-CUTOVER BRIDGE SAVE BROKEN');
-  console.error(failures.at(-1));
+  console.error(failures.at(-1),'bridgeErrors:',c.bridgeErrors,'attempted:',c.writes);
  }else console.log('PASS [E+REAL BRIDGE] original pre-cutover bridge save');
  assert.deepEqual(failures,[],'RELEASE NO-GO: actual bridge failures '+failures.join(' | '));
  console.log('ALL ORIGINAL BRIDGE FIRESTORE ACCEPTANCE PASS');
