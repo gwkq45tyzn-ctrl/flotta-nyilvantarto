@@ -1,0 +1,24 @@
+name: iMile V1 – #155 synthetic migration integrity and rollback acceptance
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-migration-dryrun.mjs'
+      - 'tools/v1-migration-dryrun.test.mjs'
+      - 'tools/v1-migration-acceptance.test.mjs'
+      - 'features/migration-manifest.mjs'
+      - '.github/workflows/imile-v1-migration-integrity.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Original Grok tests and independent hostile dry-run QA (offline only)
+        run: node --test tools/v1-migration-dryrun.test.mjs tools/v1-migration-acceptance.test.mjs
+      - name: Source syntax verification; no cloud writes or data access
+        run: node --check tools/v1-migration-dryrun.mjs
