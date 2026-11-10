@@ -289,6 +289,10 @@
           // Do not remove this field to make a test harness pass.
           throw new Error('MISSING_MIGRATION_SOURCE');
         }
+        // Preserve sealed flag if present; never clear it.
+        if (typeof existing.sealed === 'boolean') {
+          payload.sealed = existing.sealed;
+        }
         tx.set(ref, payload);
         // S7: flottaSharedState is the single canonical source.
         // Mirror writes removed to avoid 501-write budget and orphan risk.
