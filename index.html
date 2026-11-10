@@ -546,6 +546,10 @@
             <input type="text" id="driverAgency">
           </div>
           <div class="form-group">
+            <label data-i18n="driverCapacity">Napi csomagkapacitás</label>
+            <input type="number" id="driverCapacity" min="0" max="10000" step="1" value="0" required>
+          </div>
+          <div class="form-group">
             <label>Jogosítvány lejárat</label>
             <input type="date" id="driverLicenseExpiry">
           </div>
@@ -763,6 +767,8 @@
         drivers: 'Futárok / sofőrök',
         daCode: 'DA-kód',
         agency: 'Iskolaszövetkezet',
+        driverCapacity: 'Napi csomagkapacitás',
+        invalidDriverCapacity: 'A napi kapacitás 0–10000 közötti egész szám lehet.',
         statusUnknown: 'Nem ellenőrzött',
         newDriver: '+ Új sofőr',
         statusAktiv: 'Aktív',
@@ -832,6 +838,8 @@
         drivers: 'Couriers / drivers',
         daCode: 'DA code',
         agency: 'Student cooperative',
+        driverCapacity: 'Daily parcel capacity',
+        invalidDriverCapacity: 'Daily capacity must be an integer between 0 and 10000.',
         statusUnknown: 'Not verified',
         newDriver: '+ New driver',
         statusAktiv: 'Active',
@@ -1837,6 +1845,7 @@
         document.getElementById('driverDaCode').value = d.daCode || '';
         document.getElementById('driverAgency').value = d.agency || '';
         document.getElementById('driverPhone').value = d.phone || '';
+        document.getElementById('driverCapacity').value = String(d.kapacitas ?? d.capacity ?? 0);
         document.getElementById('driverLicenseExpiry').value = d.licenseExpiry || '';
         document.getElementById('driverStatus').value = d.status || 'ismeretlen';
         document.getElementById('driverSince').value = d.since || '';
@@ -1851,7 +1860,16 @@
     function saveDriver(e) {
       e.preventDefault();
       const id = document.getElementById('driverEditId').value || uid();
+      const existing = drivers.find(d => d.id === id);
+      const kapacitas = Number(document.getElementById('driverCapacity').value);
+      if (!Number.isSafeInteger(kapacitas) || kapacitas < 0 || kapacitas > 10000) {
+        alert(t('invalidDriverCapacity'));
+        return;
+      }
+      // Preserve every original + future rich canonical field that this
+      // smaller editor does not expose (including migration metadata).
       const data = {
+        ...(existing || {}),
         id,
         name: document.getElementById('driverName').value.trim(),
         daCode: document.getElementById('driverDaCode').value.trim(),
@@ -1861,12 +1879,12 @@
         status: document.getElementById('driverStatus').value,
         since: document.getElementById('driverSince').value || null,
         note: document.getElementById('driverNote').value.trim(),
-        history: []
+        kapacitas,
+        // Never mutate the currently displayed record before save succeeds.
+        history: Array.isArray(existing?.history) ? [...existing.history] : []
       };
 
-      const existing = drivers.find(d => d.id === id);
       if (existing) {
-        data.history = existing.history || [];
         if (existing.status !== data.status) {
           data.history.push({
             id: uid(),
