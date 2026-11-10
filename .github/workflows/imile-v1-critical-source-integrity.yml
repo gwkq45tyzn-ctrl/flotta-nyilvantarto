@@ -1,0 +1,25 @@
+name: iMile V1 – critical source integrity (no placeholders)
+on:
+  pull_request:
+  push:
+    branches: ['grok/v1-integrated']
+permissions:
+  contents: read
+jobs:
+  fail-closed-source-audit:
+    runs-on: ubuntu-latest
+    name: Reject truncated or placeholder V1 Rules, bridge and original Fleet
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Critical source integrity regression tests
+        run: node --test tools/verify-v1-critical-sources.test.mjs
+      - name: Validate current pull request contains full V1 source
+        run: node tools/verify-v1-critical-sources.mjs
+      - name: Verify Fleet bridge parses
+        run: node --check features/firestore-bridge.js
+      - name: Test-only check – never deploy
+        run: echo 'Source integrity check is advisory, not release GO or a Firebase deployment.'
