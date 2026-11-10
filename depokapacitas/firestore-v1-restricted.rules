@@ -951,7 +951,7 @@ service cloud.firestore {
         && request.resource.data.vehicles is list
         && request.resource.data.drivers is list
         && request.resource.data.fuelCards is list
-        && request.resource.data.contacts is list
+        && request.resource.data.contacts is list;
         // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
         // True uniqueness requires one document per identity. See
         // docs/STRUCTURAL_IDENTITY_MODEL.md.
