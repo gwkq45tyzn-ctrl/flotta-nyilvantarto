@@ -1,0 +1,22 @@
+name: iMile V1 – original rich Fleet driver form and capacity
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'features/v1-original-driver-rich-capacity-form.test.mjs'
+      - '.github/workflows/imile-v1-original-driver-rich-capacity.yml'
+permissions:
+  contents: read
+jobs:
+  original-driver-rich-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Execute ORIGINAL HTML saveDriver handler in synthetic DOM
+        run: node --test features/v1-original-driver-rich-capacity-form.test.mjs
+      - name: No production deployment
+        run: echo 'No network, no billing, no production data or deployment.'
