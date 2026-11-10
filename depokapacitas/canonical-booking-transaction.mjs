@@ -74,11 +74,10 @@ export async function commitCanonicalDepotBooking({
     // must not bootstrap or infer approval from keyed records or local cache.
     if(fleetData.sealed!==true)
       throw Error('BOOKING_BLOCKED: fleet_migration_not_sealed');
-    const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').trim().toUpperCase()===driverId);
-    // Canonical Flotta capacity is the only booking authority.
-    // Old /driverCapacities and /drivers are mutable legacy mirrors and may
-    // not inflate or manufacture a missing Fleet capacity.
-    const rawCapacity=fleetDriver?.kapacitas??fleetDriver?.capacity;
+    // After cutover, the CURRENT keyed master is the capacity authority.
+    // The legacy Fleet array is immutable after seal, so its capacity can
+    // naturally differ after an authorized keyed driver edit.
+    const rawCapacity=keyedDriver.exists()?keyedDriver.data().kapacitas:null;
     if(!Number.isSafeInteger(rawCapacity)||rawCapacity<0||rawCapacity>10000)
       throw Error('BOOKING_BLOCKED: invalid_capacity');
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
@@ -103,8 +102,7 @@ export async function commitCanonicalDepotBooking({
     if(normDriver(kd.daCode)!==driverId||
        normVehicle(kv.rendszam)!==vehicleId||
        !['aktiv','aktív'].includes(kd.status)||
-       !['aktiv','aktív'].includes(kv.status)||
-       kd.kapacitas!==rawCapacity)
+       !['aktiv','aktív'].includes(kv.status))
       throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
