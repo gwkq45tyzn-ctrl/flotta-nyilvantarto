@@ -52,7 +52,7 @@ async function reset(sealed=true){
   const admin=ctx.firestore();
   await setDoc(doc(admin,'users',uid),{name:'TEST ADMIN',active:true,role:'admin'});
   await setDoc(doc(admin,'flottaMigrationApproval','current'),{
-   status:'approved',approvedUid:uid,sourceSha256,
+   status:'approved',approvedUid:uid,sourceSha256:sourceSha,
    approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
   });
   const snap=fleet();if(!sealed)delete snap.sealed;
