@@ -79,7 +79,7 @@ export function auditV1CriticalSources(reader){
   const files=Object.keys(CRITICAL_V1_SOURCES).map(path=>{
     try{return auditCriticalSource(path,reader(path));}
     catch(error){
-      return {path,valid:false,errors:['SOURCE_READ_FAILED: '+error.code || 'UNKNOWN'],utf8Bytes:0};
+      return {path,valid:false,errors:['SOURCE_READ_FAILED: '+(error?.code || 'UNKNOWN')],utf8Bytes:0};
     }
   });
   return {
