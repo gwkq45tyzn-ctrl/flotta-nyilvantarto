@@ -33,6 +33,12 @@
   const IMPORT_VERIFIED = 'flotta_import_verified';
 
   let app, auth, db, unsub = null;
+  // After trusted seal, historic source arrays are frozen. These two
+  // separately authenticated, SERVER-confirmed collection subscriptions
+  // supply the live original Fleet UI with rich keyed driver/car records.
+  let keyedDriverUnsub = null, keyedVehicleUnsub = null;
+  let keyedLive = { drivers: null, vehicles: null };
+  let lastSealedSource = null;
   let memberVerified = false;
   let migrationServerApproved = false;
   let savePatched = false;
@@ -171,6 +177,66 @@
     }
   }
 
+  function stopKeyedListeners() {
+    if (keyedDriverUnsub) { keyedDriverUnsub(); keyedDriverUnsub = null; }
+    if (keyedVehicleUnsub) { keyedVehicleUnsub(); keyedVehicleUnsub = null; }
+    keyedLive = { drivers: null, vehicles: null };
+    lastSealedSource = null;
+  }
+
+  function canonicalRows(rows, archived, kind) {
+    if (!Array.isArray(rows) || !Array.isArray(archived)) return null;
+    const normalizer = kind === 'drivers'
+      ? s => typeof s === 'string' && /^[A-Za-z0-9_-]{4,40}$/.test(s.trim()) ? s.trim().toUpperCase() : ''
+      : s => typeof s === 'string' && /^[A-Za-z0-9 -]{4,40}$/.test(s) ? s.replace(/[ -]/g,'').toUpperCase() : '';
+    const field = kind === 'drivers' ? 'daCode' : 'rendszam';
+    const expected = new Map();
+    archived.forEach((r,i) => expected.set(normalizer(r[field]),{index:i,id:r.id}));
+    const found = new Map();
+    for (const item of rows) {
+      const id = item.key, raw = item.data;
+      if (!id || id !== normalizer(raw[field]) || found.has(id)) return null;
+      const archivedRow = expected.get(id);
+      const stableId = raw.id || archivedRow?.id || 'keyed-' + id;
+      if (archivedRow && archivedRow.id && stableId !== archivedRow.id) return null;
+      found.set(id,{...raw,id:stableId});
+    }
+    // A completed migration must have all its original rich identities.
+    // Partial import cannot silently produce a truncated Fleet UI.
+    if ([...expected.keys()].some(id => !id || !found.has(id))) return null;
+    return [...found].sort(([a],[b]) =>
+      (expected.get(a)?.index ?? Number.MAX_SAFE_INTEGER) -
+      (expected.get(b)?.index ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b)
+    ).map(([,record]) => record);
+  }
+
+  function sealedProjection(source) {
+    const drivers = canonicalRows(keyedLive.drivers,source.drivers,'drivers');
+    const vehicles = canonicalRows(keyedLive.vehicles,source.vehicles,'vehicles');
+    return drivers && vehicles ? {...source,drivers,vehicles} : null;
+  }
+
+  function ensureKeyedListeners() {
+    if (keyedDriverUnsub || keyedVehicleUnsub) return;
+    const subscribe = (kind,collectionName) =>
+      db.collection(collectionName).onSnapshot({includeMetadataChanges:true}, snap => {
+        // Never trust offline cache or locally pending writes as server proof.
+        const verified = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites;
+        keyedLive[kind] = verified
+          ? snap.docs.map(d => ({key:d.id,data:d.data()})) : null;
+        if (!verified) {
+          status('Kulcsolt Flotta-adat nincs szerverről megerősítve – mentés tiltva',true);
+          return;
+        }
+        if (lastSealedSource) applyRemote(lastSealedSource,true);
+      }, error => {
+        keyedLive[kind] = null;
+        status('Kulcsolt Flotta-szinkron hiba: ' + (error.message || error),true);
+      });
+    keyedDriverUnsub = subscribe('drivers','flottaDrivers');
+    keyedVehicleUnsub = subscribe('vehicles','flottaVehicles');
+  }
+
   function applyRemote(data, confirmed) {
     // Critical: never overwrite local Flotta data before verified import.
     if (!isPrimary()) {
@@ -181,14 +247,22 @@
       if (localDirty) status('Helyi nem mentett módosítás van – távoli frissítés várakozik');
       return;
     }
+    // Sealed archive arrays are never authoritative for display or editing.
+    // Wait for BOTH server-confirmed keyed collections, fail closed on
+    // missing/corrupt migration data, never fall back to stale archive rows.
+    const live = data.sealed === true ? sealedProjection(data) : data;
+    if (!live) {
+      status('Kulcsolt Flotta-törzsadat hiányzik vagy még nem igazolt – frissítés várakozik',true);
+      return;
+    }
     applyingRemote = true;
     try {
       if (typeof applySnapshot === 'function') {
         applySnapshot({
-          vehicles: Array.isArray(data.vehicles) ? data.vehicles : [],
-          fuelCards: Array.isArray(data.fuelCards) ? data.fuelCards : [],
-          drivers: Array.isArray(data.drivers) ? data.drivers : [],
-          contacts: Array.isArray(data.contacts) ? data.contacts : []
+          vehicles: Array.isArray(live.vehicles) ? live.vehicles : [],
+          fuelCards: Array.isArray(live.fuelCards) ? live.fuelCards : [],
+          drivers: Array.isArray(live.drivers) ? live.drivers : [],
+          contacts: Array.isArray(live.contacts) ? live.contacts : []
         });
       }
       currentRevision = Number(data.revision) || 0;
@@ -205,6 +279,7 @@
 
   function startListener() {
     if (unsub) unsub();
+    stopKeyedListeners();
     const ref = db.doc(SHARED_STATE);
     unsub = ref.onSnapshot({ includeMetadataChanges: true }, (snap) => {
       const meta = snap.metadata;
@@ -218,8 +293,14 @@
       }
       const data = snap.data();
       if (confirmed) {
-        // Firestore cache / pending local writes are not server-confirmed and
-        // must never replace the original Fleet snapshot and localStorage.
+        // Firestore cache / pending local writes are not server-confirmed.
+        // After seal only independently verified keyed masters drive the UI.
+        if (data.sealed === true) {
+          lastSealedSource = data;
+          ensureKeyedListeners();
+        } else {
+          stopKeyedListeners();
+        }
         applyRemote(data, true);
       } else {
         status(meta.fromCache
@@ -590,6 +671,7 @@
       clearVerifiedMigration();
       if (auth) await auth.signOut();
       if (unsub) { unsub(); unsub = null; }
+      stopKeyedListeners();
       setPrimary(false);
       localDirty = false;
       sessionStorage.removeItem('flotta_simple_session_v23');
