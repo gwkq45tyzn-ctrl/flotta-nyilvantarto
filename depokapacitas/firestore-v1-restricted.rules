@@ -506,6 +506,11 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)
+        // Identity claims: the selected index must match the unique claim for that normalized identity.
+        && existsAfter(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId))
+        && getAfter(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex
+        && existsAfter(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId))
+        && getAfter(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex
         // Both documents must be written in one transaction. This prevents double booking.
         && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
@@ -952,6 +957,34 @@ service cloud.firestore {
         // The booking gate re-validates full parity against this document.
         // The previous existsAfter(drivers[0]/vehicles[0]) guard caused
         // Index out of bound on empty arrays and did not prove full parity.
+      allow delete: if false;
+    }
+
+
+    match /flottaDriverClaims/{normalizedDa} {
+      allow read: if member();
+      allow create, update: if editor()
+        && canonicalImportActive()
+        && request.resource.data.keys().hasAll(['sourceIndex','revision'])
+        && request.resource.data.sourceIndex is int
+        && request.resource.data.sourceIndex >= 0
+        && request.resource.data.revision is int
+        && request.resource.data.revision == getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode is string
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.replace('[[:space:]-]','').upper() == normalizedDa;
+      allow delete: if false;
+    }
+    match /flottaVehicleClaims/{normalizedPlate} {
+      allow read: if member();
+      allow create, update: if editor()
+        && canonicalImportActive()
+        && request.resource.data.keys().hasAll(['sourceIndex','revision'])
+        && request.resource.data.sourceIndex is int
+        && request.resource.data.sourceIndex >= 0
+        && request.resource.data.revision is int
+        && request.resource.data.revision == getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.sourceIndex].rendszam is string
+        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.sourceIndex].rendszam.replace('[[:space:]-]','').upper() == normalizedPlate;
       allow delete: if false;
     }
 
