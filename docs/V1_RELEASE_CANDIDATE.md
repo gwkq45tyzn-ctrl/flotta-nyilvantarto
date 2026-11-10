@@ -1,42 +1,43 @@
-# V1 Release Candidate – 2026-11-06
+# V1 Release Candidate – 2026-11-10
 
-**Ág:** `grok/v1-integrated`  
-**PR:** #114  
-**HEAD:** `d9de32d` (integrates #134 and #135)  
-**Döntés:** **NO-GO** (duplicate identity hard-stop not proven)
+**Ág:** `grok/v1-identity-hardstop-20261110`  
+**PR:** (new branch from #114)  
+**HEAD:** `8c3e43b`  
+**Döntés:** **NO-GO** (duplicate identity hard-stop partial; #133 attacks remain open)
 
-## Verified CI (all 6 SUCCESS on bbcc488; this SHA is newer)
-- Flotta Firestore Bridge synthetic QA
-- DepóKapacitás code and security
-- staging-only integration tests
-- restricted one-account Rules and migration QA
-- real two-browser Auth/Firestore emulator QA
-- independent dual release approval QA
+## What was added
+- Identity claim documents: `/flottaDriverClaims/{normalizedDa}` and `/flottaVehicleClaims/{normalizedPlate}`.
+- Booking create requires claim exists and `sourceIndex` matches booking index.
+- Claim write requires Fleet row normalization match.
 
-## This commit integrates
-- #134: canonical restored fleet parity (backup/restore SHA and field checks).
-- #135: hyphenated DA canonical booking (DA codes may contain '_' or '-'; only trim and uppercase).
+## What this stops
+- A booking that selects an index whose identity does not match the claim for that normalized ID.
+- A booking that has no claim for the selected identity.
+
+## What this does NOT stop
+- A direct SDK update that inserts duplicate DA codes or plates into the Fleet arrays.
+- A direct SDK update that also writes a claim for only one of the duplicates.
+- Rules still cannot iterate the arrays to reject the Fleet update itself.
+
+## Remaining gap
+The #133 attacks that insert duplicates into the Fleet document and then book by selecting the eligible index are still possible if the attacker also writes the corresponding claim. The claim makes the attack harder, but does not make it impossible.
 
 ## Proven [T]
 - Post-import contract tests (6/6) – source structure only.
 - Two-browser post-import contract tests (6/6) – source structure only.
 - Synthetic backup/restore (4/4).
 - Bridge runtime regressions pass.
-- Existing original Fleet browser E2E proves pre-import read-only and login unlock.
 
 ## Nyitott
-- Duplicate DA/plate server-side hard-stop (#133 attacks remain open; Rules cannot iterate arrays).
+- True structural hard-stop for duplicate DA/plate (requires one document per identity).
 - Real two-browser post-import Flotta→Depó UI chain with original Flotta HTML.
-- Full CI re-run on this new SHA.
+- Full CI on this new SHA.
 - Rules deploy, UID swap, real migration (after approval).
-
-## Identity claim proposal
-See `docs/IDENTITY_CLAIM_PROPOSAL.md`. Claim documents in the same transaction can make booking harder against duplicates, but do not prevent a direct SDK Fleet update that creates the claims. A true structural solution requires one document per driver/vehicle.
 
 ## GO feltételek
 1. Full CI green on frozen SHA.
 2. Real two-browser post-import UI chain passes.
-3. Duplicate identity hard-stop with emulator evidence (#133 attacks denied).
+3. Duplicate identity hard-stop with emulator evidence (#133 attacks denied even with claim write).
 4. Separate Grok GO + ChatGPT GO + owner authorization.
 
 **Jelölés:** [S] statikus, [T] automatizált, [E] emulator, [B] böngésző, [L] live, [N] nem ellenőrzött.
