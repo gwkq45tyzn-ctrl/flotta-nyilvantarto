@@ -71,7 +71,7 @@ function runOriginalBridge(draft){
   doc:path=>({inner:doc(db,path),path}),
   runTransaction:fn=>runTransaction(db,tx=>fn({
    get:async r=>{const snap=await tx.get(r.inner);return {exists:snap.exists(),data:()=>snap.data()};},
-   set:(r,payload)=>{writes.push(r.path);tx.set(r.inner,payload);}
+   set:(r,payload)=>{writes.push(r.path);tx.set(r.inner,JSON.parse(JSON.stringify(payload)));}
   }))
  };
  const sandbox=vm.createContext({
