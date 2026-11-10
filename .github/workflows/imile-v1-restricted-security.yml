@@ -48,6 +48,12 @@ jobs:
         run: node depokapacitas/v1-single-account-ui.test.mjs
       - name: Install lockfile-pinned Firestore rule test dependencies
         run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: P1 real Rules DA claim identity normalization – must allow hyphen and underscore
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-restricted-v1 \
+            --config firebase.staging-emulator.json \
+            "node staging/imile-management/fleet/v1-claim-id-normalization-emulator.mjs"
       - name: Actual Firestore Emulator – allowed single UID and deny all other roles
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec \
