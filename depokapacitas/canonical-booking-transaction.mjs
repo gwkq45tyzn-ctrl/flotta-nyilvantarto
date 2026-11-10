@@ -48,10 +48,14 @@ export async function commitCanonicalDepotBooking({
   // localStorage inside it. No success signal until runTransaction resolves.
   const confirmation=await sdk.runTransaction(db,async tx=>{
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    const [oldBook,oldClaim,driver,vehicle,capacity,fleet,approval]=await Promise.all([
+    const [oldBook,oldClaim,driver,vehicle,capacity,fleet,approval,
+      keyedDriver,keyedVehicle]=await Promise.all([
       tx.get(refs.booking),tx.get(refs.driverClaim),
       tx.get(refs.driver),tx.get(refs.vehicle),tx.get(refs.capacity),
-      tx.get(refs.fleet),tx.get(refs.approval)
+      tx.get(refs.fleet),tx.get(refs.approval),
+      // Canonical identity masters must be SEEDED before booking.
+      // Never create/overwrite them in a booking transaction.
+      tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle)
     ]);
     if(oldBook.exists()||oldClaim.exists())
       throw Error('BOOKING_BLOCKED: already_occupied');
@@ -88,13 +92,20 @@ export async function commitCanonicalDepotBooking({
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>normDriver(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
+    if(!keyedDriver.exists()||!keyedVehicle.exists())
+      throw Error('BOOKING_BLOCKED: missing_keyed_master');
+    const kd=keyedDriver.data(),kv=keyedVehicle.data();
+    if(normDriver(kd.daCode)!==driverId||
+       normVehicle(kv.rendszam)!==vehicleId||
+       !['aktiv','aktív'].includes(kd.status)||
+       !['aktiv','aktív'].includes(kv.status)||
+       kd.kapacitas!==rawCapacity)
+      throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
     // Identity claims required by Rules for booking.
     tx.set(refs.driverIdentityClaim,{sourceIndex:driverIndex,revision:fleetData.revision});
     tx.set(refs.vehicleIdentityClaim,{sourceIndex:vehicleIndex,revision:fleetData.revision});
-    tx.set(refs.keyedDriver,{daCode:driverId,status:'aktiv',kapacitas:rawCapacity});
-    tx.set(refs.keyedVehicle,{rendszam:vehicleId,status:'aktiv'});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.
