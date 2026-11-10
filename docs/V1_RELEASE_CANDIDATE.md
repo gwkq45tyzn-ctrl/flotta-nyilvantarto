@@ -1,14 +1,12 @@
 # V1 Release Candidate – 2026-11-10
 
 **Ág:** `grok/v1-identity-hardstop-20261110`  
-**PR:** (new branch from #114)  
-**HEAD:** `8c3e43b`  
+**HEAD:** `35a886f` (integrates #139 at `47641f5`)  
 **Döntés:** **NO-GO** (duplicate identity hard-stop partial; #133 attacks remain open)
 
-## What was added
-- Identity claim documents: `/flottaDriverClaims/{normalizedDa}` and `/flottaVehicleClaims/{normalizedPlate}`.
-- Booking create requires claim exists and `sourceIndex` matches booking index.
-- Claim write requires Fleet row normalization match.
+## What was integrated
+- #139: modular SDK identity claim booking. Booking transaction now writes flottaDriverClaims and flottaVehicleClaims using sdk.doc.
+- #138: DA hyphen/underscore normalization fix.
 
 ## What this stops
 - A booking that selects an index whose identity does not match the claim for that normalized ID.
@@ -27,6 +25,7 @@ The #133 attacks that insert duplicates into the Fleet document and then book by
 - Two-browser post-import contract tests (6/6) – source structure only.
 - Synthetic backup/restore (4/4).
 - Bridge runtime regressions pass.
+- #139 emulator tests reported SUCCESS by ChatGPT on the source SHA.
 
 ## Nyitott
 - True structural hard-stop for duplicate DA/plate (requires one document per identity).
