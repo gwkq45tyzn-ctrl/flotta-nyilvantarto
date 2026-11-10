@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'index.html'
+      - 'depokapacitas/firestore-v1-restricted.rules'
       - 'features/v1-original-driver-rich-capacity-form.test.mjs'
       - '.github/workflows/imile-v1-original-driver-rich-capacity.yml'
 permissions:

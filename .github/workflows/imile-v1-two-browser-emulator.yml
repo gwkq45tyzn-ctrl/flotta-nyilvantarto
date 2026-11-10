@@ -9,6 +9,8 @@ on:
       - 'staging/imile-management/fleet/v1-post-import-two-browser.e2e.mjs'
       - 'staging/imile-management/fleet/v1-flotta-depo-e2e.mjs'
       - 'features/firestore-bridge.js'
+      - 'depokapacitas/firestore-v1-restricted.rules'
+      - 'index.html'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
   pull_request:
     paths:
@@ -18,6 +20,8 @@ on:
       - 'staging/imile-management/fleet/v1-post-import-two-browser.e2e.mjs'
       - 'staging/imile-management/fleet/v1-flotta-depo-e2e.mjs'
       - 'features/firestore-bridge.js'
+      - 'depokapacitas/firestore-v1-restricted.rules'
+      - 'index.html'
       - '.github/workflows/imile-v1-two-browser-emulator.yml'
 permissions:
   contents: read
@@ -67,5 +71,6 @@ jobs:
             "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
       - name: Staging deployment remains disabled
         run: |
-          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          # Approved reviewed full Flotta with bounded daily driver capacity (#158).
+          test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
           echo "Browser QA used localhost only; no Firebase deploy step exists."

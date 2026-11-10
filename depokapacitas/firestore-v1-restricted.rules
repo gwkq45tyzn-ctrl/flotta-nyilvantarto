@@ -1012,26 +1012,51 @@ service cloud.firestore {
     }
 
 
+    // P0: trusted privileged import creates keyed identities; ordinary
+    // client create/rename/delete remains closed in scoped V1.
+    // Preserve every existing field, stable identity, rich history, and rev.
+    function preservesImportedRichMaster() {
+      return request.resource.data.keys().hasAll(resource.data.keys())
+        && (!('id' in resource.data) || request.resource.data.id == resource.data.id)
+        && (!('history' in resource.data) ||
+          (resource.data.history is list
+           && request.resource.data.history is list
+           && request.resource.data.history.hasAll(resource.data.history)))
+        && (!('revision' in resource.data) ||
+          (resource.data.revision is int
+           && request.resource.data.revision is int
+           && request.resource.data.revision == resource.data.revision + 1));
+    }
     match /flottaDrivers/{normalizedDa} {
       allow read: if member();
-      allow create, update: if editor()
+      allow create: if false;
+      allow update: if editor()
         && canonicalImportActive()
+        && preservesImportedRichMaster()
         && request.resource.data.keys().hasAll(['daCode','status','kapacitas'])
         && request.resource.data.daCode is string
+        && request.resource.data.daCode == resource.data.daCode
         && request.resource.data.daCode.matches('^[A-Za-z0-9_-]+$')
         && request.resource.data.daCode.upper() == normalizedDa
         && request.resource.data.status in ['aktiv','aktív','inaktiv','inaktív']
-        && request.resource.data.kapacitas is int;
+        && request.resource.data.kapacitas is int
+        && request.resource.data.kapacitas >= 0
+        && request.resource.data.kapacitas <= 10000;
       allow delete: if false;
     }
     match /flottaVehicles/{normalizedPlate} {
       allow read: if member();
-      allow create, update: if editor()
+      allow create: if false;
+      allow update: if editor()
         && canonicalImportActive()
+        && preservesImportedRichMaster()
         && request.resource.data.keys().hasAll(['rendszam','status'])
         && request.resource.data.rendszam is string
+        && request.resource.data.rendszam == resource.data.rendszam
         && request.resource.data.rendszam.matches('^[A-Za-z0-9 -]+$')
         && request.resource.data.rendszam.replace('[[:space:]-]','').upper() == normalizedPlate
+        && (!('normalizedPlate' in resource.data) ||
+            request.resource.data.normalizedPlate == resource.data.normalizedPlate)
         && request.resource.data.status in ['aktiv','aktív','szerviz','inaktiv','inaktív'];
       allow delete: if false;
     }

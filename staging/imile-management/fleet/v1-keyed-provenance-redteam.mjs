@@ -100,6 +100,25 @@ try{
     reference('flottaVehicles/ABC123'),
     {rendszam:'ABC-123',status:'aktiv'}));
 
+  // Preserve exact field keys is necessary but insufficient: a hostile SDK
+  // can retain "history" while replacing its value with [] and bumping rev.
+  await reset();
+  await mustDeny('key-preserving rich DRIVER history truncation',()=>setDoc(
+    reference('flottaDrivers/DA0001'),
+    {...richDriver,history:[],revision:10}));
+  await reset();
+  await mustDeny('key-preserving rich VEHICLE service history truncation',()=>setDoc(
+    reference('flottaVehicles/ABC123'),
+    {...richCar,history:[],revision:12}));
+  // Post-import business identity may not be renamed even if normalized ID
+  // still targets the same document.
+  await reset();
+  await mustDeny('mutable canonical vehicle raw plate identity',()=>updateDoc(
+    reference('flottaVehicles/ABC123'),{rendszam:'ABC123',revision:12}));
+  await reset();
+  await mustDeny('mutable canonical driver raw identity',()=>updateDoc(
+    reference('flottaDrivers/DA0001'),{daCode:'da0001',revision:10}));
+
   assert.deepEqual(failures,[],'P0 RELEASE NO-GO: '+failures.join(' | '));
   console.log('PASS: all unauthorized keyed births and destructive overwrites denied by real Rules');
 }finally{
