@@ -36,6 +36,8 @@ export async function commitCanonicalDepotBooking({
     driverClaim:sdk.doc(db,'driverClaims',driverKey),
     driverIdentityClaim:sdk.doc(db,'flottaDriverClaims',driverId),
     vehicleIdentityClaim:sdk.doc(db,'flottaVehicleClaims',vehicleId),
+    keyedDriver:sdk.doc(db,'flottaDrivers',driverId),
+    keyedVehicle:sdk.doc(db,'flottaVehicles',vehicleId),
     driver:sdk.doc(db,'drivers',driverId),
     vehicle:sdk.doc(db,'vehicles',vehicleId),
     capacity:sdk.doc(db,'driverCapacities',driverId),
@@ -91,6 +93,8 @@ export async function commitCanonicalDepotBooking({
     // Identity claims required by Rules for booking.
     tx.set(refs.driverIdentityClaim,{sourceIndex:driverIndex,revision:fleetData.revision});
     tx.set(refs.vehicleIdentityClaim,{sourceIndex:vehicleIndex,revision:fleetData.revision});
+    tx.set(refs.keyedDriver,{daCode:driverId,status:'aktiv',kapacitas:rawCapacity});
+    tx.set(refs.keyedVehicle,{rendszam:vehicleId,status:'aktiv'});
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.
