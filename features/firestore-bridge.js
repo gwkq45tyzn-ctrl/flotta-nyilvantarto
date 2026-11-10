@@ -289,27 +289,87 @@
           // Do not remove this field to make a test harness pass.
           throw new Error('MISSING_MIGRATION_SOURCE');
         }
-        // Preserve sealed flag if present; never clear it.
+        // The source snapshot, seal and original SHA are immutable after
+        // cutover. The original HTML can still edit the live Fleet records,
+        // but those edits are written to keyed masters; never to archived
+        // driver/vehicle arrays, which the server correctly rejects.
         if (typeof existing.sealed === 'boolean') {
           payload.sealed = existing.sealed;
         }
-        // After seal, identity changes must go through keyed documents.
-        // This bridge still writes the legacy arrays for pre-seal compatibility.
-        // Post-seal array writes are denied by Rules.
-        tx.set(ref, payload);
-        // After seal, also write keyed documents for identity changes.
+        const keyedWrites = [];
         if (existing.sealed === true) {
-          const normDA = s => String(s||'').trim().toUpperCase();
-          const normPlate = s => String(s||'').replace(/[ -]/g,'').toUpperCase();
-          for (const d of (draft.drivers||[])) {
-            const id = normDA(d.daCode);
-            if (id) tx.set(db.doc('flottaDrivers/'+id), {daCode:d.daCode, status:d.status||'aktiv', kapacitas:d.kapacitas||0});
+          if (!Array.isArray(existing.drivers) || !Array.isArray(existing.vehicles))
+            throw new Error('SEALED_SOURCE_INVALID');
+          const validDA = s => typeof s === 'string' &&
+            /^[A-Za-z0-9_-]{4,40}$/.test(s.trim())
+            ? s.trim().toUpperCase() : '';
+          const validPlate = s => typeof s === 'string' &&
+            /^[A-Za-z0-9 -]{4,40}$/.test(s)
+            ? s.replace(/[ -]/g,'').toUpperCase() : '';
+          const collect = (kind, field, normalizer, collectionName) => {
+            const source = existing[kind], nextRows = draft[kind] || [];
+            // Delete and rename are unsafe without a full keyed tombstone +
+            // dependent booking/claim protocol: never fake success for them.
+            if (source.length !== nextRows.length)
+              throw new Error('SEALED_IDENTITY_CREATE_DELETE_REQUIRES_CUTOVER_SUPPORT');
+            const originals = new Map(source.map(x => [x.id, x]));
+            if (originals.size !== source.length)
+              throw new Error('SEALED_SOURCE_INTERNAL_ID_COLLISION');
+            const seen = new Set();
+            for (const row of nextRows) {
+              const previous = originals.get(row.id);
+              if (!previous)
+                throw new Error('SEALED_IDENTITY_CREATE_DELETE_REQUIRES_CUTOVER_SUPPORT');
+              const id = normalizer(row[field]);
+              if (!id || id !== normalizer(previous[field]) || seen.has(id))
+                throw new Error('SEALED_IDENTITY_RENAME_OR_COLLISION');
+              seen.add(id);
+              const changed = Object.keys(row).filter(k =>
+                JSON.stringify(row[k]) !== JSON.stringify(previous[k]));
+              if (!changed.length) continue;
+              if (changed.some(k => ['id','daCode','rendszam','normalizedPlate'].includes(k)))
+                throw new Error('SEALED_IDENTITY_RENAME_REQUIRES_CUTOVER_SUPPORT');
+              keyedWrites.push({
+                ref: db.doc(collectionName + '/' + id), previous, row, changed,
+                collectionName, id
+              });
+            }
+          };
+          collect('drivers','daCode',validDA,'flottaDrivers');
+          collect('vehicles','rendszam',validPlate,'flottaVehicles');
+          if (keyedWrites.length > 100)
+            throw new Error('SEALED_BULK_UPDATE_REQUIRES_BOUNDED_MIGRATION');
+          // Firestore transactions require ALL reads before ANY writes.
+          // A stale original Fleet form must never silently overwrite another
+          // browser's later rich record or its history.
+          for (const candidate of keyedWrites) {
+            const current = await tx.get(candidate.ref);
+            if (!current.exists)
+              throw new Error('SEALED_KEYED_MASTER_MISSING_' + candidate.id);
+            const saved = current.data();
+            if (!saved || saved[candidate.collectionName === 'flottaDrivers' ? 'daCode' : 'rendszam'] == null)
+              throw new Error('SEALED_KEYED_MASTER_CORRUPT_' + candidate.id);
+            const merged = { ...saved };
+            for (const key of candidate.changed) {
+              const oldValue = candidate.previous[key], liveValue = saved[key],
+                wanted = candidate.row[key];
+              if (JSON.stringify(liveValue) !== JSON.stringify(oldValue) &&
+                  JSON.stringify(liveValue) !== JSON.stringify(wanted))
+                throw new Error('SEALED_STALE_KEYED_RECORD_' + candidate.id);
+              merged[key] = wanted;
+            }
+            // Preserve unknown fields, rich history, optional metadata, and
+            // migration provenance; never replace with a reduced projection.
+            if (Number.isSafeInteger(saved.revision))
+              merged.revision = saved.revision + 1;
+            candidate.merged = merged;
           }
-          for (const v of (draft.vehicles||[])) {
-            const id = normPlate(v.rendszam);
-            if (id) tx.set(db.doc('flottaVehicles/'+id), {rendszam:v.rendszam, status:v.status||'aktiv'});
-          }
+          payload.drivers = existing.drivers;
+          payload.vehicles = existing.vehicles;
         }
+        tx.set(ref, payload);
+        for (const item of keyedWrites)
+          tx.set(item.ref, item.merged);
         // S7: flottaSharedState is the single canonical source.
         // Mirror writes removed to avoid 501-write budget and orphan risk.
         // Depó reads the projection from flottaSharedState via onSnapshot.
