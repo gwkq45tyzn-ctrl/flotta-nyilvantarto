@@ -195,6 +195,32 @@ try{
   assert.equal(persisted.migrationSourceSha256,sourceSha);
   console.log('PASS [B+E]: original Fleet form saved km 99999, Depot original UI live updated rev 1 -> 2 without reload; rich canonical data intact');
 
+  // A booking is deliberately FORBIDDEN before trusted sealed migration
+  // (#147). This synthetic, privileged local-emulator-only dry-run creates
+  // FULL RICH keyed masters from server-confirmed post-edit Fleet source,
+  // checks parity, and marks source sealed ONLY AFTER keyed reads match.
+  // This is a test fixture, NOT a browser ability to seal or a live import.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const admin=ctx.firestore();
+    const sourceRef=doc(admin,'flottaSharedState','current');
+    const confirmed=(await getDoc(sourceRef)).data();
+    assert.equal(confirmed.revision,2);
+    const driver=confirmed.drivers[0],vehicle=confirmed.vehicles[0];
+    assert.equal(driver.daCode,'DA0001');
+    assert.equal(vehicle.rendszam,'ABC-123');
+    await setDoc(doc(admin,'flottaDrivers','DA0001'),{...driver,revision:1});
+    await setDoc(doc(admin,'flottaVehicles','ABC123'),{...vehicle,revision:1});
+    const [readD,readV]=await Promise.all([
+      getDoc(doc(admin,'flottaDrivers','DA0001')),
+      getDoc(doc(admin,'flottaVehicles','ABC123'))
+    ]);
+    assert.equal(readD.data().kapacitas,80,'trusted seed driver capacity parity');
+    assert.deepEqual(readV.data().history,confirmed.vehicles[0].history,
+      'trusted seed rich vehicle history parity');
+    await setDoc(sourceRef,{...confirmed,sealed:true});
+  });
+  console.log('PASS [B+E]: synthetic privileged post-import rich keyed parity verified before immutable seal');
+
   // Real booking through original Depot planning UI; tomorrow is deliberate:
   // same-day bookings additionally require a trusted Attendance clearance
   // publisher, which this synthetic test cannot manufacture as a browser.
