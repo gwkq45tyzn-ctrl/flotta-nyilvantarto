@@ -58,7 +58,7 @@ test('truncated legitimate source or missing core guard is blocked',()=>{
     assert.equal(cut.valid,false);
     assert.ok(cut.errors.includes('TRUNCATED_OR_UNREVIEWED_SOURCE'));
     for(const signature of CRITICAL_V1_SOURCES[path].signatures){
-      const replaced=s.replace(signature,'REMOVED_SYNTHETIC_SIGNATURE');
+      const replaced=s.split(signature).join('REMOVED_SYNTHETIC_SIGNATURE');
       assert.notEqual(replaced,s,'Expected baseline signature missing '+signature);
       const outcome=auditCriticalSource(path,replaced);
       assert.equal(outcome.valid,false,'Must reject removed '+signature);
