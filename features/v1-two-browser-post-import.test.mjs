@@ -26,8 +26,10 @@ test('two-browser post-import: rules use getAfter for eligibility', () => {
   assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*vehicles\[/);
 });
 
-test('two-browser post-import: capacity only from Fleet', () => {
-  assert.match(rules, /The original Fleet capacity is AUTHORITATIVE/);
+test('two-browser post-import: booked capacity from current canonical KEYED Fleet, not stale legacy array', () => {
+  assert.match(rules, /function declaredDriverCapacity\(driverId, driverIndex\)/);
+  assert.match(rules, /let keyed = getAfter\(\/databases\/\$\(database\)\/documents\/flottaDrivers\/\$\(driverId\)\)\.data/);
+  assert.match(rules, /return keyed\.keys\(\)\.hasAny\(\['kapacitas'\]\) \? keyed\.kapacitas : null/);
   assert.doesNotMatch(rules, /capacity != null \? capacity\.data\.capacity/);
 });
 
