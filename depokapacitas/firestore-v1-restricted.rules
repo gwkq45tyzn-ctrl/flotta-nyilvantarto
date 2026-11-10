@@ -956,7 +956,11 @@ service cloud.firestore {
         && request.resource.data.contacts is list
         // After sealed migration, legacy arrays are read-only.
         // Identity changes must go through keyed documents.
-        && (resource.data.sealed != true
+        // Seal may be set ONLY by a separately approved privileged migration.
+        // A browser can neither forge 'sealed:true' nor unseal/strip it.
+        // Old pre-cutover Fleet snapshots without this field still save normally.
+        && request.resource.data.get('sealed', false) == resource.data.get('sealed', false)
+        && (resource.data.get('sealed', false) != true
           || (request.resource.data.drivers == resource.data.drivers
             && request.resource.data.vehicles == resource.data.vehicles));
         // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
