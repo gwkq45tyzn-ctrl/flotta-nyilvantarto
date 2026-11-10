@@ -137,7 +137,8 @@ jobs:
         run: |
           # Compare the original full Fleet blob from the reviewed Grok+QA base,
           # not the older main (which predates the safe Firestore script order).
-          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          # Reviewed original full Flotta with #158 daily capacity editor; fixed blob pin.
+          test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
           node --check features/firestore-bridge.js
 
       - name: Szűkített Flotta + Depó V1 offline csomag – biztonsági regresszió
