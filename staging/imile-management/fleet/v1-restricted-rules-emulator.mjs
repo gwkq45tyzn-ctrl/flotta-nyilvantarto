@@ -255,14 +255,28 @@ try{
     ()=>bookFuture('2099-01-13',{capacity:500}));
   await expectPermission('Fleet kapacitas 50 remains bookable even if legacy mirror says 500',true,
     ()=>bookFuture('2099-01-13',{capacity:50}));
-  // L4: absent canonical capacity must DENY rather than silently become zero.
+  // After trusted cutover, archived Fleet capacity is historical only.
+  // A valid migrated keyed master remains authoritative at 50 even if the
+  // old frozen array has no capacity field.
   await env.withSecurityRulesDisabled(ctx=>setDoc(fleet(ctx.firestore()),{
     ...fleetData(2),drivers:[{daCode:'TEST0001',status:'aktiv'}]
   }));
-  await expectPermission('missing canonical driver capacity cannot be manufactured by mirror or zero',false,
-    ()=>bookFuture('2099-01-14',{capacity:0}));
+  await expectPermission('sealed keyed capacity 50 works despite absent archived capacity',true,
+    ()=>bookFuture('2099-01-14',{capacity:50}));
+  // Missing current KEYED capacity must fail closed, never fall back to
+  // frozen legacy arrays or deprecated Depot mirror capacity.
+  await env.withSecurityRulesDisabled(ctx=>setDoc(
+    doc(ctx.firestore(),'flottaDrivers','TEST0001'),
+    {daCode:'TEST0001',status:'aktiv',history:[{note:'test missing capacity'}]}
+  ));
+  await expectPermission('missing keyed driver capacity cannot be manufactured by mirror or zero',false,
+    ()=>bookFuture('2099-01-15',{capacity:0}));
   await env.withSecurityRulesDisabled(async ctx=>{
     await setDoc(fleet(ctx.firestore()),fleetData(2));
+    await setDoc(doc(ctx.firestore(),'flottaDrivers','TEST0001'),{
+      daCode:'TEST0001',status:'aktiv',kapacitas:50,
+      history:[{note:'migrated original'}]
+    });
     await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});
   });
   await expectPermission('approval cannot be revoked by browser',false,

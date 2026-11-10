@@ -57,12 +57,11 @@ service cloud.firestore {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
     }
     function declaredDriverCapacity(driverId, driverIndex) {
-      // S7: The original Fleet capacity is AUTHORITATIVE. /driverCapacities
-      // is a deprecated editor-writable mirror, not a trusted override.
-      // A missing capacity is invalid, never silently authorized as zero.
-      let original = getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[driverIndex];
-      return original.keys().hasAny(['kapacitas']) ? original.kapacitas
-        : (original.keys().hasAny(['capacity']) ? original.capacity : null);
+      // After trusted seal, the normalized-keyed driver IS the authority.
+      // Neither the old frozen Fleet array nor the mutable Depot capacity
+      // mirror may override current canonical driver capacity.
+      let keyed = getAfter(/databases/$(database)/documents/flottaDrivers/$(driverId)).data;
+      return keyed.keys().hasAny(['kapacitas']) ? keyed.kapacitas : null;
     }
 
     // New independent Attendance PWA. Separate self-service courier principal,
@@ -500,6 +499,9 @@ service cloud.firestore {
         && request.resource.data.vehicleIndex >= 0
         && existsAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId))
         && getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
+        // The keyed vehicle's CURRENT availability must be enforced by Rules,
+        // not merely by the normal app, or a direct SDK can book service cars.
+        && getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.status in ['aktiv','aktív']
         // The normalized field is browser-writable in the rich legacy Fleet.
         // Recompute eligibility from the ORIGINAL plate at booking time.
         // A forged normalizedPlate must never authorize another vehicle.
@@ -508,7 +510,8 @@ service cloud.firestore {
         // before upper(); no forged source plate may authorize an ASCII ID.
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.matches('^[A-Za-z0-9 -]{4,40}$')
         && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].status in ['aktiv','aktív']
+        // The original Fleet snapshot is immutable after seal. Its old
+        // status must not override the live normalized-keyed vehicle status.
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)
         // Identity claims: the selected index must match the unique claim for that normalized identity.
