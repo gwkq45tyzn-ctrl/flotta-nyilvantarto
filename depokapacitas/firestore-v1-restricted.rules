@@ -1012,11 +1012,9 @@ service cloud.firestore {
     }
 
 
-    // P0 closure: Only a privileged and separately verified migration may
-    // create new keyed Fleet identities. Original Fleet V1 create/rename/delete
-    // is intentionally unsupported post-seal pending an audited lifecycle.
-    // A signed-in editor can modify existing rich source data, never strip
-    // unknown source keys, historical events, or source identity/revision.
+    // P0: trusted privileged import creates keyed identities; ordinary
+    // client create/rename/delete remains closed in scoped V1.
+    // Preserve every existing field, stable identity, rich history, and rev.
     function preservesImportedRichMaster() {
       return request.resource.data.keys().hasAll(resource.data.keys())
         && (!('id' in resource.data) || request.resource.data.id == resource.data.id)
@@ -1038,12 +1036,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['daCode','status','kapacitas'])
         && request.resource.data.daCode is string
         && request.resource.data.daCode == resource.data.daCode
-        && request.resource.data.daCode.matches('^[A-Za-z0-9_-]+
-
-    match /{path=**} { allow read, write: if false; }
-  }
-}
-)
+        && request.resource.data.daCode.matches('^[A-Za-z0-9_-]+$')
         && request.resource.data.daCode.upper() == normalizedDa
         && request.resource.data.status in ['aktiv','aktív','inaktiv','inaktív']
         && request.resource.data.kapacitas is int
@@ -1060,12 +1053,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['rendszam','status'])
         && request.resource.data.rendszam is string
         && request.resource.data.rendszam == resource.data.rendszam
-        && request.resource.data.rendszam.matches('^[A-Za-z0-9 -]+
-
-    match /{path=**} { allow read, write: if false; }
-  }
-}
-)
+        && request.resource.data.rendszam.matches('^[A-Za-z0-9 -]+$')
         && request.resource.data.rendszam.replace('[[:space:]-]','').upper() == normalizedPlate
         && (!('normalizedPlate' in resource.data) ||
             request.resource.data.normalizedPlate == resource.data.normalizedPlate)
