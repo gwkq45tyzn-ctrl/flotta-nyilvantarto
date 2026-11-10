@@ -75,8 +75,19 @@ async function seed(overrides={}){
       plate:'ABC123',model:'Ford Transit',status:'Elérhető'
     });
     await setDoc(doc(db,'driverCapacities','DA0001'),{capacity:50});
-    if(overrides.fleet!==false)
+    if(overrides.fleet!==false){
       await setDoc(doc(db,'flottaSharedState','current'),overrides.fleetData||fleet());
+      // The booking is forbidden to manufacture its own canonical authority.
+      // This synthetic privileged migration seeds both keyed masters first.
+      await setDoc(doc(db,'flottaDrivers','DA0001'),{
+        daCode:'DA0001',status:'aktiv',kapacitas:50,
+        name:'Migrated Driver',history:[{type:'onboarding',note:'PRESERVE'}]
+      });
+      await setDoc(doc(db,'flottaVehicles','ABC123'),{
+        rendszam:'ABC-123',status:'aktiv',gyartmany:'Ford',modell:'Transit',
+        history:[{type:'service',note:'PRESERVE'}]
+      });
+    }
     if(overrides.approval!==false)
       await setDoc(doc(db,'flottaMigrationApproval','current'),overrides.approvalData||approval);
   });
@@ -178,6 +189,10 @@ try{
       history:[{type:'assignment',note:'synthetic'}]
     });
     await setDoc(doc(db,'flottaSharedState','current'),expanded);
+    await setDoc(doc(db,'flottaDrivers','DA-0002'),{
+      daCode:'DA-0002',status:'aktiv',kapacitas:70,
+      name:'Migrated Hyphen Driver',history:[{type:'onboarding',note:'PRESERVE'}]
+    });
   });
   const hyphenBooked=await commitCanonicalDepotBooking({
     db:shared,sdk,uid,getCurrentUid:()=>uid,offline:false,
