@@ -5,6 +5,7 @@ on:
       - 'index.html'
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'features/v1-original-driver-rich-capacity-form.test.mjs'
+      - 'features/v1-original-driver-capacity-edgecases.test.mjs'
       - '.github/workflows/imile-v1-original-driver-rich-capacity.yml'
 permissions:
   contents: read
@@ -18,6 +19,6 @@ jobs:
         with:
           node-version: '24'
       - name: Execute ORIGINAL HTML saveDriver handler in synthetic DOM
-        run: node --test features/v1-original-driver-rich-capacity-form.test.mjs
+        run: node --test features/v1-original-driver-rich-capacity-form.test.mjs features/v1-original-driver-capacity-edgecases.test.mjs
       - name: No production deployment
         run: echo 'No network, no billing, no production data or deployment.'
