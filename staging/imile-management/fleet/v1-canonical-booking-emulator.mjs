@@ -32,7 +32,7 @@ let passed=0;
 
 function fleet(){
   return {
-    revision:1,migrationSourceSha256:digest,
+    revision:1,migrationSourceSha256:digest,sealed:true,
     vehicles:[{id:'fleet-internal-vehicle',rendszam:'ABC-123',normalizedPlate:'ABC123',
       gyartmany:'Ford',modell:'Transit',status:'aktiv',
       history:[{type:'service',note:'NO REAL DATA'}]}],
@@ -105,6 +105,13 @@ try{
   await shouldReject('no privileged Fleet and policy cannot book',
     ()=>book('2099-01-01'),/BOOKING_BLOCKED: no_server_migration_approval/);
   await absence('2099-01-01');
+
+  // No authorized booking or client-created identity claims before a
+  // trusted migration explicitly seals the original source document.
+  await seed({fleetData:{...fleet(),sealed:false}});
+  await shouldReject('approved but NOT SEALED Fleet must not book',
+    ()=>book('2099-01-11'),/BOOKING_BLOCKED: fleet_migration_not_sealed/);
+  await absence('2099-01-11');
 
   await seed();
   const approved=await book('2099-01-01');
