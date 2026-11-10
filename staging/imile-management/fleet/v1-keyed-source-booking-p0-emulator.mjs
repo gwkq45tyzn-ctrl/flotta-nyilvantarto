@@ -12,6 +12,7 @@
  * exit nonzero on actual violations, not turn known failure into "PASS".
  */
 import assert from 'node:assert/strict';
+import {isDeepStrictEqual} from 'node:util';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 import {doc,getDoc,setDoc,Timestamp,runTransaction} from 'firebase/firestore';
@@ -105,11 +106,11 @@ try{
     console.log('PASS ALLOW [E+SDK] legitimate booking with trusted migrated keyed source');
     const afterDriver=(await getDoc(keyDriver())).data();
     const afterVehicle=(await getDoc(keyVehicle())).data();
-    if(JSON.stringify(afterDriver)!==JSON.stringify(driverMaster)){
+    if(!isDeepStrictEqual(afterDriver,driverMaster)){
       errors.push('P0 DATA LOSS: legitimate booking rewrote trusted keyed DRIVER, dropping original rich fields/history');
       console.error(errors.at(-1),JSON.stringify(afterDriver));
     } else console.log('PASS [E+SDK] complete original keyed driver survived booking');
-    if(JSON.stringify(afterVehicle)!==JSON.stringify(vehicleMaster)){
+    if(!isDeepStrictEqual(afterVehicle,vehicleMaster)){
       errors.push('P0 DATA LOSS: legitimate booking rewrote trusted keyed VEHICLE, dropping original rich fields/history');
       console.error(errors.at(-1),JSON.stringify(afterVehicle));
     } else console.log('PASS [E+SDK] complete original keyed vehicle survived booking');
