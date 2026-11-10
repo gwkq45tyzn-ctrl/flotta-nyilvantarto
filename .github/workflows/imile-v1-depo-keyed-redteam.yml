@@ -1,0 +1,23 @@
+name: iMile V1 – #156 keyed Depot master hostile-source acceptance
+on:
+  pull_request:
+    paths:
+      - 'depokapacitas/keyed-live-master.mjs'
+      - 'depokapacitas/keyed-live-master.test.mjs'
+      - 'depokapacitas/keyed-live-master.redteam.test.mjs'
+      - '.github/workflows/imile-v1-depo-keyed-redteam.yml'
+permissions:
+  contents: read
+jobs:
+  fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run original Grok unit tests plus independent hostile keyed cases
+        run: node --test depokapacitas/keyed-live-master.test.mjs depokapacitas/keyed-live-master.redteam.test.mjs
+      - name: No deploy, no cloud, test-only
+        run: echo 'All tests use static synthetic snapshots only.'
