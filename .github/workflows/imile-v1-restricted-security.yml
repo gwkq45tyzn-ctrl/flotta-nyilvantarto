@@ -69,4 +69,5 @@ jobs:
       - name: Protect active staging Rules and actual original Fleet
         run: |
           test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
-          test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+          # Reviewed original full Flotta with #158 daily capacity editor; fixed blob pin.
+          test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
