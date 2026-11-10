@@ -293,7 +293,23 @@
         if (typeof existing.sealed === 'boolean') {
           payload.sealed = existing.sealed;
         }
+        // After seal, identity changes must go through keyed documents.
+        // This bridge still writes the legacy arrays for pre-seal compatibility.
+        // Post-seal array writes are denied by Rules.
         tx.set(ref, payload);
+        // After seal, also write keyed documents for identity changes.
+        if (existing.sealed === true) {
+          const normDA = s => String(s||'').trim().toUpperCase();
+          const normPlate = s => String(s||'').replace(/[ -]/g,'').toUpperCase();
+          for (const d of (draft.drivers||[])) {
+            const id = normDA(d.daCode);
+            if (id) tx.set(db.doc('flottaDrivers/'+id), {daCode:d.daCode, status:d.status||'aktiv', kapacitas:d.kapacitas||0});
+          }
+          for (const v of (draft.vehicles||[])) {
+            const id = normPlate(v.rendszam);
+            if (id) tx.set(db.doc('flottaVehicles/'+id), {rendszam:v.rendszam, status:v.status||'aktiv'});
+          }
+        }
         // S7: flottaSharedState is the single canonical source.
         // Mirror writes removed to avoid 501-write budget and orphan risk.
         // Depó reads the projection from flottaSharedState via onSnapshot.
