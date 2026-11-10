@@ -148,7 +148,18 @@ try{
   // Trusted, pre-approved migration path is represented ONLY by a Rules-bypass
   // emulator seed. No real privilege or data is used in this test.
   await env.withSecurityRulesDisabled(async ctx=>{
-    await setDoc(fleet(ctx.firestore()),fleetData(1));
+    const source=ctx.firestore();
+    await setDoc(fleet(source),fleetData(1));
+    // Trusted migration must seed canonical keyed sources BEFORE any booking.
+    // Never manufacture them in the booking batch.
+    await setDoc(doc(source,'flottaDrivers','TEST0001'),{
+      daCode:'TEST0001',status:'aktiv',kapacitas:50,
+      history:[{note:'original rich driver'}],name:'Synthetic Migrated Driver'
+    });
+    await setDoc(doc(source,'flottaVehicles','TEST0001'),{
+      rendszam:'TEST0001',status:'aktiv',
+      history:[{note:'original rich vehicle'}],modell:'Synthetic Car'
+    });
   });
   await expectPermission('canonical Fleet existence freezes browser driver master edits',false,
     ()=>updateDoc(doc(shared,'drivers','TEST0001'),{name:'DRIFT'}));
