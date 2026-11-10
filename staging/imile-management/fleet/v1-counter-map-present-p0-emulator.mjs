@@ -123,10 +123,37 @@ try{
     ()=>updateDoc(fleetRef,{revision:2,vehicles:liePlate.vehicles,
       identity:liePlate.identity}));
 
-  if(vulnerabilities.length){
+
+  // The ORIGINAL Fleet bridge performs tx.set(ref, payload), with payload
+  // consisting of vehicles, drivers, fuelCards, contacts, revision,
+  // migrationSourceSha256, updatedAt and updatedBy. It DOES NOT include the
+  // now REQUIRED identity counters. This actual SDK save replays that shape.
+  // It is a genuine POSITIVE control for legal original-Fleet editing.
+  await seed();
+  const bridge=seedDoc();
+  bridge.drivers[0].kapacitas=70;
+  const bridgePayload={
+    vehicles:bridge.vehicles,drivers:bridge.drivers,
+    fuelCards:bridge.fuelCards,contacts:bridge.contacts,
+    revision:2,migrationSourceSha256:digest,
+    updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
+    updatedBy:uid
+  };
+  const positiveRegressions=[];
+  try {
+    await setDoc(fleetRef,bridgePayload);
+    console.log('PASS [E+SDK] original bridge-shaped rich Fleet save ALLOWED');
+  } catch(error){
+    if(error.code!=='permission-denied')throw error;
+    const message='P1 REGRESSION [E+SDK] original bridge-shaped valid Fleet save DENIED: missing identity counters';
+    positiveRegressions.push(message);
+    console.error(message);
+  }
+  if(vulnerabilities.length || positiveRegressions.length){
     throw Error('RELEASE NO-GO: '+vulnerabilities.length+
-      ' authenticated direct-SDK duplicate Fleet source writes were allowed. '+ 
-      'Counter field presence is not an invariant or a hard stop.');
+      ' authenticated direct-SDK duplicate Fleet source writes ALLOWED and '+
+      positiveRegressions.length+' legal bridge-shaped save(s) DENIED. '+
+      'Counter field presence is neither an identity invariant nor a usable edit protocol.');
   }
   console.log('P0 ACCEPTANCE PASS: duplicate DA/plate updates denied by ACTUAL Rules.');
 } finally {
