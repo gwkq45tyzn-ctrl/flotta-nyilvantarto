@@ -69,6 +69,11 @@ export async function commitCanonicalDepotBooking({
     });
     if(!check.ready)throw Error('BOOKING_BLOCKED: '+check.code);
     const fleetData=fleet.exists()?fleet.data():{};
+    // Trusted import must finish before ANY booking. Only an authorized
+    // privileged migration sets this immutable server-side seal; a browser
+    // must not bootstrap or infer approval from keyed records or local cache.
+    if(fleetData.sealed!==true)
+      throw Error('BOOKING_BLOCKED: fleet_migration_not_sealed');
     const fleetDriver=(fleetData.drivers||[]).find(d=>String(d.daCode||'').trim().toUpperCase()===driverId);
     // Canonical Flotta capacity is the only booking authority.
     // Old /driverCapacities and /drivers are mutable legacy mirrors and may
