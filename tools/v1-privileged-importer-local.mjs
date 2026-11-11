@@ -21,11 +21,14 @@ const denied=(reason,details)=>({
 const validHash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 
 export class LocalPrivilegedImporter {
+  #dryRun;
+  #trustedPinnedSha;
+  #expectedRevision;
   constructor({dryRun=true,trustedPinnedSha=null,expectedRevision=1}={}){
     // There is deliberately no privileged write capability.
-    this.dryRun=dryRun===true;
-    this.trustedPinnedSha=trustedPinnedSha;
-    this.expectedRevision=expectedRevision;
+    this.#dryRun=dryRun===true;
+    this.#trustedPinnedSha=trustedPinnedSha;
+    this.#expectedRevision=expectedRevision;
     this.writes=Object.freeze([]);
   }
 
@@ -38,8 +41,12 @@ export class LocalPrivilegedImporter {
   async importSource(snapshot,opts={}){
     if(!opts||typeof opts!=='object'||Array.isArray(opts))
       return denied('INVALID_OPTIONS');
-    const pin=opts.trustedPinnedSha??this.trustedPinnedSha;
-    const revision=opts.expectedRevision??this.expectedRevision;
+    // Never let per-request input replace externally pinned authority.
+    if(Object.prototype.hasOwnProperty.call(opts,'trustedPinnedSha')||
+       Object.prototype.hasOwnProperty.call(opts,'expectedRevision'))
+      return denied('UNTRUSTED_PER_CALL_AUTHORITY_OVERRIDE');
+    const pin=this.#trustedPinnedSha;
+    const revision=this.#expectedRevision;
     if(!validHash(pin)||!Number.isSafeInteger(revision)||revision<1)
       return denied('INDEPENDENT_PIN_AND_REVISION_REQUIRED');
     if(!opts.backup)return denied('INDEPENDENT_BACKUP_REQUIRED');
@@ -68,7 +75,7 @@ export class LocalPrivilegedImporter {
     if(!verdict.ok)return denied(verdict.reason||'ATTESTATION_FAILED',verdict.details);
     // Critical: we never use local "withSecurityRulesDisabled" or self-
     // calculated hash as proof that a production importer is authorized.
-    if(!this.dryRun)
+    if(!this.#dryRun)
       return denied('SEAL_REFUSED_NO_PRODUCTION_IAM_PROOF');
     return {
       ok:true,sealed:false,authorizedForImport:false,
