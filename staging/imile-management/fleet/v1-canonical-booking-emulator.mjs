@@ -80,11 +80,11 @@ async function seed(overrides={}){
       // The booking is forbidden to manufacture its own canonical authority.
       // This synthetic privileged migration seeds both keyed masters first.
       await setDoc(doc(db,'flottaDrivers','DA0001'),{
-        daCode:'DA0001',status:'aktiv',kapacitas:50,
+        daCode:'DA0001',status:'aktiv',kapacitas:50,sourceIndex:0,
         name:'Migrated Driver',history:[{type:'onboarding',note:'PRESERVE'}]
       });
       await setDoc(doc(db,'flottaVehicles','ABC123'),{
-        rendszam:'ABC-123',status:'aktiv',gyartmany:'Ford',modell:'Transit',
+        rendszam:'ABC-123',status:'aktiv',sourceIndex:0,gyartmany:'Ford',modell:'Transit',
         history:[{type:'service',note:'PRESERVE'}]
       });
       // The privileged importer—not the Depot booking—pins each original
