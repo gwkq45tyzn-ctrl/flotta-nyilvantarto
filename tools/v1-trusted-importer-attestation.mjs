@@ -21,7 +21,13 @@ export function attestBeforeSeal(snapshot, keyedState, claimedSha) {
   if (!partial.complete)
     return {ok:false, reason:'KEYED_PARITY_OR_PARTIAL', details:partial};
   // Duplicate normalized IDs already rejected by preflight
-  return {ok:true, sourceSha256:pre.sourceSha256, plan};
+  // A complete local parity check is NOT a privilege grant, server seal
+  // or a trusted signed manifest. Production importer/IAM is still absent.
+  return {
+    ok:true, sourceSha256:pre.sourceSha256, plan,
+    authorizedForImport:false, sealed:false,
+    proofScope:'LOCAL_OFFLINE_PARITY_ONLY'
+  };
 }
 
 export function refusePoisonedSeal(snapshot) {
