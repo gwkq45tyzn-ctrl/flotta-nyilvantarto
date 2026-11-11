@@ -343,6 +343,13 @@ try{
     await new Promise(resolve=>setTimeout(resolve,200));
   }
   assert.equal(restored.status,'aktiv');
+  // The previously used day ALREADY has an 80-parcel confirmed booking;
+  // its car must remain reserved even after being restored from service.
+  // Check the restored vehicle on a genuinely unoccupied future day.
+  const laterDay=new Date(Date.parse(today+'T12:00:00Z')+2*86400000)
+    .toISOString().slice(0,10);
+  await depotPage.locator('#datePick').fill(laterDay);
+  await depotPage.locator('#datePick').dispatchEvent('change');
   try {
     await depotPage.waitForFunction(()=>{
       const sel=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
@@ -365,10 +372,6 @@ try{
 
   // Use a distinct future day; earlier 80-capacity booking is immutable.
   // This tests a NEW booking with 70, never rewrites a historical 80 snapshot.
-  const laterDay=new Date(Date.parse(today+'T12:00:00Z')+2*86400000)
-    .toISOString().slice(0,10);
-  await depotPage.locator('#datePick').fill(laterDay);
-  await depotPage.locator('#datePick').dispatchEvent('change');
   const secondBooking=depotPage.locator('#content form[data-form="booking"]');
   await secondBooking.locator('select[name="driverId"]').selectOption('DA0001');
   await secondBooking.locator('select[name="vehicleId"]').selectOption('ABC123');
