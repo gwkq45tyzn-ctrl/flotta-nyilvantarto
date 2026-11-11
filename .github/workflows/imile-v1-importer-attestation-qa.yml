@@ -1,0 +1,30 @@
+name: iMile V1 #184 real offline importer parity acceptance
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-trusted-importer-attestation.mjs'
+      - 'tools/v1-trusted-importer-attestation.test.mjs'
+      - 'tools/v1-migration-dryrun.mjs'
+      - '.github/workflows/imile-v1-importer-attestation-qa.yml'
+permissions:
+  contents: read
+jobs:
+  local-parity-and-negative-probes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Confirm exact unmerged PR HEAD
+        run: echo "Checked $(git rev-parse HEAD) – local/offline only"
+      - name: Syntax plus valid-ALLOW and hostile-DENY attestation tests
+        run: |
+          node --check tools/v1-trusted-importer-attestation.mjs
+          node --test tools/v1-trusted-importer-attestation.test.mjs tools/v1-migration-dryrun.test.mjs tools/v1-migration-acceptance.test.mjs
+      - name: Explicit fail-closed scope
+        run: echo "No actual privilege, seal, deployment, IAM or production import tested"
