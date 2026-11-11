@@ -602,7 +602,39 @@
     vehicleEditGuardPatched = true;
   }
 
+  let presealEditorsPatched=false;
+  function canEditSealedFleet(){
+    return isPrimary() && lastSealedSource?.sealed===true
+      && appliedKeyed.drivers instanceof Map
+      && appliedKeyed.vehicles instanceof Map
+      && Array.isArray(keyedLive.drivers)
+      && Array.isArray(keyedLive.vehicles);
+  }
+  function patchPresealEditors(){
+    if(presealEditorsPatched)return;
+    presealEditorsPatched=true;
+    // Original HTML mutators can change in-memory arrays BEFORE calling
+    // window.save(). Guard their entrypoints, not just SDK persistence:
+    // rejected preseal edits must not appear in the UI as phantom saves.
+    const mutators=[
+      'editVehicle','editDriver','deleteVehicle','deleteDriver',
+      'quickStatusChange','openModal','openDriverModal','saveVehicle','saveDriver'
+    ];
+    for(const name of mutators){
+      const original=window[name];
+      if(typeof original!=='function')continue;
+      window[name]=function(...args){
+        if(!canEditSealedFleet()){
+          status('A lezárás előtti Flotta-törzs csak olvasható – a szerkesztés nem engedélyezett',true);
+          return;
+        }
+        return original.apply(this,args);
+      };
+    }
+  }
+
   function patchSave() {
+    patchPresealEditors();
     patchVehicleEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
