@@ -146,6 +146,25 @@ test('invalid non-JSON, wrong revision and invalid options never grant rights',a
   denied(await i.importSource(raw,[]));
 });
 
+test('per-call untrusted digest cannot override independently pinned expected SHA or revision',async()=>{
+  const original=clean(),forged=structuredClone(original);
+  forged.drivers[0].kapacitas=999;
+  const importer=createLocalImporter({
+    trustedPinnedSha:sha256(original),expectedRevision:1
+  });
+  const result=await importer.importSource(forged,{
+    backup:simulateBackup(forged),
+    trustedPinnedSha:sha256(forged),
+    expectedRevision:999
+  });
+  denied(result);
+  assert.equal(result.reason,'UNTRUSTED_PER_CALL_AUTHORITY_OVERRIDE');
+  assert.equal(importer.trustedPinnedSha,undefined);
+  assert.equal(importer.expectedRevision,undefined);
+  importer.trustedPinnedSha=sha256(forged); // public property is NOT the private pin
+  denied(await importer.importSource(forged,{backup:simulateBackup(forged)}));
+});
+
 test('the local preview never contains a Firestore write or seal capability',async()=>{
   const raw=clean(),obj=createLocalImporter({trustedPinnedSha:sha256(raw)});
   const res=await obj.importSource(raw,{backup:simulateBackup(raw)});
