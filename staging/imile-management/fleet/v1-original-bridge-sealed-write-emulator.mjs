@@ -145,10 +145,11 @@ try{
  const pre=fleet();pre.drivers[0].kapacitas=60;
  const c=runOriginalBridge(pre);await c.submit();
  const preResult=(await getDoc(ref('flottaSharedState/current'))).data();
- if(preResult.drivers[0].kapacitas!==60){
-  failures.push('P1 LEGAL PRE-CUTOVER BRIDGE SAVE BROKEN');
-  console.error(failures.at(-1),'bridgeErrors:',c.bridgeErrors,'attempted:',c.writes);
- }else console.log('PASS [E+REAL BRIDGE] original pre-cutover bridge save');
+ if(preResult.drivers[0].kapacitas!==50||preResult.revision!==1){
+  failures.push('P0 PRESEAL ORIGINAL BRIDGE BYPASSED IMMUTABLE ARRAY HARD-STOP');
+  console.error(failures.at(-1),{capacity:preResult.drivers[0].kapacitas,
+    revision:preResult.revision,bridgeErrors:c.bridgeErrors});
+ }else console.log('PASS DENY [E+REAL BRIDGE] preseal original bridge cannot alter imported driver master');
  assert.deepEqual(failures,[],'RELEASE NO-GO: actual bridge failures '+failures.join(' | '));
  console.log('ALL ORIGINAL BRIDGE FIRESTORE ACCEPTANCE PASS');
 }finally{await env.cleanup();}
