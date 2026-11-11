@@ -114,7 +114,14 @@ function mockBridge({importVerified = false, forgeLocal = false, failTransaction
   };
   context.window=context;
   vm.createContext(context);
-  vm.runInContext(bridgeSource,context,{filename:'features/firestore-bridge.js'});
+  // QA-only VM hook: simulate a server-confirmed privileged seal for
+  // the bounded retry test. Never expose this in the real browser bridge.
+  const sourceWithQaHook=bridgeSource.replace(
+    '  boot();\n})();',
+    '  window.__qaConfirmedSealed=function(){lastSealedSource={sealed:true};};\n  boot();\n})();'
+  );
+  assert.notEqual(sourceWithQaHook,bridgeSource,'original QA injection anchor must exist');
+  vm.runInContext(sourceWithQaHook,context,{filename:'features/firestore-bridge.js'});
   return {
     login:()=>context.fleetSimpleLogin({preventDefault(){}}),
     save:()=>context.save(),
@@ -126,7 +133,8 @@ function mockBridge({importVerified = false, forgeLocal = false, failTransaction
     pendingCallbacks:()=>delayedMicrotasks.length,
     shiftCallback:()=>delayedMicrotasks.shift(),
     status:()=>controls.syncStatus.textContent,
-    requestApproval:()=>context.flottaMarkImportVerified('verified-import')
+    requestApproval:()=>context.flottaMarkImportVerified('verified-import'),
+    confirmSyntheticSeal:()=>context.__qaConfirmedSealed()
   };
 }
 
@@ -154,6 +162,7 @@ test('legacy fleetmanager session must not start app/Apps Script sync before Fir
 test('permanent revision conflict stops retry chain and preserves pending',async()=>{
   const h=mockBridge({importVerified:true,failTransactions:true});
   await h.login();
+  h.confirmSyntheticSeal(); // Proven signed-in postseal retry path, not preseal.
   h.save();
   for(let i=0;i<8;i++) await Promise.resolve();
   let attempts=0;
