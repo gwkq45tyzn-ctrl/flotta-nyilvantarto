@@ -316,6 +316,19 @@ try{
     null,{timeout:25000});
   console.log('PASS [B+E]: original driver capacity 80→70 reaches ACTUAL Depot shared Fleet UI automatically');
 
+  // An existing future booking stores its original 80, but next-day planning
+  // must recalculate against today's LIVE driver master (70), without
+  // mutating the previously committed Firestore booking.
+  await depotPage.locator('#shell [data-view="planning"]').click();
+  await depotPage.waitForFunction(()=>{
+    const panel=document.getElementById('nextDayForecast');
+    return [...(panel?.querySelectorAll('.kpi')||[])].some(k=>
+      k.querySelector('.name')?.textContent?.trim()==='Tervezett kapacitás'&&
+      k.querySelector('.number')?.textContent?.trim()==='70');
+  },null,{timeout:20000});
+  assert.equal((await serverRead('bookings/'+tomorrow+'__ABC123')).capacity,80);
+  console.log('PASS [B+E]: CURRENT next-day planning counts original booked 80 as live keyed 70 without rewriting history');
+
   // The original Fleet's real quick status SELECT is a production user event.
   // A service vehicle must DISAPPEAR from Depot booking options immediately.
   await flottaPage.locator('#vehicleTable select[onchange^="quickStatusChange"]').first()
