@@ -6,7 +6,7 @@
  * evidence the underlying forged index would be denied.
  *
  * Test shape: first demonstrate positive ALLOW for a legal atomic booking,
- * then attempt identically-shaped malicious two-document transactions.
+ * then attempt identically-shaped malicious FOUR-document transactions.
  * A privileged LOCAL EMULATOR fixture simulates a corrupt approved source;
  * never mistake it for an authorized real migration.
  *
@@ -42,12 +42,21 @@ const data=({driverIndex=0,vehicleIndex=0,capacity=80}={})=>({
   status:'planned',capacity,driverIndex,vehicleIndex
 });
 const newBooking=(db,opts={})=>{
-  // This ATOMIC booking + reverse driver claim is the one actual Depot
-  // requires. A lone booking setDoc cannot prove index authorization.
+  // This ATOMIC four-document booking + reverse claim + both identity claims
+  // is the one actual Depot uses. A lone booking setDoc cannot prove authorization.
   const batch=writeBatch(db);
   batch.set(ref(db,'bookings',bookingId),data(opts));
   batch.set(ref(db,'driverClaims',claimId),{
     date,driverId:'DA0001',bookingId
+  });
+  // Critical: the REAL original Depot transaction writes FOUR documents.
+  // Both source identity claims are getAfter() prerequisites under the full
+  // Rules. A two-document booking also gives a meaningless DENY.
+  batch.set(ref(db,'flottaDriverClaims','DA0001'),{
+    sourceIndex:opts.driverIndex??0,revision:1
+  });
+  batch.set(ref(db,'flottaVehicleClaims','ABC123'),{
+    sourceIndex:opts.vehicleIndex??0,revision:1
   });
   return batch.commit();
 };
@@ -108,7 +117,7 @@ async function main(){
     assert.equal(reverse.exists(),true);
     assert.equal(saved.data().capacity,80);
     assert.equal(reverse.data().bookingId,bookingId);
-    console.log('PASS ALLOW [E+SDK]: genuine sealed Fleet + canonical indexes + 80 capacity atomic booking/driverClaim');
+    console.log('PASS ALLOW [E+SDK]: genuine sealed Fleet + canonical indexes + 80 capacity atomic FOUR-document booking');
 
     await seed();
     // Control: the OLD Grok setDoc-only strategy always fails because
