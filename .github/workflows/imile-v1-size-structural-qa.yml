@@ -1,0 +1,27 @@
+name: iMile V1 #185 Firestore storage-size estimate and hostile structural QA
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-firestore-size-gate.mjs'
+      - 'tools/v1-firestore-size-gate.test.mjs'
+      - '.github/workflows/imile-v1-size-structural-qa.yml'
+permissions:
+  contents: read
+jobs:
+  strictly-local-size-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax and official-storage-example plus hostile structure regressions
+        run: |
+          node --check tools/v1-firestore-size-gate.mjs
+          node --test tools/v1-firestore-size-gate.test.mjs
+      - name: Never conflate estimate with encoded authorization
+        run: echo 'Local size estimates only; encodedSizeVerified remains false; no cloud, IAM or real data'
