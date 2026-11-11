@@ -107,16 +107,20 @@ try{
     ()=>setDoc(fleetRef,{...base(),revision:2,
       updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
       updatedBy:uid}));
-  // The original Fleet source was seeded without 'sealed'; the current
-  // unadapted bridge still produces a full replacement without it.
-  // Before any approved structural cutover, this legal path MUST continue.
+  // #133/#141: the former pre-cutover full array edit was a documented
+  // source of duplicate identities. It MUST now be READ-ONLY until the
+  // privileged, unique-identity-verified seal. Preserve other nonidentity
+  // metadata updates without changing immutable archived driver/car arrays.
   await seed('absent');
-  await allow('pre-cutover original Fleet full bridge save without sealed field',()=>{
+  await deny('pre-cutover original Fleet bridge-shaped source identity edit',()=>{
     const d=base();d.revision=2;d.drivers[0].kapacitas=70;
     return setDoc(fleetRef,{...d,
       updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
       updatedBy:uid});
   });
+  await allow('preseal original Fleet nonidentity metadata edit still works',
+    ()=>updateDoc(fleetRef,{revision:2,updatedBy:uid}));
+  assert.deepEqual((await getDoc(fleetRef)).data().drivers,base().drivers);
 
   assert.deepEqual(violations,[],
     'NO-GO: source-seal integrity and/or pre-cutover original Fleet workflow violated');
