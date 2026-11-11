@@ -1,43 +1,40 @@
 /**
- * Approximate Firestore Standard document storage size estimator.
- * Based on public docs: path + UTF-8 fields + overhead. Not official wire size.
- * Always fails closed for import authorization.
+ * #185 Compatibility façade around the ONE strict fail-closed Firestore
+ * storage-size estimate and shape preflight.
+ * Previously Grok's independent approximate formula silently disagreed with
+ * the documented 147-byte sample, double-counted some nested values, and
+ * allowed malformed map/document paths, nonfinite numbers and invalid types.
+ *
+ * A storage estimate is NOT actual wire size and NEVER import permission.
  */
-export function estimateStorageSize(docPath, data) {
-  if (typeof docPath !== 'string' || !data || typeof data !== 'object') return null;
-  let size = 32; // base overhead
-  size += Buffer.byteLength(docPath, 'utf8') + 1;
-  function walk(obj, depth = 0) {
-    if (depth > 20) return false;
-    if (Array.isArray(obj)) {
-      size += 1;
-      for (const item of obj) if (!walk(item, depth + 1)) return false;
-      return true;
-    }
-    if (obj && typeof obj === 'object') {
-      size += 1;
-      for (const [k, v] of Object.entries(obj)) {
-        size += Buffer.byteLength(k, 'utf8') + 1;
-        if (!walk(v, depth + 1)) return false;
-      }
-      return true;
-    }
-    if (typeof obj === 'string') size += Buffer.byteLength(obj, 'utf8') + 1;
-    else if (typeof obj === 'number') size += 8;
-    else if (typeof obj === 'boolean') size += 1;
-    else return false;
-    return true;
+import {
+  checkSizeGate,estimateFirestoreDocumentStorageBytes
+} from './v1-firestore-size-gate.mjs';
+
+export function estimateStorageSize(docPath,data){
+  try{
+    return estimateFirestoreDocumentStorageBytes(data,docPath);
+  }catch{
+    return null;
   }
-  if (!walk(data)) return null;
-  return size;
 }
 
-export function sizeGate(source, keyedDocs) {
-  const sourceSize = estimateStorageSize('flottaSharedState/current', source);
-  if (sourceSize === null || sourceSize > 900000) return {ok: false, reason: 'SOURCE_SIZE_OR_INVALID'};
-  for (const [path, data] of Object.entries(keyedDocs)) {
-    const s = estimateStorageSize(path, data);
-    if (s === null || s > 900000) return {ok: false, reason: 'KEYED_SIZE_OR_INVALID', path};
-  }
-  return {ok: true, sourceSize, firestoreEncodedSizeVerified: false, authorizedForImport: false};
+/**
+ * Deliberately always `ok:false`: callers must not confuse advisory
+ * feasibility with permission to import. Use `advisoryOk` for the separate
+ * untrusted local-storage estimate.
+ */
+export function sizeGate(source,keyedDocs){
+  const result=checkSizeGate(source,keyedDocs);
+  return {
+    ok:false,
+    advisoryOk:result.advisoryOk,
+    sourceSize:result.sourceStorageEstimateBytes,
+    maxKeyedStorageEstimateBytes:result.maxKeyedStorageEstimateBytes,
+    firestoreEncodedSizeVerified:false,
+    authorizedForImport:false,
+    reason:result.advisoryOk
+      ?'LOCAL_ADVISORY_ONLY_NOT_IMPORT_AUTHORIZED'
+      :result.reason
+  };
 }
