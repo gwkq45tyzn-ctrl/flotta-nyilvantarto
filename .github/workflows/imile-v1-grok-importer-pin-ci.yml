@@ -1,0 +1,32 @@
+name: iMile V1 #205 Grok importer real independent pin and dry-run controls
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-privileged-importer-local.mjs'
+      - 'tools/v1-privileged-importer-local.test.mjs'
+      - '.github/workflows/imile-v1-grok-importer-pin-ci.yml'
+permissions:
+  contents: read
+jobs:
+  clean-and-hostile-importer-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify exact tested SHA
+        run: git rev-parse HEAD
+      - name: Honest preflight ALLOW and poisoned identity/hash/non-dry-run DENY
+        run: |
+          node --check tools/v1-privileged-importer-local.mjs
+          node --test tools/v1-privileged-importer-local.test.mjs \
+            tools/v1-pinned-backup-trust.test.mjs \
+            tools/v1-trusted-importer-attestation.test.mjs \
+            tools/v1-poisoned-source-hardstop.test.mjs
+      - name: Still not production IAM or a real server importer
+        run: echo "No trusted production source principal, no deployed importer, no IAM proof, no seal and no V1 release GO"

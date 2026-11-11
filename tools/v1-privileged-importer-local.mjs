@@ -1,54 +1,95 @@
 /**
- * Local-only privileged importer adapter.
- * Enforces attestation BEFORE any writes. Rejects poisoned / duplicate sources.
- * NOT a production IAM proof. Synthetic emulator use only.
+ * Local, read-only preflight/attestation adapter for an importer THAT DOES
+ * NOT YET EXIST. No privileged SDK, IAM, Firestore connection or write API.
+ *
+ * Never authorize importing merely because a source hashes to itself.
+ * Require a separately pinned SHA, a full-rich pre-import backup and an
+ * expected revision supplied as EXTERNAL trusted inputs by a future owner-
+ * authorized importer. Even that proves local content integrity, NOT the
+ * provenance/authority of the pin or production IAM credentials.
  */
-import {attestBeforeSeal, refusePoisonedSeal} from './v1-trusted-importer-attestation.mjs';
 import {sha256} from './v1-migration-dryrun.mjs';
+import {verifyPinnedImportSource} from './v1-pinned-backup-trust.mjs';
+
+const DENY_SCOPE='LOCAL_CONTENT_INTEGRITY_ONLY';
+const denied=(reason,details)=>({
+  ok:false,sealed:false,authorizedForImport:false,
+  trustedExternalProvenanceVerified:false,
+  productionIamVerified:false,firestoreEncodedSizeVerified:false,
+  proofScope:DENY_SCOPE,reason,...(details===undefined?{}:{details})
+});
+const validHash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 
 export class LocalPrivilegedImporter {
-  constructor({dryRun = true} = {}) {
-    this.dryRun = dryRun;
-    this.writes = [];
+  #dryRun;
+  #trustedPinnedSha;
+  #expectedRevision;
+  constructor({dryRun=true,trustedPinnedSha=null,expectedRevision=1}={}){
+    // There is deliberately no privileged write capability.
+    this.#dryRun=dryRun===true;
+    this.#trustedPinnedSha=trustedPinnedSha;
+    this.#expectedRevision=expectedRevision;
+    this.writes=Object.freeze([]);
   }
 
-  async importSource(snapshot, keyedState = {}) {
-    const claimed = sha256(snapshot);
-    const attestation = attestBeforeSeal(snapshot, keyedState, claimed);
-    if (!attestation.ok) {
-      return {
-        ok: false,
-        sealed: false,
-        reason: attestation.reason || 'ATTESTATION_FAILED',
-        errors: attestation.errors || [],
-        authorizedForImport: false,
-        proofScope: 'LOCAL_PRIVILEGED_ADAPTER_ONLY'
-      };
+  /**
+   * @param {object} snapshot Raw exact source export (not a signed approval).
+   * @param {object} opts The second argument may contain observedKeyed for
+   *   a post-batch parity preview. During BEFORE-import preflight omit it.
+   *   backup MUST be a distinct pre-import backup carrying the raw snapshot.
+   */
+  async importSource(snapshot,opts={}){
+    if(!opts||typeof opts!=='object'||Array.isArray(opts))
+      return denied('INVALID_OPTIONS');
+    // Never let per-request input replace externally pinned authority.
+    if(Object.prototype.hasOwnProperty.call(opts,'trustedPinnedSha')||
+       Object.prototype.hasOwnProperty.call(opts,'expectedRevision'))
+      return denied('UNTRUSTED_PER_CALL_AUTHORITY_OVERRIDE');
+    const pin=this.#trustedPinnedSha;
+    const revision=this.#expectedRevision;
+    if(!validHash(pin)||!Number.isSafeInteger(revision)||revision<1)
+      return denied('INDEPENDENT_PIN_AND_REVISION_REQUIRED');
+    if(!opts.backup)return denied('INDEPENDENT_BACKUP_REQUIRED');
+    let actualSourceSha;
+    try {
+      actualSourceSha=sha256(snapshot);
+    } catch(error) {
+      return denied('INVALID_RAW_SOURCE',String(error.message||error));
     }
-    // Even after local attestation, refuse seal without external privilege proof
-    const refuse = refusePoisonedSeal(snapshot);
-    if (this.dryRun) {
-      return {
-        ok: true,
-        sealed: false,
-        reason: 'DRY_RUN_ATTESTATION_PASSED_BUT_NO_SEAL',
-        sourceSha256: attestation.sourceSha256,
-        authorizedForImport: false,
-        proofScope: 'LOCAL_PRIVILEGED_ADAPTER_ONLY',
-        note: refuse.reason
-      };
+    if(actualSourceSha!==pin)return denied('RAW_SOURCE_NOT_TRUSTED_PIN');
+    // This separately checks *every* full-rich backup field, sourceIndex,
+    // original normalized uniqueness, revision, 4 arrays, source fields,
+    // projected keyed document shapes and local size advisory.
+    let verdict;
+    try {
+      verdict=verifyPinnedImportSource({
+        backup:opts.backup,trustedPinnedSha:pin,expectedRevision:revision,
+        ...(
+          Object.prototype.hasOwnProperty.call(opts,'observedKeyed')
+          ? {observedKeyed:opts.observedKeyed}: {}
+        )
+      });
+    }catch(error){
+      return denied('PREFLIGHT_EXCEPTION',String(error.message||error));
     }
-    // Non-dry-run path still refuses real seal in this free-tool scope
+    if(!verdict.ok)return denied(verdict.reason||'ATTESTATION_FAILED',verdict.details);
+    // Critical: we never use local "withSecurityRulesDisabled" or self-
+    // calculated hash as proof that a production importer is authorized.
+    if(!this.#dryRun)
+      return denied('SEAL_REFUSED_NO_PRODUCTION_IAM_PROOF');
     return {
-      ok: false,
-      sealed: false,
-      reason: 'SEAL_REFUSED_NO_PRODUCTION_IAM_PROOF',
-      authorizedForImport: false,
-      proofScope: 'LOCAL_PRIVILEGED_ADAPTER_ONLY'
+      ok:true,sealed:false,authorizedForImport:false,
+      trustedExternalProvenanceVerified:false,
+      productionIamVerified:false,firestoreEncodedSizeVerified:false,
+      proofScope:DENY_SCOPE,
+      reason:'DRY_RUN_PINNED_SOURCE_PREFLIGHT_ONLY_NO_SEAL',
+      sourceSha256:pin,expectedRevision:revision,
+      projectedDocumentCount:verdict.projectedDocumentCount,
+      keyedParityVerified:Object.prototype.hasOwnProperty.call(opts,'observedKeyed'),
+      sourceCounts:verdict.counts,
+      advisoryOk:verdict.firestoreAdvisory.advisoryOk,
+      writesAttempted:0
     };
   }
 }
-
-export function createLocalImporter(opts) {
-  return new LocalPrivilegedImporter(opts);
-}
+export function createLocalImporter(opts){return new LocalPrivilegedImporter(opts);}
