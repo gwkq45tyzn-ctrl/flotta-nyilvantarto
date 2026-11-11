@@ -73,6 +73,18 @@ test('UTF-8 byte budget and non-JSON sources cannot authorize a plan',()=>{
   const invalid=synthetic(); invalid.contacts[0].invalid=Infinity;
   assert.equal(preflight(invalid).ok,false);
 });
+test('privileged sourceIndex must never be inherited from raw legacy data even when matching array index',()=>{
+  const matchingDriver=synthetic();
+  matchingDriver.drivers[0].sourceIndex=0;
+  const driverCheck=preflight(matchingDriver);
+  assert.equal(driverCheck.ok,false);
+  assert.match(driverCheck.errors.join(' '),/Untrusted pre-existing sourceIndex/);
+  assert.throws(()=>buildPlan(matchingDriver),/Untrusted pre-existing sourceIndex/);
+  const matchingVehicle=synthetic();
+  matchingVehicle.vehicles[0].sourceIndex=0;
+  assert.equal(preflight(matchingVehicle).ok,false);
+  assert.throws(()=>buildPlan(matchingVehicle),/Untrusted pre-existing sourceIndex/);
+});
 test('preflight source SHA cannot be substituted after source changes',()=>{
   const input=synthetic(), pre=preflight(input);
   input.drivers[0].kapacitas=90;
