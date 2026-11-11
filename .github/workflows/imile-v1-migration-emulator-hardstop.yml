@@ -1,0 +1,42 @@
+name: iMile V1 – #155 privileged synthetic migration emulator/rollback RED TEAM
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-migration-emulator-drill.mjs'
+      - 'tools/v1-migration-dryrun.mjs'
+      - 'tools/v1-migration-dryrun.test.mjs'
+      - 'tools/v1-migration-acceptance.test.mjs'
+      - 'staging/imile-management/fleet/v1-migration-emulator-acceptance.mjs'
+      - 'depokapacitas/firestore-v1-restricted.rules'
+      - '.github/workflows/imile-v1-migration-emulator-hardstop.yml'
+permissions:
+  contents: read
+jobs:
+  local-only-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Offline full-rich backup and hostile source tests
+        run: node --test tools/v1-migration-dryrun.test.mjs tools/v1-migration-acceptance.test.mjs
+      - name: Validate syntax before local emulator execution
+        run: |
+          node --check tools/v1-migration-emulator-drill.mjs
+          node --check staging/imile-management/fleet/v1-migration-emulator-acceptance.mjs
+      - name: Install existing lockfile-pinned Firebase test dependencies
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Actual full restricted Firestore Rules – LOCAL privileged synthetic import, checkpoint, rollback, seal and restore
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-migration \
+            --config firebase.staging-emulator.json \
+            "node tools/v1-migration-emulator-drill.mjs"
+      - name: Never deploy or change IAM
+        run: echo 'Local demo project, no cloud deployment, no real UID/credentials'
