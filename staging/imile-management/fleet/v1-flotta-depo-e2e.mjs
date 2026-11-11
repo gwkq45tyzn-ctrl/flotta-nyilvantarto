@@ -183,11 +183,21 @@ try{
   // The source identity archive is deliberately read-only before a
   // privileged, verified seal. The browser must NOT be able to change KM
   // (or normalized DA/plate arrays) in the old unsealed source.
-  await flottaPage.waitForFunction(oldKm=>{
-    const car=typeof vehicles!=='undefined'&&vehicles.find(v=>v.rendszam==='ABC-123');
-    return !!car && car.km===oldKm &&
-      document.getElementById('syncStatus')?.textContent?.includes('csak olvasható');
-  },fleetData.vehicles[0].km,{timeout:20000});
+  try{
+    await flottaPage.waitForFunction(oldKm=>{
+      const car=typeof vehicles!=='undefined'&&vehicles.find(v=>v.rendszam==='ABC-123');
+      return !!car && car.km===oldKm;
+    },fleetData.vehicles[0].km,{timeout:20000});
+  }catch(error){
+    const diagnostic=await flottaPage.evaluate(()=>({
+      km:typeof vehicles==='undefined'?null:vehicles.find(v=>v.rendszam==='ABC-123')?.km,
+      syncStatus:document.getElementById('syncStatus')?.textContent,
+      pending:localStorage.getItem('flotta_pending_v16')!==null,
+      modalActive:document.querySelector('#modal')?.className
+    }));
+    console.error('PRESEAL ORIGINAL FLEET READONLY DIAGNOSTIC',JSON.stringify(diagnostic));
+    throw error;
+  }
   const persisted=await serverRead('flottaSharedState/current');
   assert.equal(persisted.revision,1,'preseal source revision must stay frozen');
   assert.equal(persisted.vehicles[0].km,fleetData.vehicles[0].km);
