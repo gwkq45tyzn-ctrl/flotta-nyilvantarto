@@ -515,10 +515,10 @@ service cloud.firestore {
         && nonNegative(request.resource.data.capacity,10000)
         && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)
         // Identity claims: the selected index must match the unique claim for that normalized identity.
-        && existsAfter(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId))
-        && getAfter(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex
-        && existsAfter(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId))
-        && getAfter(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex
+        && exists(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId))
+        && get(/databases/$(database)/documents/flottaDriverClaims/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex
+        && exists(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId))
+        && get(/databases/$(database)/documents/flottaVehicleClaims/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex
         // Both documents must be written in one transaction. This prevents double booking.
         && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
         && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
@@ -982,34 +982,18 @@ service cloud.firestore {
     }
 
 
+    // P0 #133: indexes are SECURITY-SENSITIVE trusted import attestations.
+    // Ordinary browser SDK MUST NOT create, rewrite or delete either index,
+    // even when its chosen row happens to match a duplicated old Fleet ID.
+    // Only the separately authorized PRIVILEGED importer may seed these two
+    // per-identity documents after checking full-array uniqueness.
     match /flottaDriverClaims/{normalizedDa} {
       allow read: if member();
-      allow create, update: if editor()
-        && canonicalImportActive()
-        && request.resource.data.keys().hasAll(['sourceIndex','revision'])
-        && request.resource.data.sourceIndex is int
-        && request.resource.data.sourceIndex >= 0
-        && request.resource.data.revision is int
-        && request.resource.data.revision == getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode is string
-        // DA IDs keep '-' and '_' exactly; only ASCII source bytes are accepted.
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.matches('^[A-Za-z0-9_-]+$')
-        && validDriverCode(getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.upper())
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.drivers[request.resource.data.sourceIndex].daCode.upper() == normalizedDa;
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
     match /flottaVehicleClaims/{normalizedPlate} {
       allow read: if member();
-      allow create, update: if editor()
-        && canonicalImportActive()
-        && request.resource.data.keys().hasAll(['sourceIndex','revision'])
-        && request.resource.data.sourceIndex is int
-        && request.resource.data.sourceIndex >= 0
-        && request.resource.data.revision is int
-        && request.resource.data.revision == getAfter(/databases/$(database)/documents/flottaSharedState/current).data.revision
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.sourceIndex].rendszam is string
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.sourceIndex].rendszam.replace('[[:space:]-]','').upper() == normalizedPlate;
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
 
