@@ -20,7 +20,9 @@ test('both original Fleet and immutable migration approval must be server confir
   assert.match(src,/onSnapshot\(doc\(db,'flottaMigrationApproval','current'\),\{includeMetadataChanges:true\}/);
   assert.match(src,/state\.canonicalFleetRaw=confirmed&&exists\?snap\.data\(\):null/);
   assert.match(src,/state\.canonicalApproval=confirmed&&exists\?snap\.data\(\):null/);
-  assert.match(src,/const liveSources=\[\.\.\.watchedCollections,'flottaSharedState','flottaMigrationApproval'\]/);
+  assert.match(src,/const liveSources=\[\.\.\.watchedCollections,'flottaSharedState','flottaMigrationApproval','flottaDrivers','flottaVehicles'\]/);
+  assert.match(src,/\['flottaDrivers','keyedDriversSnap'\]/);
+  assert.match(src,/\['flottaVehicles','keyedVehiclesSnap'\]/);
   assert.match(src,/const trusted=label\.trusted&&canonical\.trusted/);
 });
 test('read-only preview cannot be mistaken for a privileged cutover or write permission',()=>{
