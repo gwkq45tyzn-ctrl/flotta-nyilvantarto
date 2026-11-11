@@ -320,6 +320,10 @@ try{
   // must recalculate against today's LIVE driver master (70), without
   // mutating the previously committed Firestore booking.
   await depotPage.locator('#shell [data-view="planning"]').click();
+  // The prior booking UI selected TOMORROW. Forecast always looks one day
+  // ahead of the current date picker, so restore the original base day.
+  await depotPage.locator('#datePick').fill(today);
+  await depotPage.locator('#datePick').dispatchEvent('change');
   await depotPage.waitForFunction(()=>{
     const panel=document.getElementById('nextDayForecast');
     return [...(panel?.querySelectorAll('.kpi')||[])].some(k=>
