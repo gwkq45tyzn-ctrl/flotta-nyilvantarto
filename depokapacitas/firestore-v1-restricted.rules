@@ -970,11 +970,7 @@ service cloud.firestore {
         // server-side by user-supplied count maps or client-side filter().
         && request.resource.data.get('sealed', false) == resource.data.get('sealed', false)
         && request.resource.data.drivers == resource.data.drivers
-        && request.resource.data.vehicles == resource.data.vehicles
-        // Protect associated archived rich metadata against preseal edits
-        // that would silently diverge from the signed manifest.
-        && request.resource.data.fuelCards == resource.data.fuelCards
-        && request.resource.data.contacts == resource.data.contacts;
+        && request.resource.data.vehicles == resource.data.vehicles;
         // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
         // True uniqueness requires one document per identity. See
         // docs/STRUCTURAL_IDENTITY_MODEL.md.
