@@ -1,4 +1,5 @@
 import {projectKeyedMasters} from './keyed-live-master.mjs';
+import {projectLiveBookingCapacity} from './keyed-booking-capacity.mjs';
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {emptySharedFleetPreview,projectSharedFleetSnapshot} from './flotta-master-readonly.mjs';
 import {reconcileSharedMaster} from './master-reconciliation.mjs';
@@ -60,6 +61,7 @@ const safeBookingCapacity=b=>{
   const d=byId('drivers',b.driverId);
   return Number.isSafeInteger(d?.capacity)?d.capacity:0;
 };
+const planningBookings=()=>projectLiveBookingCapacity(get('bookings'),get('drivers'),todayAtDepot());
 function totals(mode='day'){const ds=get('demands').filter(x=>inRange(x,mode));const bs=get('bookings').filter(x=>inRange(x,mode));const rs=get('results').filter(x=>inRange(x,mode));const sum=(l,f)=>l.reduce((a,x)=>a+number(x[f]),0);return {newCount:sum(ds,'newCount'),retryCount:sum(ds,'retryCount'),capacity:bs.reduce((n,b)=>n+safeBookingCapacity(b),0),blockedBookings:bs.filter(b=>!bookingAssessment(b).eligible).length,picked:sum(rs,'picked'),success:sum(rs,'success'),failed:sum(rs,'failed'),drivers:new Set(bs.filter(b=>bookingAssessment(b).eligible).map(b=>b.driverId)).size,hasDemand:ds.length>0,hasResults:rs.length>0};}
 function centralTaskList(limit=null){
   const criticalSources=['vehicles','drivers','bookings','fleetRecords','fleetAssignments'];
@@ -94,7 +96,7 @@ function centralTaskList(limit=null){
 function nextDayPanel(){
  let forecast;try{forecast=prepareNextDay({
    baseDate:state.date,today:todayAtDepot(),
-   demands:get('demands'),bookings:get('bookings'),
+   demands:get('demands'),bookings:planningBookings(),
    drivers:get('drivers'),vehicles:get('vehicles'),
    sourcesReady:assessSources(state.sourceMeta,{online:navigator.onLine,required:liveSources}).trusted&&state.canonicalMaster?.trusted===true
  });}catch{return section('Következő napi kapacitástervezés','<p class="notice">Érvénytelen tervezési dátum; előrejelzés nem adható.</p>');}
@@ -137,7 +139,7 @@ function overview(){
  const t=totals();
  const plan=summarizeDistrictCapacity({
    date:state.date,today:todayAtDepot(),demands:get('demands'),
-   bookings:get('bookings'),drivers:get('drivers'),vehicles:get('vehicles')
+   bookings:planningBookings(),drivers:get('drivers'),vehicles:get('vehicles')
  });
  const health=assessSources(state.sourceMeta,{online:navigator.onLine});
  const sourceReady=health.trusted&&state.canonicalMaster?.trusted===true;
