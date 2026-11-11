@@ -158,10 +158,10 @@ test('first Firebase login opens original Fleet read-only UI before import verif
     'Authentication succeeded, but the original Fleet UI remained locked');
 });
 
-test('two rapid saves cannot drop the second edit or erase its pending backup', async () => {
+test('preseal original Fleet cannot accept or queue rapid legacy array edits', async () => {
   const h = makeHarness({ importVerified: true });
   await h.login();
-  assert.equal(h.isUnlocked(), true, 'Import-verified account must unlock original UI');
+  assert.equal(h.isUnlocked(), true, 'Authenticated user may view source before seal');
   h.setKm(100);
   h.save();
   h.setKm(200);
@@ -169,9 +169,9 @@ test('two rapid saves cannot drop the second edit or erase its pending backup', 
   await new Promise(resolve => setImmediate(resolve));
   h.releaseTransaction();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(h.getRemoteKm(), 200,
-    'The second edit was silently omitted from Firestore despite successful save status');
-  assert.equal(h.pending(), false, 'Pending backup may be cleared only after latest edit is persisted');
+  assert.equal(h.getRemoteKm(),0,'Server preseal source arrays must stay immutable');
+  assert.equal(h.uploadCount(),0,'No preseal legacy transaction may begin');
+  assert.equal(h.pending(),false,'Preseal local edits must not enter a replayable pending backup');
 });
 
 test('mismatched imported Fleet SHA never authorizes a write', async () => {
@@ -185,7 +185,7 @@ test('mismatched imported Fleet SHA never authorizes a write', async () => {
   assert.equal(h.getRemoteKm(), 0);
 });
 
-test('missing server Fleet SHA after verification cannot be silently removed by a save', async () => {
+test('missing source SHA and preseal arrays cannot bypass read-only Fleet gate', async () => {
   const h = makeHarness({ importVerified: true });
   await h.login();
   await new Promise(resolve => setImmediate(resolve));
@@ -194,5 +194,6 @@ test('missing server Fleet SHA after verification cannot be silently removed by 
   h.save();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.getRemoteKm(), 0, 'Missing source SHA must abort before commit');
-  assert.equal(h.pending(), true, 'Latest local change must remain recoverable on failed write');
+  assert.equal(h.uploadCount(),0,'No preseal unverified transaction may begin');
+  assert.equal(h.pending(),false,'No preseal change may enter a pending legacy replay queue');
 });
