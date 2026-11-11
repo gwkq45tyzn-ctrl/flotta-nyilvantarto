@@ -41,9 +41,8 @@ function richList(snapshot,key,errors) {
     // `sourceIndex` is a reserved PRIVILEGED attestation inserted only
     // after full normalized uniqueness and rich provenance preflight.
     // A conflicting value in the raw legacy data must not be overwritten.
-    if((key==='drivers'||key==='vehicles')&&
-       own(row,'sourceIndex')&&row.sourceIndex!==i)
-      errors.push('Reserved sourceIndex collision at '+key+'['+i+']');
+    if((key==='drivers'||key==='vehicles')&&own(row,'sourceIndex'))
+      errors.push('Untrusted pre-existing sourceIndex at '+key+'['+i+']');
     if(typeof row.id==='string')internalIds.add(row.id);
     if(own(row,'revision')&&(!Number.isSafeInteger(row.revision)||row.revision<1))
       errors.push('Invalid existing revision at '+key+'['+i+']');
