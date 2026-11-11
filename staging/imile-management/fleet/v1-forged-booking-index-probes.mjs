@@ -90,11 +90,11 @@ async function main(){
       await setDoc(ref(db,'flottaSharedState','current'),snapshot);
       await setDoc(ref(db,'flottaDrivers','DA0001'),{
         id:'synthetic-driver-master',daCode:'DA0001',
-        status:'aktiv',kapacitas:keyedCapacity,revision:1,history:[{kind:'verified-synthetic'}]
+        status:'aktiv',kapacitas:keyedCapacity,sourceIndex:0,revision:1,history:[{kind:'verified-synthetic'}]
       });
       await setDoc(ref(db,'flottaVehicles','ABC123'),{
         id:'synthetic-vehicle-master',rendszam:'ABC-123',
-        status:keyedVehicleStatus,revision:1,history:[{kind:'verified-synthetic'}]
+        status:keyedVehicleStatus,sourceIndex:0,revision:1,history:[{kind:'verified-synthetic'}]
       });
       await setDoc(ref(db,'flottaDriverClaims','DA0001'),{sourceIndex:driverIndex,revision:1});
       await setDoc(ref(db,'flottaVehicleClaims','ABC123'),{sourceIndex:vehicleIndex,revision:1});
