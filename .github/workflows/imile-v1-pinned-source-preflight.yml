@@ -1,0 +1,27 @@
+name: iMile V1 #184 pinned trusted offline source preflight
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-pinned-backup-trust.mjs'
+      - 'tools/v1-pinned-backup-trust.test.mjs'
+      - '.github/workflows/imile-v1-pinned-source-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  independently-pinned-source-manifest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Strict no-cloud source trust and poisoned duplicate negative tests
+        run: |
+          node --check tools/v1-pinned-backup-trust.mjs
+          node --test tools/v1-pinned-backup-trust.test.mjs tools/v1-trusted-importer-attestation.test.mjs
+      - name: Explicit no IAM or production authorization
+        run: echo "A matching digest is integrity only; externally authenticated source ownership and production IAM remain NO-GO"
