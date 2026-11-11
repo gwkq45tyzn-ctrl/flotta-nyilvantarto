@@ -203,8 +203,8 @@ try{
     const driver=confirmed.drivers[0],vehicle=confirmed.vehicles[0];
     assert.equal(driver.daCode,'DA0001');
     assert.equal(vehicle.rendszam,'ABC-123');
-    await setDoc(doc(admin,'flottaDrivers','DA0001'),{...driver,revision:1});
-    await setDoc(doc(admin,'flottaVehicles','ABC123'),{...vehicle,revision:1});
+    await setDoc(doc(admin,'flottaDrivers','DA0001'),{...driver,sourceIndex:0,revision:1});
+    await setDoc(doc(admin,'flottaVehicles','ABC123'),{...vehicle,sourceIndex:0,revision:1});
     const [readD,readV]=await Promise.all([
       getDoc(doc(admin,'flottaDrivers','DA0001')),
       getDoc(doc(admin,'flottaVehicles','ABC123'))
