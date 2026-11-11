@@ -65,16 +65,16 @@ try{
   await seed();
   // The current full restricted Rules do not require count maps; mapping
   // alone was never a uniqueness proof. Fail only for ACTUAL duplicates.
-  // Positive check: keeping same counts on a legitimate single-record edit
-  // must work; a fail-closed but unusable Depot is not a valid fix.
-  await expectAllow('legitimate rich driver edit preserving identity maps',async()=>{
-    const source=seedDoc();
-    source.drivers[0].kapacitas=70;
-    await updateDoc(fleetRef,{revision:2,drivers:source.drivers,
-      identity:source.identity});
+  // Legitimate preseal nonidentity metadata update remains usable. The
+  // imported original driver/vehicle arrays are *intentionally read-only*:
+  // there is no safe generic global uniqueness proof for variable-length
+  // Firestore arrays. Legitimate rich driver edits move to keyed docs after seal.
+  await expectAllow('preseal revision metadata edit with no source-array drift',async()=>{
+    await updateDoc(fleetRef,{revision:2,updatedBy:uid});
     const confirmed=(await getDoc(fleetRef)).data();
-    assert.equal(confirmed.drivers[0].kapacitas,70);
-    assert.equal(confirmed.identity.daCnt['DA-0001'],1);
+    assert.equal(confirmed.revision,2);
+    assert.deepEqual(confirmed.drivers,seedDoc().drivers);
+    assert.deepEqual(confirmed.vehicles,seedDoc().vehicles);
   });
 
   await seed();
@@ -122,36 +122,46 @@ try{
       identity:liePlate.identity}));
 
 
-  // The ORIGINAL Fleet bridge performs tx.set(ref, payload), with payload
-  // consisting of vehicles, drivers, fuelCards, contacts, revision,
-  // migrationSourceSha256, updatedAt and updatedBy. It DOES NOT include the
-  // now REQUIRED identity counters. This actual SDK save replays that shape.
-  // It is a genuine POSITIVE control for legal original-Fleet editing.
+  // This former "legal" preseal rich edit is intentionally DENIED now;
+  // it would otherwise allow normalized business identity duplicates.
   await seed();
   const bridge=seedDoc();
   bridge.drivers[0].kapacitas=70;
-  const bridgePayload={
-    vehicles:bridge.vehicles,drivers:bridge.drivers,
-    fuelCards:bridge.fuelCards,contacts:bridge.contacts,
-    revision:2,migrationSourceSha256:digest,
-    updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
-    updatedBy:uid
-  };
-  const positiveRegressions=[];
-  try {
-    await setDoc(fleetRef,bridgePayload);
-    console.log('PASS [E+SDK] original bridge-shaped rich Fleet save ALLOWED');
-  } catch(error){
-    if(error.code!=='permission-denied')throw error;
-    const message='P1 REGRESSION [E+SDK] original bridge-shaped valid Fleet save DENIED: missing identity counters';
-    positiveRegressions.push(message);
-    console.error(message);
-  }
-  if(vulnerabilities.length || positiveRegressions.length){
+  await mustDeny('preseal original bridge-shaped rich array overwrite',
+    ()=>setDoc(fleetRef,{
+      vehicles:bridge.vehicles,drivers:bridge.drivers,
+      fuelCards:bridge.fuelCards,contacts:bridge.contacts,
+      revision:2,migrationSourceSha256:digest,
+      updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
+      updatedBy:uid
+    }));
+  // Positive control for ACTUAL intended workflow: after a trusted
+  // privileged source seal, changing a rich keyed driver retains history.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const privileged=ctx.firestore();
+    await setDoc(doc(privileged,'flottaSharedState','current'),{
+      ...seedDoc(),sealed:true
+    });
+    await setDoc(doc(privileged,'flottaDrivers','DA-0001'),{
+      id:'synthetic-driver1',daCode:'DA-0001',
+      status:'aktiv',kapacitas:50,
+      history:[{note:'original driver'}],revision:1,
+      futureField:{retain:true}
+    });
+  });
+  await expectAllow('postseal actual keyed rich driver edit still works',async()=>{
+    await updateDoc(doc(db,'flottaDrivers','DA-0001'),{
+      kapacitas:70,revision:2
+    });
+    const confirmed=(await getDoc(doc(db,'flottaDrivers','DA-0001'))).data();
+    assert.equal(confirmed.kapacitas,70);
+    assert.deepEqual(confirmed.history,[{note:'original driver'}]);
+    assert.deepEqual(confirmed.futureField,{retain:true});
+  });
+  if(vulnerabilities.length){
     throw Error('RELEASE NO-GO: '+vulnerabilities.length+
-      ' authenticated direct-SDK duplicate Fleet source writes ALLOWED and '+
-      positiveRegressions.length+' legal bridge-shaped save(s) DENIED. '+
-      'Counter field presence is neither an identity invariant nor a usable edit protocol.');
+      ' authenticated direct-SDK duplicate Fleet writes ALLOWED. '+
+      vulnerabilities.join('; '));
   }
   console.log('P0 ACCEPTANCE PASS: duplicate DA/plate updates denied by ACTUAL Rules.');
 } finally {

@@ -151,7 +151,7 @@ test('legacy fleetmanager session must not start app/Apps Script sync before Fir
     'Original inline code starts load() with a forgeable client-only legacy session before bridge executes; must fail-closed before Firebase Auth');
 });
 
-test('permanent revision conflict stops retry chain and preserves pending',async()=>{
+test('approved but unsealed preseal Fleet never enters an SDK revision-retry chain',async()=>{
   const h=mockBridge({importVerified:true,failTransactions:true});
   await h.login();
   h.save();
@@ -159,14 +159,13 @@ test('permanent revision conflict stops retry chain and preserves pending',async
   let attempts=0;
   while(h.pendingCallbacks()>0 && attempts<8){
     const callback=h.shiftCallback();
-    callback();
-    attempts++;
+    callback(); attempts++;
     for(let i=0;i<8;i++) await Promise.resolve();
   }
-  assert.equal(h.remoteWrites(),4,'One initial attempt plus no more than three retries');
-  assert.equal(h.pendingCallbacks(),0,'Failed transaction must not leave unbounded retry microtasks');
-  assert.equal(h.pending(),true,'Conflict must retain the local backup');
-  assert.match(h.status(),/Túl sok újrapróbálkozás|ütközés/i);
+  assert.equal(h.remoteWrites(),0,'Preseal source is read-only even with approved migration metadata');
+  assert.equal(h.pendingCallbacks(),0,'Preseal source must not schedule any unsafe writes or retry loops');
+  assert.equal(h.pending(),false,'Rejected preseal UI save must not stage a misleading pending write');
+  assert.match(h.status(),/csak olvasható|mentés letiltva/i);
 });
 
 test('legacy localStorage migration token cannot enable original Fleet writes',async()=>{

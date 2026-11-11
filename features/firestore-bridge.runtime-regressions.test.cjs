@@ -158,10 +158,11 @@ test('first Firebase login opens original Fleet read-only UI before import verif
     'Authentication succeeded, but the original Fleet UI remained locked');
 });
 
-test('two rapid saves cannot drop the second edit or erase its pending backup', async () => {
+test('preseal original Fleet rapid edits cannot write or stage phantom local data', async () => {
   const h = makeHarness({ importVerified: true });
   await h.login();
-  assert.equal(h.isUnlocked(), true, 'Import-verified account must unlock original UI');
+  assert.equal(h.isUnlocked(), true, 'Approved read-only Fleet UI must remain accessible');
+  await new Promise(resolve => setImmediate(resolve));
   h.setKm(100);
   h.save();
   h.setKm(200);
@@ -169,9 +170,11 @@ test('two rapid saves cannot drop the second edit or erase its pending backup', 
   await new Promise(resolve => setImmediate(resolve));
   h.releaseTransaction();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(h.getRemoteKm(), 200,
-    'The second edit was silently omitted from Firestore despite successful save status');
-  assert.equal(h.pending(), false, 'Pending backup may be cleared only after latest edit is persisted');
+  assert.equal(h.getRemoteKm(), 0,
+    'Before the privileged seal, neither ordinary nor rapid UI edits may rewrite original Fleet');
+  assert.equal(h.uploadCount(), 0, 'Preseal bridge must not even attempt an SDK write');
+  assert.equal(h.getLocalKm(), 0, 'Rejected edits may not remain as phantom local Fleet state');
+  assert.equal(h.pending(), false, 'Rejected preseal edits may not create an untrusted pending backup');
 });
 
 test('mismatched imported Fleet SHA never authorizes a write', async () => {
@@ -194,5 +197,6 @@ test('missing server Fleet SHA after verification cannot be silently removed by 
   h.save();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.getRemoteKm(), 0, 'Missing source SHA must abort before commit');
-  assert.equal(h.pending(), true, 'Latest local change must remain recoverable on failed write');
+  assert.equal(h.pending(), false, 'Preseal edit is blocked before staging a pending write');
+  assert.equal(h.getLocalKm(), 0, 'Original confirmed preseal data is restored after rejected edit');
 });

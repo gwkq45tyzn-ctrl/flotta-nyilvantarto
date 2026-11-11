@@ -35,7 +35,7 @@ assert.ok(bridgeRaw.includes(emulatorAnchor),'Bridge injection point changed: ST
 
 const fleetData={
   vehicles:[{id:'fleet-qa-vehicle-1',rendszam:'ABC-123',gyartmany:'Ford',modell:'Transit',km:5000,status:'aktiv',normalizedPlate:'ABC123',history:[{date:'2026-01-01',note:'synthetic'}]}],
-  drivers:[{daCode:'DA0001',name:'Synthetic',status:'aktiv',kapacitas:80}],
+  drivers:[{id:'driver-qa-1',daCode:'DA0001',name:'Synthetic',status:'aktiv',kapacitas:80,history:[{note:'synthetic driver'}]}],
   fuelCards:[{id:'FC001',provider:'synthetic'}],
   contacts:[{id:'CT001',name:'Synthetic Contact'}],
   revision:1
@@ -62,7 +62,16 @@ try{
       status:'approved',approvedUid:result.localId,sourceSha256:sourceSha,
       approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
     });
-    await setDoc(doc(db,'flottaSharedState','current'),fleetData);
+    // Actual POST-SEAL keyed migration fixture. The source arrays remain
+    // immutable while signed-in original Fleet editors operate on keyed
+    // flottaDrivers/ and flottaVehicles/ documents.
+    await setDoc(doc(db,'flottaSharedState','current'),{...fleetData,sealed:true});
+    await setDoc(doc(db,'flottaDrivers','DA0001'),{
+      ...fleetData.drivers[0],revision:1
+    });
+    await setDoc(doc(db,'flottaVehicles','ABC123'),{
+      ...fleetData.vehicles[0],revision:1
+    });
   });
   // Same emulator injection as existing passing original-Fleet browser test.
   // A test must never silently fall back to a real cloud project.
@@ -143,6 +152,15 @@ try{
     assert.match(sync||'',/Firestore|rev/, 'Browser '+(number+1)+' has confirmed sync status');
   }
   console.log('PASS [B+E]: both original Fleet browsers actually loaded rich approved source snapshot');
+  // The archived array is read-only after seal; both browsers must receive
+  // REAL server-confirmed keyed records before any edit can be enabled.
+  for(const page of [page1,page2]){
+    await page.waitForFunction(()=>
+      document.getElementById('syncStatus')?.textContent?.includes('rev 1') &&
+      typeof vehicles!=='undefined' && vehicles.some(v=>
+        v.rendszam==='ABC-123'&&v.km===5000),
+      null,{timeout:20000});
+  }
   // Real user interaction: click the original Fleet vehicle edit button,
   // change the actual #km form control, and submit #vehicleForm. Never mutate
   // a Firestore cache key to simulate a user edit: bridge.save() snapshots
@@ -160,19 +178,23 @@ try{
     if(!raw)return false;
     try{
       const v=JSON.parse(raw);
-      return v.revision===2 && v.vehicles?.[0]?.km===12345;
+      return v.revision===2 &&
+        typeof vehicles!=='undefined'&&vehicles.some(car=>
+          car.rendszam==='ABC-123'&&car.km===12345);
     }catch{return false;}
   },null,{timeout:20000});
   // rules-unit-testing.withSecurityRulesDisabled is scoped for execution;
   // it does NOT promise to return the callback's snapshot result.
-  let persisted;
+  let persisted,keyed;
   await env.withSecurityRulesDisabled(async ctx=>{
     persisted=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    keyed=await getDoc(doc(ctx.firestore(),'flottaVehicles','ABC123'));
   });
   assert.equal(persisted.exists(),true,'Server has canonical Fleet document');
   assert.equal(persisted.data().revision,2,'Server revision advanced after REAL original-UI save');
-  assert.equal(persisted.data().vehicles[0].km,12345,'Server saved vehicle km');
-  assert.deepEqual(persisted.data().vehicles[0].history,fleetData.vehicles[0].history,
+  assert.equal(persisted.data().vehicles[0].km,5000,'Archived source vehicle must stay immutable');
+  assert.equal(keyed.data().km,12345,'Server saved POSTSEAL KEYED vehicle km');
+  assert.deepEqual(keyed.data().history,fleetData.vehicles[0].history,
     'Original vehicle nested history must survive UI save');
   assert.equal(persisted.data().drivers[0].kapacitas,80,'Driver capacity preserved');
   assert.deepEqual(persisted.data().fuelCards,fleetData.fuelCards,'Original fuel cards preserved');
@@ -205,7 +227,9 @@ try{
   await page2.waitForFunction(()=>{
     try{
       const raw=JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}');
-      return raw.revision===3&&raw.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT';
+      return raw.revision===3 &&
+        typeof vehicles!=='undefined'&&vehicles.some(v=>
+          v.rendszam==='ABC-123'&&v.megjegyzes==='KEEP_A_EDIT');
     }catch{return false;}
   },null,{timeout:15000});
   // If the remote event refreshed the in-memory Fleet but NOT the open
@@ -223,19 +247,21 @@ try{
     return cache.revision>=4
       || /Ütközés|Mentési hiba|Túl sok újrapróbálkozás/.test(sync);
   },null,{timeout:20000});
-  let afterConflict;
+  let afterConflict,afterKeyed;
   await env.withSecurityRulesDisabled(async ctx=>{
     afterConflict=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
+    afterKeyed=await getDoc(doc(ctx.firestore(),'flottaVehicles','ABC123'));
   });
   assert.ok(afterConflict.exists());
-  const persistedAfter=afterConflict.data();
+  assert.ok(afterKeyed.exists());
+  const persistedAfter=afterConflict.data(),keyedAfter=afterKeyed.data();
   console.log('REAL RICH FORM STALE-EDIT DIAGNOSTIC (synthetic): '+
     JSON.stringify({serverRevision:persistedAfter.revision,
-      preservedForeignNote:persistedAfter.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT',
-      secondKmOnServer:persistedAfter.vehicles?.[0]?.km===22222}));
+      preservedForeignNote:keyedAfter.megjegyzes==='KEEP_A_EDIT',
+      secondKmOnServer:keyedAfter.km===22222}));
   // Failure here is an actual release blocker, not an emulator-only test
   // flake: A's committed note must not be reverted by B's stale edit form.
-  assert.equal(persistedAfter.vehicles[0].megjegyzes,'KEEP_A_EDIT',
+  assert.equal(keyedAfter.megjegyzes,'KEEP_A_EDIT',
     'P0 SILENT LOST UPDATE: stale original Fleet form B overwrote A committed note');
   if(persistedAfter.revision===3){
     const recovery=await page2.evaluate(()=>{
@@ -253,11 +279,11 @@ try{
       'Conflicted save must visibly warn operator, not falsely report success');
     assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222',
       'Original stale modal must retain typed input after denied submit');
-    assert.equal(persistedAfter.vehicles[0].km,12345,
+    assert.equal(keyedAfter.km,12345,
       'No stale B km was silently saved after conflict');
     console.log('PASS [B+E]: stale original Fleet form HARD STOP; foreign committed note intact, local km draft preserved');
   }else{
-    assert.equal(persistedAfter.vehicles[0].km,22222);
+    assert.equal(keyedAfter.km,22222);
     console.log('PASS [B+E]: concurrent real Fleet rich form edits merged without losing A note');
   }
   await page1.locator('#flottaLogout').click();

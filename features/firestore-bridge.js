@@ -44,6 +44,7 @@
   // or capacity silently does nothing). JSON clones prevent UI mutation.
   let appliedKeyed = { drivers: null, vehicles: null };
   let lastSealedSource = null;
+  let lastPresealSource = null;
   let memberVerified = false;
   let migrationServerApproved = false;
   let savePatched = false;
@@ -309,10 +310,12 @@
         // Firestore cache / pending local writes are not server-confirmed.
         // After seal only independently verified keyed masters drive the UI.
         if (data.sealed === true) {
+          lastPresealSource = null;
           lastSealedSource = data;
           ensureKeyedListeners();
         } else {
           stopKeyedListeners();
+          lastPresealSource = data;
         }
         applyRemote(data, true);
       } else {
@@ -367,6 +370,12 @@
         }
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
+        // P0: before the privileged migration is sealed, no ordinary
+        // browser may edit archived arrays or create normalized identities.
+        // The only writable original Fleet fields post-cutover are keyed
+        // master records, after server-approved seal/source attestation.
+        if(existing.sealed!==true)
+          throw new Error('PRESEAL_FLEET_READ_ONLY_REQUIRE_TRUSTED_CUTOVER');
         const projected = projectStrictMasters(draft);
         const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
         const payload = {
@@ -593,7 +602,39 @@
     vehicleEditGuardPatched = true;
   }
 
+  let presealEditorsPatched=false;
+  function canEditSealedFleet(){
+    return isPrimary() && lastSealedSource?.sealed===true
+      && appliedKeyed.drivers instanceof Map
+      && appliedKeyed.vehicles instanceof Map
+      && Array.isArray(keyedLive.drivers)
+      && Array.isArray(keyedLive.vehicles);
+  }
+  function patchPresealEditors(){
+    if(presealEditorsPatched)return;
+    presealEditorsPatched=true;
+    // Original HTML mutators can change in-memory arrays BEFORE calling
+    // window.save(). Guard their entrypoints, not just SDK persistence:
+    // rejected preseal edits must not appear in the UI as phantom saves.
+    const mutators=[
+      'editVehicle','editDriver','deleteVehicle','deleteDriver',
+      'quickStatusChange','openModal','openDriverModal','saveVehicle','saveDriver'
+    ];
+    for(const name of mutators){
+      const original=window[name];
+      if(typeof original!=='function')continue;
+      window[name]=function(...args){
+        if(!canEditSealedFleet()){
+          status('A lezárás előtti Flotta-törzs csak olvasható – a szerkesztés nem engedélyezett',true);
+          return;
+        }
+        return original.apply(this,args);
+      };
+    }
+  }
+
   function patchSave() {
+    patchPresealEditors();
     patchVehicleEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
@@ -603,6 +644,17 @@
       // Pre-import: strictly read-only. Do not call original save or stage pending.
       if (!isPrimary()) {
         status('Import ellenőrzés előtt csak olvasás – mentés letiltva', true);
+        return;
+      }
+      if (lastPresealSource || !lastSealedSource) {
+        // The original inline form mutates its JS arrays *before* calling
+        // save(). Restore the exact last server-confirmed source immediately
+        // so that no local phantom edit is mistaken for saved data.
+        if (lastPresealSource && !applyingRemote) {
+          localDirty=false;
+          applyRemote(lastPresealSource,true);
+        }
+        status('Migrációs lezárás előtt a Flotta csak olvasható – a módosítás nem lett mentve',true);
         return;
       }
       localDirty = true;

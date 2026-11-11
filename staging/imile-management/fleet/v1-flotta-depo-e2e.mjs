@@ -173,27 +173,34 @@ try{
     null,{timeout:20000});
   console.log('PASS [B+E]: actual original Depot UI shows server-confirmed Fleet rev 1 and normalized plate');
 
-  // Real user action in original Fleet form, while original Depot page is open.
+  // Preseal original Fleet must be truly read-only in the ORIGINAL GUI,
+  // not just via failed server saves. Click the real "edit" button: modal
+  // must NOT open; no phantom local change or pending SDK write can exist.
   await flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first()
     .click();
-  await flottaPage.locator('#modal.active #km').fill('99999');
-  await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]')
-    .click();
-
-  await depotPage.waitForFunction(()=>
-    document.getElementById('content')?.textContent
-      ?.includes('Eredeti Flotta – szerverről visszaigazolt adat (rev 2)')
-    && document.getElementById('content')?.textContent?.includes('ABC123'),
-    null,{timeout:20000});
+  await flottaPage.waitForFunction(()=>
+    document.getElementById('syncStatus')?.textContent
+      ?.includes('szerkesztés nem engedélyezett'),null,{timeout:12000});
+  const presealUI=await flottaPage.evaluate(()=>({
+    modalActive:document.getElementById('modal')?.classList.contains('active'),
+    vehicleKm:typeof vehicles==='undefined'?null:
+      vehicles.find(v=>v.rendszam==='ABC-123')?.km,
+    pending:localStorage.getItem('flotta_pending_v16')!==null
+  }));
+  assert.equal(presealUI.modalActive,false,'preseal original edit dialog must remain blocked');
+  assert.equal(presealUI.vehicleKm,fleetData.vehicles[0].km);
+  assert.equal(presealUI.pending,false,'preseal must never stage a misleading browser save');
   const persisted=await serverRead('flottaSharedState/current');
-  assert.equal(persisted.revision,2);
-  assert.equal(persisted.vehicles[0].km,99999);
+  assert.equal(persisted.revision,1,'preseal source revision must stay frozen');
+  assert.equal(persisted.vehicles[0].km,fleetData.vehicles[0].km);
   assert.deepEqual(persisted.vehicles[0].history,fleetData.vehicles[0].history);
   assert.deepEqual(persisted.fuelCards,fleetData.fuelCards);
   assert.deepEqual(persisted.contacts,fleetData.contacts);
   assert.equal(persisted.drivers[0].kapacitas,80);
   assert.equal(persisted.migrationSourceSha256,sourceSha);
-  console.log('PASS [B+E]: original Fleet form saved km 99999, Depot original UI live updated rev 1 -> 2 without reload; rich canonical data intact');
+  assert.ok((await depotPage.locator('#content').innerText())
+    .includes('Eredeti Flotta – szerverről visszaigazolt adat (rev 1)'));
+  console.log('PASS DENY [B+E]: preseal original Fleet form edit is read-only, no phantom save or archived source drift');
 
   // A booking is deliberately FORBIDDEN before trusted sealed migration
   // (#147). This synthetic, privileged local-emulator-only dry-run creates
@@ -204,7 +211,7 @@ try{
     const admin=ctx.firestore();
     const sourceRef=doc(admin,'flottaSharedState','current');
     const confirmed=(await getDoc(sourceRef)).data();
-    assert.equal(confirmed.revision,2);
+    assert.equal(confirmed.revision,1);
     const driver=confirmed.drivers[0],vehicle=confirmed.vehicles[0];
     assert.equal(driver.daCode,'DA0001');
     assert.equal(vehicle.rendszam,'ABC-123');
@@ -256,7 +263,7 @@ try{
   assert.equal(claimed.bookingId,tomorrow+'__ABC123');
   assert.equal(claimed.driverId,'DA0001');
   const afterBooking=await serverRead('flottaSharedState/current');
-  assert.equal(afterBooking.revision,2,'Booking must not rewrite Fleet revision');
+  assert.equal(afterBooking.revision,1,'Booking must not rewrite Fleet revision');
   assert.equal(afterBooking.migrationSourceSha256,sourceSha);
   assert.deepEqual(errors,[],'No hidden JS exceptions in actual app UIs');
   assert.deepEqual(blockedCloud,[],'No real Firebase cloud/prod network access');
