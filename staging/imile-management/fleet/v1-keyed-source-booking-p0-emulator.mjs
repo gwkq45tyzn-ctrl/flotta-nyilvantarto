@@ -31,7 +31,7 @@ const env=await initializeTestEnvironment({
 const db=env.authenticatedContext(uid,{email}).firestore();
 const sdk={doc,runTransaction};
 const driverMaster={
-  daCode:'DA0001',status:'aktiv',kapacitas:50,
+  daCode:'DA0001',status:'aktiv',kapacitas:50,sourceIndex:0,
   name:'Rich driver with original history',
   agency:'SYNTHETIC',
   contact:{name:'Synthetic contact',number:'NO_REAL_NUMBER'},
@@ -39,7 +39,7 @@ const driverMaster={
   revision:11
 };
 const vehicleMaster={
-  rendszam:'ABC-123',status:'aktiv',
+  rendszam:'ABC-123',status:'aktiv',sourceIndex:0,
   gyartmany:'Ford',modell:'Transit',
   extra:{year:2024,lastService:'2098-12-03'},
   history:[{type:'service',note:'must survive booking'}],
