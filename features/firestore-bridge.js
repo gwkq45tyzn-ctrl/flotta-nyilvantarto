@@ -38,6 +38,11 @@
   // supply the live original Fleet UI with rich keyed driver/car records.
   let keyedDriverUnsub = null, keyedVehicleUnsub = null;
   let keyedLive = { drivers: null, vehicles: null };
+  // Last source actually applied to the local Fleet UI, not merely received
+  // in a listener. Compare edits against THIS rich baseline, never against
+  // the immutable imported archive (otherwise reverting to a prior status
+  // or capacity silently does nothing). JSON clones prevent UI mutation.
+  let appliedKeyed = { drivers: null, vehicles: null };
   let lastSealedSource = null;
   let memberVerified = false;
   let migrationServerApproved = false;
@@ -264,6 +269,14 @@
           drivers: Array.isArray(live.drivers) ? live.drivers : [],
           contacts: Array.isArray(live.contacts) ? live.contacts : []
         });
+        if(data.sealed===true){
+          const driverKey=d=>String(d.daCode||'').trim().toUpperCase();
+          const vehicleKey=v=>String(v.rendszam||'').replace(/[ -]/g,'').toUpperCase();
+          appliedKeyed={
+            drivers:new Map(live.drivers.map(d=>[driverKey(d),JSON.parse(JSON.stringify(d))])),
+            vehicles:new Map(live.vehicles.map(v=>[vehicleKey(v),JSON.parse(JSON.stringify(v))]))
+          };
+        } else appliedKeyed={drivers:null,vehicles:null};
       }
       currentRevision = Number(data.revision) || 0;
       if (confirmed) {
@@ -344,6 +357,7 @@
     const draft = snapshot();
     const draftKey = JSON.stringify(draft);
     try {
+      let confirmedKeyedWrites=[];
       const newRev = await db.runTransaction(async (tx) => {
         const ref = db.doc(SHARED_STATE);
         const snap = await tx.get(ref);
@@ -405,13 +419,20 @@
               if (!id || id !== normalizer(previous[field]) || seen.has(id))
                 throw new Error('SEALED_IDENTITY_RENAME_OR_COLLISION');
               seen.add(id);
+              const applied = appliedKeyed[kind]?.get(id);
+              if(!applied)
+                throw new Error('SEALED_LOCAL_KEYED_BASELINE_NOT_CONFIRMED_' + id);
+              // Immutable imported arrays are ONLY used to validate identity
+              // membership. Rich field changes (including reverting to old
+              // status/capacity) are relative to the last successfully applied
+              // SERVER-CONFIRMED keyed source.
               const changed = Object.keys(row).filter(k =>
-                JSON.stringify(row[k]) !== JSON.stringify(previous[k]));
+                JSON.stringify(row[k]) !== JSON.stringify(applied[k]));
               if (!changed.length) continue;
               if (changed.some(k => ['id','daCode','rendszam','normalizedPlate'].includes(k)))
                 throw new Error('SEALED_IDENTITY_RENAME_REQUIRES_CUTOVER_SUPPORT');
               keyedWrites.push({
-                ref: db.doc(collectionName + '/' + id), previous, row, changed,
+                ref: db.doc(collectionName + '/' + id), previous:applied, row, changed,
                 collectionName, id
               });
             }
@@ -451,12 +472,23 @@
         tx.set(ref, payload);
         for (const item of keyedWrites)
           tx.set(item.ref, item.merged);
+        // Only advance local optimistic baseline AFTER the transaction
+        // completes successfully; retries may re-run this callback.
+        confirmedKeyedWrites=keyedWrites.map(({collectionName,id,merged})=>
+          ({kind:collectionName==='flottaDrivers'?'drivers':'vehicles',
+            id,data:JSON.parse(JSON.stringify(merged))}));
         // S7: flottaSharedState is the single canonical source.
         // Mirror writes removed to avoid 501-write budget and orphan risk.
         // Depó reads the projection from flottaSharedState via onSnapshot.
         return next;
       });
       currentRevision = newRev;
+      // A second immediate edit (e.g. service → available) must compare with
+      // the FIRST confirmed edit, even before its onSnapshot echo arrives.
+      for(const item of confirmedKeyedWrites){
+        if(appliedKeyed[item.kind])
+          appliedKeyed[item.kind].set(item.id,item.data);
+      }
       const latest = snapshot();
       const latestKey = JSON.stringify(latest);
       if (latestKey === draftKey) {
