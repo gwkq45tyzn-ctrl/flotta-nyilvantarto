@@ -63,18 +63,15 @@ async function mustDeny(label,action){
 }
 try{
   await seed();
-  // The current full restricted Rules do not require count maps; mapping
-  // alone was never a uniqueness proof. Fail only for ACTUAL duplicates.
-  // Positive check: keeping same counts on a legitimate single-record edit
-  // must work; a fail-closed but unusable Depot is not a valid fix.
-  await expectAllow('legitimate rich driver edit preserving identity maps',async()=>{
-    const source=seedDoc();
-    source.drivers[0].kapacitas=70;
-    await updateDoc(fleetRef,{revision:2,drivers:source.drivers,
-      identity:source.identity});
+  // NEW SECURITY CONTRACT: immutable imported identity arrays before AND
+  // after seal. A nonidentity metadata update is still allowed, proving that
+  // negative probes are not trivially denied for missing approval or auth.
+  await expectAllow('legitimate approved preseal metadata-only update',async()=>{
+    await updateDoc(fleetRef,{revision:2,updatedBy:uid});
     const confirmed=(await getDoc(fleetRef)).data();
-    assert.equal(confirmed.drivers[0].kapacitas,70);
-    assert.equal(confirmed.identity.daCnt['DA-0001'],1);
+    assert.equal(confirmed.revision,2);
+    assert.equal(confirmed.drivers[0].daCode,'DA-0001');
+    assert.equal(confirmed.vehicles[0].rendszam,'TEST0001');
   });
 
   await seed();
@@ -122,11 +119,8 @@ try{
       identity:liePlate.identity}));
 
 
-  // The ORIGINAL Fleet bridge performs tx.set(ref, payload), with payload
-  // consisting of vehicles, drivers, fuelCards, contacts, revision,
-  // migrationSourceSha256, updatedAt and updatedBy. It DOES NOT include the
-  // now REQUIRED identity counters. This actual SDK save replays that shape.
-  // It is a genuine POSITIVE control for legal original-Fleet editing.
+  // A raw original Fleet bridge-shaped source rewrite before trusted seal
+  // MUST now fail closed. Keep this regression test explicit, not discarded.
   await seed();
   const bridge=seedDoc();
   bridge.drivers[0].kapacitas=70;
@@ -137,21 +131,36 @@ try{
     updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
     updatedBy:uid
   };
-  const positiveRegressions=[];
-  try {
-    await setDoc(fleetRef,bridgePayload);
-    console.log('PASS [E+SDK] original bridge-shaped rich Fleet save ALLOWED');
-  } catch(error){
-    if(error.code!=='permission-denied')throw error;
-    const message='P1 REGRESSION [E+SDK] original bridge-shaped valid Fleet save DENIED: missing identity counters';
-    positiveRegressions.push(message);
-    console.error(message);
-  }
-  if(vulnerabilities.length || positiveRegressions.length){
+  await mustDeny('preseal original Fleet bridge-shaped edit cannot rewrite imported identity arrays',
+    ()=>setDoc(fleetRef,bridgePayload));
+
+  // Positive postseal: separately seeded privileged keyed identities remain
+  // safely editable without ever rewriting the frozen old arrays.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const admin=ctx.firestore();
+    const sealed=seedDoc();
+    await setDoc(doc(admin,'flottaSharedState','current'),{
+      ...sealed,sealed:true
+    });
+    await setDoc(doc(admin,'flottaDrivers','DA-0001'),{
+      ...sealed.drivers[0],revision:1
+    });
+    await setDoc(doc(admin,'flottaVehicles','TEST0001'),{
+      ...sealed.vehicles[0],revision:1
+    });
+  });
+  await expectAllow('postseal keyed rich driver capacity update remains possible',async()=>{
+    await updateDoc(doc(db,'flottaDrivers','DA-0001'),
+      {kapacitas:70,revision:2});
+    const post=await getDoc(doc(db,'flottaDrivers','DA-0001'));
+    assert.equal(post.data().kapacitas,70);
+    assert.deepEqual(post.data().history,seedDoc().drivers[0].history);
+  });
+
+  if(vulnerabilities.length){
     throw Error('RELEASE NO-GO: '+vulnerabilities.length+
-      ' authenticated direct-SDK duplicate Fleet source writes ALLOWED and '+
-      positiveRegressions.length+' legal bridge-shaped save(s) DENIED. '+
-      'Counter field presence is neither an identity invariant nor a usable edit protocol.');
+      ' forbidden signed-in preseal array writes were authorized. '+
+      'Source arrays must remain immutable until privileged sealed keyed import.');
   }
   console.log('P0 ACCEPTANCE PASS: duplicate DA/plate updates denied by ACTUAL Rules.');
 } finally {
