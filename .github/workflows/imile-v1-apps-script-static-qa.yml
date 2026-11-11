@@ -1,0 +1,27 @@
+name: iMile V1 #186 static legacy Apps Script writer inventory QA
+on:
+  pull_request:
+    paths:
+      - 'docs/V1_APPS_SCRIPT_INVENTORY.md'
+      - 'docs/v1-apps-script-inventory-static.test.mjs'
+      - '.github/workflows/imile-v1-apps-script-static-qa.yml'
+permissions:
+  contents: read
+jobs:
+  static-no-cloud-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check source inventory and published redaction without Google account access
+        run: |
+          node --check docs/v1-apps-script-inventory-static.test.mjs
+          node --test docs/v1-apps-script-inventory-static.test.mjs
+      - name: Explicit cutover NO-GO
+        run: echo "Static source does not establish which Apps Script or scheduled triggers are currently deployed"
