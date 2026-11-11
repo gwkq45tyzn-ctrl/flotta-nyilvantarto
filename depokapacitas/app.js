@@ -1,3 +1,4 @@
+import { projectKeyedMasters, capacityFromKeyed } from './keyed-live-master.mjs';
 import {prepareNextDay} from './next-day-forecast.mjs';
 import {emptySharedFleetPreview,projectSharedFleetSnapshot} from './flotta-master-readonly.mjs';
 import {reconcileSharedMaster} from './master-reconciliation.mjs';
@@ -267,7 +268,9 @@ const watchedCollections=[
 ];
 const liveSources=[...watchedCollections,'flottaSharedState','flottaMigrationApproval'];
 function refreshCanonicalMaster(){
- state.canonicalMaster=assessCanonicalMasterDisplay({
+ const keyed=projectKeyedMasters(driversSnap,vehiclesSnap,data);
+if(keyed){state.canonicalMaster=keyed;}else{state.canonicalMaster={trusted:false,drivers:[],vehicles:[],source:'blocked'};}
+state.canonicalMaster=assessCanonicalMasterDisplay({
   fleet:state.canonicalFleetRaw,
   approval:state.canonicalApproval,
   uid:state.uid,driverMirrors:state.data.drivers,
