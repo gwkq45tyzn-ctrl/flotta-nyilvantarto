@@ -56,9 +56,9 @@ try{
    revision:1,sealed:true,migrationSourceSha256:digest,
    vehicles:[{id:'synthetic-vehicle',rendszam:'ABC-123',normalizedPlate:'ABC123',status:'aktiv'}],
    drivers:[
-    {id:'synthetic-da1',daCode:'DA0001',status:'aktiv',kapacitas:50},
-    {id:'synthetic-da2',daCode:'DA-0002',status:'aktiv',kapacitas:70},
-    {id:'synthetic-da3',daCode:'DA_0003',status:'aktiv',kapacitas:80}
+    {id:'synthetic-da1',daCode:'DA0001',name:'Synthetic One',agency:'SYNTHETIC',status:'aktiv',kapacitas:50},
+    {id:'synthetic-da2',daCode:'DA-0002',name:'Synthetic Two',agency:'SYNTHETIC',status:'aktiv',kapacitas:70},
+    {id:'synthetic-da3',daCode:'DA_0003',name:'Synthetic Three',agency:'SYNTHETIC',status:'aktiv',kapacitas:80}
    ],fuelCards:[],contacts:[]
   });
   for(const [id,sourceIndex,capacity] of [
