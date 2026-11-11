@@ -126,6 +126,10 @@ async function main(){
       vehicles:[vehicle()]
     });
     await seed(duplicateDrivers);
+    await mustDeny('direct signed-in SDK cannot rewrite verified keyed driver sourceIndex 0→1',
+      ()=>updateDoc(ref(client,'flottaDrivers','DA0001'),{
+        sourceIndex:1,revision:2
+      }));
     // A malicious authorized SDK update of the source-identity claim might
     // be accepted, even AFTER seal. This must not be quietly ignored.
     await mustDeny('postseal SDK changes immutable driver identity claim 0→1 on duplicate DA',
@@ -141,6 +145,10 @@ async function main(){
       drivers:[driver()],
       vehicles:[vehicle('ABC-123','szerviz'),vehicle('abc 123','aktiv')]
     }));
+    await mustDeny('direct signed-in SDK cannot rewrite verified keyed vehicle sourceIndex 0→1',
+      ()=>updateDoc(ref(client,'flottaVehicles','ABC123'),{
+        sourceIndex:1,revision:2
+      }));
     await mustDeny('postseal SDK changes immutable vehicle identity claim 0→1 on duplicate plate',
       ()=>updateDoc(ref(client,'flottaVehicleClaims','ABC123'),{
         sourceIndex:1,revision:1
