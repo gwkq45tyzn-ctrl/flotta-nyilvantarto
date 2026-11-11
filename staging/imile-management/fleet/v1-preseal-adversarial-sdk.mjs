@@ -55,6 +55,11 @@ async function main(){
     await assertFails(setDoc(doc(client,'flottaDrivers','DA0001'),{daCode:'DA0001',status:'aktiv',kapacitas:80}));
     await assertFails(updateDoc(doc(client,'flottaDrivers','DA0001'),{history:[],revision:2}));
 
+    // Identity rewrite with otherwise valid source/revision must DENY.
+    await assertFails(updateDoc(doc(client,'flottaDrivers','DA0001'),{
+      daCode:'DA0002',revision:2
+    }));
+
     // Authenticated positive control: the Rules enforce the previous
     // preserved rich history, while permitting normal existing keyed fields.
     await updateDoc(doc(client,'flottaDrivers','DA0001'),{kapacitas:70,revision:2});
