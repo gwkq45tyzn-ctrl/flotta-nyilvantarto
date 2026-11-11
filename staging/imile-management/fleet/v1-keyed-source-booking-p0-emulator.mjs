@@ -94,6 +94,8 @@ async function seed({keyed,sealed=true}={}){
     if(keyed){
       await setDoc(doc(admin,'flottaDrivers','DA0001'),driverMaster);
       await setDoc(doc(admin,'flottaVehicles','ABC123'),vehicleMaster);
+      await setDoc(doc(admin,'flottaDriverClaims','DA0001'),{sourceIndex:0,revision:1});
+      await setDoc(doc(admin,'flottaVehicleClaims','ABC123'),{sourceIndex:0,revision:1});
     }
   });
 }
