@@ -49,13 +49,14 @@ export async function commitCanonicalDepotBooking({
   const confirmation=await sdk.runTransaction(db,async tx=>{
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
     const [oldBook,oldClaim,driver,vehicle,capacity,fleet,approval,
-      keyedDriver,keyedVehicle]=await Promise.all([
+      keyedDriver,keyedVehicle,driverIdentityClaim,vehicleIdentityClaim]=await Promise.all([
       tx.get(refs.booking),tx.get(refs.driverClaim),
       tx.get(refs.driver),tx.get(refs.vehicle),tx.get(refs.capacity),
       tx.get(refs.fleet),tx.get(refs.approval),
       // Canonical identity masters must be SEEDED before booking.
       // Never create/overwrite them in a booking transaction.
-      tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle)
+      tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle),
+      tx.get(refs.driverIdentityClaim),tx.get(refs.vehicleIdentityClaim)
     ]);
     if(oldBook.exists()||oldClaim.exists())
       throw Error('BOOKING_BLOCKED: already_occupied');
@@ -96,6 +97,17 @@ export async function commitCanonicalDepotBooking({
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>normDriver(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
+    // Identity-index proof must be seeded in the privileged import; direct
+    // SDK authors may NEVER create or amend it during a booking. Client
+    // attempts cannot promote duplicate archived rows to canonical.
+    if(!driverIdentityClaim.exists()||!vehicleIdentityClaim.exists()||
+       driverIdentityClaim.data().sourceIndex!==driverIndex||
+       vehicleIdentityClaim.data().sourceIndex!==vehicleIndex||
+       !Number.isSafeInteger(driverIdentityClaim.data().revision)||
+       !Number.isSafeInteger(vehicleIdentityClaim.data().revision)||
+       driverIdentityClaim.data().revision>fleetData.revision||
+       vehicleIdentityClaim.data().revision>fleetData.revision)
+      throw Error('BOOKING_BLOCKED: privileged_identity_proof_missing_or_drift');
     if(!keyedDriver.exists()||!keyedVehicle.exists())
       throw Error('BOOKING_BLOCKED: missing_keyed_master');
     const kd=keyedDriver.data(),kv=keyedVehicle.data();
@@ -106,9 +118,8 @@ export async function commitCanonicalDepotBooking({
       throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
-    // Identity claims required by Rules for booking.
-    tx.set(refs.driverIdentityClaim,{sourceIndex:driverIndex,revision:fleetData.revision});
-    tx.set(refs.vehicleIdentityClaim,{sourceIndex:vehicleIndex,revision:fleetData.revision});
+    // Read-only identity-index proofs were verified above and by Rules.
+    // Only write booking + date-scoped reverse claim, atomically.
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.
