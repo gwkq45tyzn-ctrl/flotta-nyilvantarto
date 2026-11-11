@@ -8,7 +8,10 @@ const workflow=read('../../.github/workflows/imile-staging.yml');
 
 assert.match(app,/import \{prepareNextDay\} from '\.\/next-day-forecast\.mjs'/);
 assert.match(app,/function nextDayPanel\(\)/);
-assert.match(app,/sourcesReady:assessSources\(state.sourceMeta,\{online:navigator.onLine\}\)\.trusted/);
+assert.match(app,/import \{projectKeyedMasters\} from '\.\/keyed-live-master\.mjs'/);
+assert.match(app,/\['flottaDrivers','keyedDriversSnap'\]/);
+assert.match(app,/\['flottaVehicles','keyedVehiclesSnap'\]/);
+assert.match(app,/sourcesReady:assessSources\(state.sourceMeta,\{online:navigator.onLine,required:liveSources\}\)\.trusted&&state.canonicalMaster\?\.trusted===true/);
 assert.match(app,/return datebar\(\)\+nextDayPanel\(\)\+centralTaskList\(8\)/);
 assert.match(app,/return datebar\(\)\+nextDayPanel\(\)\+centralTaskList\(5\)/);
 assert.match(app,/Visszaigazolt kapacitás/);
