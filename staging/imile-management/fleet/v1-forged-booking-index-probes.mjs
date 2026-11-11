@@ -42,22 +42,16 @@ const data=({driverIndex=0,vehicleIndex=0,capacity=80}={})=>({
   status:'planned',capacity,driverIndex,vehicleIndex
 });
 const newBooking=(db,opts={})=>{
-  // This ATOMIC four-document booking + reverse claim + both identity claims
-  // is the one actual Depot uses. A lone booking setDoc cannot prove authorization.
+  // This ATOMIC booking + reverse driver claim is the current fixed
+  // original Depot transaction, AFTER privileged identity claim import. A lone booking setDoc cannot prove authorization.
   const batch=writeBatch(db);
   batch.set(ref(db,'bookings',bookingId),data(opts));
   batch.set(ref(db,'driverClaims',claimId),{
     date,driverId:'DA0001',bookingId
   });
-  // Critical: the REAL original Depot transaction writes FOUR documents.
-  // Both source identity claims are getAfter() prerequisites under the full
-  // Rules. A two-document booking also gives a meaningless DENY.
-  batch.set(ref(db,'flottaDriverClaims','DA0001'),{
-    sourceIndex:opts.driverIndex??0,revision:1
-  });
-  batch.set(ref(db,'flottaVehicleClaims','ABC123'),{
-    sourceIndex:opts.vehicleIndex??0,revision:1
-  });
+  // #133 FIX: source-index claims are now PRIVILEGED and immutable. They
+  // are seeded above, and the original Depot no longer writes them.
+  // The booking + date-scoped reverse claim remain atomic.
   return batch.commit();
 };
 const findings=[];
@@ -117,7 +111,7 @@ async function main(){
     assert.equal(reverse.exists(),true);
     assert.equal(saved.data().capacity,80);
     assert.equal(reverse.data().bookingId,bookingId);
-    console.log('PASS ALLOW [E+SDK]: genuine sealed Fleet + canonical indexes + 80 capacity atomic FOUR-document booking');
+    console.log('PASS ALLOW [E+SDK]: valid sealed Fleet with PRIVILEGED identity claims supports atomic booking');
 
     await seed();
     // Control: the OLD Grok setDoc-only strategy always fails because
