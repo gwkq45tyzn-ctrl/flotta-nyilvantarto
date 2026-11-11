@@ -204,14 +204,20 @@ try{
       daCode:'DA-0002',status:'aktiv',kapacitas:70,
       name:'Migrated Hyphen Driver',history:[{type:'onboarding',note:'PRESERVE'}]
     });
+    await setDoc(doc(db,'flottaDriverClaims','DA-0002'),{sourceIndex:1,revision:1});
   });
-  const hyphenBooked=await commitCanonicalDepotBooking({
+  const hyphenRequest=()=>commitCanonicalDepotBooking({
     db:shared,sdk,uid,getCurrentUid:()=>uid,offline:false,
     booking:{
       date:'2099-01-10',driverId:'DA-0002',vehicleId:'ABC123',
       district:'01',status:'planned'
     }
   });
+  await shouldReject('missing privileged DA-0002 sourceIndex rejects booking',
+    hyphenRequest,/BOOKING_BLOCKED: keyed_master_drift/);
+  await env.withSecurityRulesDisabled(ctx=>
+    updateDoc(doc(ctx.firestore(),'flottaDrivers','DA-0002'),{sourceIndex:1}));
+  const hyphenBooked=await hyphenRequest();
   assert.equal(hyphenBooked.committed,true,
     'Valid ASCII hyphenated DA must book under Rules + canonical projection');
   const hyphenBooking=await getDoc(doc(shared,'bookings','2099-01-10__ABC123'));
