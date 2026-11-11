@@ -183,7 +183,11 @@ test('unconfirmed cache or pending snapshots cannot overwrite Fleet even after i
   assert.equal(client.applications(),applications);
 });
 
-test('confirmed write in one browser appears in another without reload',async()=>{
+test('two signed-in preseal browsers must not exchange unverified array edits',async()=>{
+  // Historical preview remains readable, but a normal Fleet save must be
+  // refused until independently verified keyed masters are fully sealed.
+  // Postseal live multi-browser behavior is covered by the actual
+  // signed-in 2-Chromium Fleet/Depot Firebase-emulator E2E gate.
   const server=makeServer(fixture(),{approved:true});
   const first=makeClient(server,{verified:true,localKm:0});
   const second=makeClient(server,{verified:true,localKm:0});
@@ -196,7 +200,11 @@ test('confirmed write in one browser appears in another without reload',async()=
   first.save();
   await tick();
   await tick();
-  assert.equal(server.state.vehicles[0].km,250,'Server must have the confirmed change');
-  assert.equal(second.km(),250,'Second browser must apply the confirmed snapshot');
-  assert.equal(first.pending(),false,'First browser pending backup cleared after confirmed commit');
+  assert.equal(server.state.vehicles[0].km,10,
+    'Preseal unauthorized browser must not mutate canonical vehicle array');
+  assert.equal(second.km(),10,
+    'Second browser must never apply unconfirmed preseal Fleet edits');
+  assert.equal(first.originalSaves(),0,
+    'Preseal UI must not write original localStorage/pending backup');
+  assert.equal(first.pending(),false);
 });

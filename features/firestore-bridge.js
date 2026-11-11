@@ -367,6 +367,11 @@
         }
         const next = serverRev + 1;
         const existing = snap.exists ? snap.data() : {};
+        // P0 #133/#141: normal browser bridge may NEVER update a preseal
+        // imported Fleet array. Only privileged migration may create keyed
+        // masters, verify identity parity and seal the frozen archive.
+        if(existing.sealed!==true)
+          throw new Error('PRESEAL_FLEET_READ_ONLY_UNTIL_TRUSTED_IMPORT');
         const projected = projectStrictMasters(draft);
         const norm=s=>String(s||'').replace(/[\s-]/g,'').toUpperCase();
         const payload = {
@@ -593,16 +598,52 @@
     vehicleEditGuardPatched = true;
   }
 
+  // Original Fleet's inline handlers mutate in-memory objects BEFORE
+  // calling save(). Block them at the user-event boundary, so a preseal
+  // editor cannot silently change local records or accidentally persist a
+  // pending legacy save that will replay after a trusted seal.
+  let presealEditGuardPatched=false;
+  function patchPresealEditGuard(){
+    if(presealEditGuardPatched)return;
+    presealEditGuardPatched=true;
+    const allowed=()=>lastSealedSource?.sealed===true&&isPrimary();
+    const block=event=>{
+      if(allowed())return false;
+      if(event&&typeof event.preventDefault==='function')event.preventDefault();
+      if(event&&typeof event.stopImmediatePropagation==='function')
+        event.stopImmediatePropagation();
+      status('Lezárás előtt a Flotta futár- és autótörzse írásvédett. Csak a hitelesített kulcsolt import után szerkeszthető.',true);
+      return true;
+    };
+    const methods=['editVehicle','editDriver','openVehicleModal',
+      'openDriverModal','saveVehicle','saveDriver','deleteVehicle',
+      'deleteDriver','quickStatusChange','openStatusModal'];
+    for(const name of methods){
+      const original=window[name];
+      if(typeof original!=='function')continue;
+      window[name]=function(...args){
+        if(block(args[0]&&typeof args[0].preventDefault==='function'?args[0]:null))
+          return;
+        return original.apply(this,args);
+      };
+    }
+    for(const id of ['vehicleForm','driverForm']){
+      const form=document.getElementById(id);
+      if(form)form.addEventListener('submit',event=>{block(event);},true);
+    }
+  }
+
   function patchSave() {
     patchVehicleEditGuard();
+    patchPresealEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
     savePatched = true;
     window.save = function () {
       if (typeof fleetGateSession !== 'function' || !fleetGateSession()) return;
       // Pre-import: strictly read-only. Do not call original save or stage pending.
-      if (!isPrimary()) {
-        status('Import ellenőrzés előtt csak olvasás – mentés letiltva', true);
+      if (!isPrimary()||lastSealedSource?.sealed!==true) {
+        status('Lezárás előtt a Flotta-törzs írásvédett – csak a hitelesített kulcsolt import után menthető', true);
         return;
       }
       localDirty = true;

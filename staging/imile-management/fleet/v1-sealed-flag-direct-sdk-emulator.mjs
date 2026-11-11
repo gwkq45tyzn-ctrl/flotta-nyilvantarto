@@ -107,15 +107,18 @@ try{
     ()=>setDoc(fleetRef,{...base(),revision:2,
       updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
       updatedBy:uid}));
-  // The original Fleet source was seeded without 'sealed'; the current
-  // unadapted bridge still produces a full replacement without it.
-  // Before any approved structural cutover, this legal path MUST continue.
+  // Trusted source before seal: all old arrays are immutable to signed
+  // in browser clients, regardless of whether the original source carried
+  // a 'sealed' property. A metadata-only revision update stays possible.
   await seed('absent');
-  await allow('pre-cutover original Fleet full bridge save without sealed field',()=>{
+  await deny('preseal original Fleet full bridge edit of rich master is forbidden',()=>{
     const d=base();d.revision=2;d.drivers[0].kapacitas=70;
     return setDoc(fleetRef,{...d,
       updatedAt:Timestamp.fromDate(new Date('2026-11-10T00:00:00Z')),
       updatedBy:uid});
+  });
+  await allow('preseal metadata-only update preserves original identities',()=>{
+    return updateDoc(fleetRef,{revision:2,updatedBy:uid});
   });
 
   assert.deepEqual(violations,[],

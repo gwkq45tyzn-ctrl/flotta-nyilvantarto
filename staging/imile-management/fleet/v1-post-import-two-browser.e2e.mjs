@@ -1,7 +1,8 @@
 /**
  * REAL post-import two-browser Flotta E2E against local Auth/Firestore emulators.
  * Uses original index.html. Synthetic data only. No live Firebase or real data.
- * Proves: login unlock after approved import, data load, save, sync between browsers.
+ * Proves: login + server source readback after approval, preseal read-only in both real browser contexts.
+ * The same CI workflow separately runs the actual postseal two-browser Fleet/Depo save and conflict acceptance.
  */
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -143,123 +144,38 @@ try{
     assert.match(sync||'',/Firestore|rev/, 'Browser '+(number+1)+' has confirmed sync status');
   }
   console.log('PASS [B+E]: both original Fleet browsers actually loaded rich approved source snapshot');
-  // Real user interaction: click the original Fleet vehicle edit button,
-  // change the actual #km form control, and submit #vehicleForm. Never mutate
-  // a Firestore cache key to simulate a user edit: bridge.save() snapshots
-  // original in-memory Fleet arrays, not the cache.
-  const editFirst=page1.locator('#vehicleTable button[onclick^="editVehicle"]').first();
-  await editFirst.waitFor({state:'visible',timeout:15000});
-  await editFirst.click();
-  await page1.locator('#modal.active #km').fill('12345');
-  await page1.locator('#modal.active #vehicleForm button[type="submit"]').click();
-
-  // The Firestore local cache is just a *receiver* of server-confirmed data,
-  // not a source of truth or a fake mutation point.
-  await page2.waitForFunction(()=>{
-    const raw=localStorage.getItem('flotta_firestore_cache_v3');
-    if(!raw)return false;
-    try{
-      const v=JSON.parse(raw);
-      return v.revision===2 && v.vehicles?.[0]?.km===12345;
-    }catch{return false;}
-  },null,{timeout:20000});
-  // rules-unit-testing.withSecurityRulesDisabled is scoped for execution;
-  // it does NOT promise to return the callback's snapshot result.
+  // #133/#141: approved SOURCE without a privileged full keyed seal is
+  // READ-ONLY in BOTH actual original Fleet browsers. This is intentional.
+  // The first browser's edit controls must never open a preseal mutation form.
+  for(const [browserNumber,page] of [page1,page2].entries()){
+    const button=page.locator('#vehicleTable button[onclick^="editVehicle"]').first();
+    await button.waitFor({state:'visible',timeout:15000});
+    await button.click();
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('#modal.active').count(),0,
+      'Browser '+(browserNumber+1)+' must block preseal source edits');
+    const read=await page.evaluate(()=>({
+      cache:JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}'),
+      pending:localStorage.getItem('flotta_pending_v16')
+    }));
+    assert.equal(read.cache.revision,1);
+    assert.equal(read.cache.vehicles?.[0]?.km,5000);
+    assert.equal(read.pending,null,'No rejected preseal edit can be queued for replay');
+  }
+  // Only independent privileged migration can seed keyed masters and seal.
+  // The separate ORIGINAL Fleet+Depot 2-browser E2E in this same CI workflow
+  // proves sealed form km/capacity/status changes and the stale-form STOP.
   let persisted;
   await env.withSecurityRulesDisabled(async ctx=>{
     persisted=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
   });
-  assert.equal(persisted.exists(),true,'Server has canonical Fleet document');
-  assert.equal(persisted.data().revision,2,'Server revision advanced after REAL original-UI save');
-  assert.equal(persisted.data().vehicles[0].km,12345,'Server saved vehicle km');
-  assert.deepEqual(persisted.data().vehicles[0].history,fleetData.vehicles[0].history,
-    'Original vehicle nested history must survive UI save');
-  assert.equal(persisted.data().drivers[0].kapacitas,80,'Driver capacity preserved');
-  assert.deepEqual(persisted.data().fuelCards,fleetData.fuelCards,'Original fuel cards preserved');
-  assert.deepEqual(persisted.data().contacts,fleetData.contacts,'Original contacts preserved');
-  assert.equal(persisted.data().migrationSourceSha256,sourceSha,
-    'Original import provenance SHA must be retained');
-  console.log('PASS [B+E]: original Fleet vehicle form edit persisted to REAL Firestore emulator with all rich data intact');
-
-  // The second *original Fleet UI*, not only the cache, must display the edit.
-  const editSecond=page2.locator('#vehicleTable button[onclick^="editVehicle"]').first();
-  await editSecond.click();
-  await page2.waitForFunction(()=>document.getElementById('km')?.value==='12345',null,{timeout:10000});
-  assert.equal(await page2.locator('#modal.active #km').inputValue(),'12345');
-  console.log('PASS [B+E]: second independent original Fleet UI reflects edit without reload');
-
-  // P0 RED-TEAM: both ORIGINAL Fleet vehicle forms are edited against the
-  // same rich record. Client B starts an edit BEFORE A saves a different field.
-  // Once A's server update arrives, the stale B form must NEVER silently
-  // overwrite A's unrelated note. Either merge correctly using server source,
-  // or refuse B's stale save and preserve B's pending km value for recovery.
-  await page2.locator('#modal.active button[onclick="closeModal()"]').click();
-  await page2.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
-  const staleNote=await page2.locator('#modal.active #megjegyzes').inputValue();
-  await page2.locator('#modal.active #km').fill('22222');
-
-  await page1.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
-  await page1.locator('#modal.active #megjegyzes').fill('KEEP_A_EDIT');
-  await page1.locator('#modal.active #vehicleForm button[type="submit"]').click();
-
-  await page2.waitForFunction(()=>{
-    try{
-      const raw=JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}');
-      return raw.revision===3&&raw.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT';
-    }catch{return false;}
-  },null,{timeout:15000});
-  // If the remote event refreshed the in-memory Fleet but NOT the open
-  // editing modal, the form still holds a stale value for the other field.
-  assert.equal(await page2.locator('#modal.active #megjegyzes').inputValue(),
-    staleNote,'Stale B modal must be reproducibly open for negative QA');
-  assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222');
-  await page2.locator('#modal.active #vehicleForm button[type="submit"]').click();
-
-  await page2.waitForFunction(()=>{
-    const sync=document.getElementById('syncStatus')?.textContent||'';
-    let cache;
-    try{cache=JSON.parse(localStorage.getItem('flotta_firestore_cache_v3')||'{}');}
-    catch{cache={};}
-    return cache.revision>=4
-      || /Ütközés|Mentési hiba|Túl sok újrapróbálkozás/.test(sync);
-  },null,{timeout:20000});
-  let afterConflict;
-  await env.withSecurityRulesDisabled(async ctx=>{
-    afterConflict=await getDoc(doc(ctx.firestore(),'flottaSharedState','current'));
-  });
-  assert.ok(afterConflict.exists());
-  const persistedAfter=afterConflict.data();
-  console.log('REAL RICH FORM STALE-EDIT DIAGNOSTIC (synthetic): '+
-    JSON.stringify({serverRevision:persistedAfter.revision,
-      preservedForeignNote:persistedAfter.vehicles?.[0]?.megjegyzes==='KEEP_A_EDIT',
-      secondKmOnServer:persistedAfter.vehicles?.[0]?.km===22222}));
-  // Failure here is an actual release blocker, not an emulator-only test
-  // flake: A's committed note must not be reverted by B's stale edit form.
-  assert.equal(persistedAfter.vehicles[0].megjegyzes,'KEEP_A_EDIT',
-    'P0 SILENT LOST UPDATE: stale original Fleet form B overwrote A committed note');
-  if(persistedAfter.revision===3){
-    const recovery=await page2.evaluate(()=>{
-      try {
-        const d=JSON.parse(localStorage.getItem('flotta_stale_vehicle_draft_v1')||'{}');
-        return {id:d.id,km:d.fields?.km,note:d.fields?.megjegyzes,
-          message:document.getElementById('syncStatus')?.textContent};
-      } catch{return null;}
-    });
-    assert.equal(recovery?.id,'fleet-qa-vehicle-1',
-      'Rejected B edit must keep original vehicle identity in separate recovery draft');
-    assert.equal(recovery?.km,'22222',
-      'Rejected stale B edit must preserve pending km 22222 for recovery/export');
-    assert.match(recovery?.message||'',/Ütközés|helyi piszkozat/i,
-      'Conflicted save must visibly warn operator, not falsely report success');
-    assert.equal(await page2.locator('#modal.active #km').inputValue(),'22222',
-      'Original stale modal must retain typed input after denied submit');
-    assert.equal(persistedAfter.vehicles[0].km,12345,
-      'No stale B km was silently saved after conflict');
-    console.log('PASS [B+E]: stale original Fleet form HARD STOP; foreign committed note intact, local km draft preserved');
-  }else{
-    assert.equal(persistedAfter.vehicles[0].km,22222);
-    console.log('PASS [B+E]: concurrent real Fleet rich form edits merged without losing A note');
-  }
+  assert.equal(persisted.exists(),true);
+  assert.equal(persisted.data().revision,1);
+  assert.equal(persisted.data().vehicles[0].km,5000);
+  assert.deepEqual(persisted.data().vehicles[0].history,fleetData.vehicles[0].history);
+  assert.equal(persisted.data().drivers[0].kapacitas,80);
+  assert.equal(persisted.data().migrationSourceSha256,sourceSha);
+  console.log('PASS [B+E]: BOTH original Fleet browsers remain preseal read-only, no pending replay or rich data loss');
   await page1.locator('#flottaLogout').click();
   await page1.waitForFunction(()=>document.body.classList.contains('flotta-locked'),null,{timeout:15000});
   console.log('PASS [B+E]: logout re-locks');
