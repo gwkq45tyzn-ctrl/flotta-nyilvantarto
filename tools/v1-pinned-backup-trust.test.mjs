@@ -91,5 +91,5 @@ test('extra / missing / mutated keyed documents block full parity at source seal
 });
 test('oversized invalid source and unsupported nested values never obtain authorization',()=>{
   const raw=source();raw.extension.bad=undefined;
-  assert.throws(()=>simulateBackup(raw),/Non-JSON source/);
+  assert.throws(()=>simulateBackup(raw),/Non-JSON value in source: undefined/);
 });
