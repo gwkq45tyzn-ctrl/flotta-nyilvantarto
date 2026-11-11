@@ -206,10 +206,14 @@ try{
     ()=>bookFuture('2099-01-01'));
   const realDAClaim=await getDoc(doc(shared,'flottaDriverClaims','TEST0001'));
   const realPlateClaim=await getDoc(doc(shared,'flottaVehicleClaims','TEST0001'));
-  assert.equal(realDAClaim.exists(),true,'DA claim must be committed atomically');
-  assert.equal(realPlateClaim.exists(),true,'Plate claim must be committed atomically');
-  assert.deepEqual(realDAClaim.data(),{sourceIndex:0,revision:2});
-  assert.deepEqual(realPlateClaim.data(),{sourceIndex:0,revision:2});
+  // With privileged-only immutable keyed sourceIndex, browser bookings
+  // must NEVER manufacture any independent identity attestations.
+  assert.equal(realDAClaim.exists(),false,'Booking must not mint privileged DA identity attestations');
+  assert.equal(realPlateClaim.exists(),false,'Booking must not mint privileged plate identity attestations');
+  const keyedDA=await getDoc(doc(shared,'flottaDrivers','TEST0001'));
+  const keyedPlate=await getDoc(doc(shared,'flottaVehicles','TEST0001'));
+  assert.equal(keyedDA.data().sourceIndex,0,'Privileged keyed driver source index preserved');
+  assert.equal(keyedPlate.data().sourceIndex,0,'Privileged keyed plate source index preserved');
   // Valid plate normalization survives a hyphen in the canonical original.
   await env.withSecurityRulesDisabled(ctx=>
     setDoc(fleet(ctx.firestore()),{...fleetData(2),
