@@ -143,10 +143,10 @@ try{
       ...sealed,sealed:true
     });
     await setDoc(doc(admin,'flottaDrivers','DA-0001'),{
-      ...sealed.drivers[0],revision:1
+      ...sealed.drivers[0],sourceIndex:0,revision:1
     });
     await setDoc(doc(admin,'flottaVehicles','TEST0001'),{
-      ...sealed.vehicles[0],revision:1
+      ...sealed.vehicles[0],sourceIndex:0,revision:1
     });
   });
   await expectAllow('postseal keyed rich driver capacity update remains possible',async()=>{

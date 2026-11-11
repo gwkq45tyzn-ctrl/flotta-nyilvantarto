@@ -80,13 +80,17 @@ async function seed(overrides={}){
       // The booking is forbidden to manufacture its own canonical authority.
       // This synthetic privileged migration seeds both keyed masters first.
       await setDoc(doc(db,'flottaDrivers','DA0001'),{
-        daCode:'DA0001',status:'aktiv',kapacitas:50,
+        daCode:'DA0001',status:'aktiv',kapacitas:50,sourceIndex:0,
         name:'Migrated Driver',history:[{type:'onboarding',note:'PRESERVE'}]
       });
       await setDoc(doc(db,'flottaVehicles','ABC123'),{
-        rendszam:'ABC-123',status:'aktiv',gyartmany:'Ford',modell:'Transit',
+        rendszam:'ABC-123',status:'aktiv',sourceIndex:0,gyartmany:'Ford',modell:'Transit',
         history:[{type:'service',note:'PRESERVE'}]
       });
+      // The privileged importer—not the Depot booking—pins each original
+      // normalized identity to its sole verified source index.
+      await setDoc(doc(db,'flottaDriverClaims','DA0001'),{sourceIndex:0,revision:1});
+      await setDoc(doc(db,'flottaVehicleClaims','ABC123'),{sourceIndex:0,revision:1});
     }
     if(overrides.approval!==false)
       await setDoc(doc(db,'flottaMigrationApproval','current'),overrides.approvalData||approval);
@@ -125,8 +129,8 @@ try{
   assert.equal(claim.data().bookingId,'2099-01-01__ABC123');
   const driverIdentityClaim=await getDoc(doc(shared,'flottaDriverClaims','DA0001'));
   const vehicleIdentityClaim=await getDoc(doc(shared,'flottaVehicleClaims','ABC123'));
-  assert.equal(driverIdentityClaim.exists(),true,'Identity DA claim must be atomically created');
-  assert.equal(vehicleIdentityClaim.exists(),true,'Identity vehicle claim must be atomically created');
+  assert.equal(driverIdentityClaim.exists(),true,'Trusted DA identity proof must exist before booking');
+  assert.equal(vehicleIdentityClaim.exists(),true,'Trusted plate identity proof must exist before booking');
   assert.deepEqual(driverIdentityClaim.data(),{sourceIndex:0,revision:1});
   assert.deepEqual(vehicleIdentityClaim.data(),{sourceIndex:0,revision:1});
   console.log('PASS [E]: actual committed canonical booking + driverClaim atomic pair');

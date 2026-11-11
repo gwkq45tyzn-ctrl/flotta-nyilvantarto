@@ -72,7 +72,23 @@ async function main(){
   try {
     const snapshot=before(),health=preflight(snapshot);
     assert.equal(health.ok,true,JSON.stringify(health.errors));
+    // P0 #133: full normalized source uniqueness is verified BEFORE any
+    // privileged import or seal. Neither a client's index nor a mutable
+    // metadata counter can replace this complete preflight.
+    const duplicateDA=before();
+    duplicateDA.drivers[1].daCode='da0001';
+    const duplicatePlate=before();
+    duplicatePlate.vehicles[1].rendszam='ABC 123';
+    assert.equal(preflight(duplicateDA).ok,false,'forged duplicated DA source must be refused');
+    assert.equal(preflight(duplicatePlate).ok,false,'normalized duplicate plate source must be refused');
+    assert.throws(()=>buildPlan(duplicateDA),/Duplicate DA/i);
+    assert.throws(()=>buildPlan(duplicatePlate),/Duplicate plate/i);
+    console.log('PASS [E]: privileged migration refuses poisoned duplicate DA and normalized-plate sources');
     const plan=buildPlan(snapshot,health);
+    assert.equal(plan.drivers.find(x=>x.id==='DA0001').data.sourceIndex,0);
+    assert.equal(plan.drivers.find(x=>x.id==='DA0002').data.sourceIndex,1);
+    assert.equal(plan.vehicles.find(x=>x.id==='ABC123').data.sourceIndex,0);
+    assert.equal(plan.vehicles.find(x=>x.id==='XYZ999').data.sourceIndex,1);
     assert.equal(plan.authorizedForImport,false);
     assert.equal(plan.firestoreEncodedSizeVerified,false);
     assert.equal(plan.sourceSha256,sha256(snapshot));

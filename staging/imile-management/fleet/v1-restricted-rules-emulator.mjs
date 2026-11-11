@@ -58,11 +58,8 @@ function bookFuture(date,{vehicleId='TEST0001',driverId='TEST0001',capacity=50,d
   b.set(doc(shared,'driverClaims',date+'__'+driverId),{
     date,driverId,bookingId
   });
-  // The new restricted Rules require BOTH canonical identity claims in the
-  // SAME atomic batch. Their index+revision must match the trusted Fleet.
-  // This is NOT a global-uniqueness proof: the #133 hostile SDK tests remain.
-  b.set(doc(shared,'flottaDriverClaims',driverId),{sourceIndex:driverIndex,revision:2});
-  b.set(doc(shared,'flottaVehicleClaims',vehicleId),{sourceIndex:vehicleIndex,revision:2});
+  // The privileged import pins immutable sourceIndex directly on the already
+  // confirmed keyed driver/vehicle. The booking only writes two records.
   return b.commit();
 }
 const locations=[
@@ -153,11 +150,11 @@ try{
     // Trusted migration must seed canonical keyed sources BEFORE any booking.
     // Never manufacture them in the booking batch.
     await setDoc(doc(source,'flottaDrivers','TEST0001'),{
-      daCode:'TEST0001',status:'aktiv',kapacitas:50,
+      daCode:'TEST0001',status:'aktiv',kapacitas:50,sourceIndex:0,
       history:[{note:'original rich driver'}],name:'Synthetic Migrated Driver'
     });
     await setDoc(doc(source,'flottaVehicles','TEST0001'),{
-      rendszam:'TEST0001',status:'aktiv',
+      rendszam:'TEST0001',status:'aktiv',sourceIndex:0,
       history:[{note:'original rich vehicle'}],modell:'Synthetic Car'
     });
   });
@@ -209,10 +206,14 @@ try{
     ()=>bookFuture('2099-01-01'));
   const realDAClaim=await getDoc(doc(shared,'flottaDriverClaims','TEST0001'));
   const realPlateClaim=await getDoc(doc(shared,'flottaVehicleClaims','TEST0001'));
-  assert.equal(realDAClaim.exists(),true,'DA claim must be committed atomically');
-  assert.equal(realPlateClaim.exists(),true,'Plate claim must be committed atomically');
-  assert.deepEqual(realDAClaim.data(),{sourceIndex:0,revision:2});
-  assert.deepEqual(realPlateClaim.data(),{sourceIndex:0,revision:2});
+  // With privileged-only immutable keyed sourceIndex, browser bookings
+  // must NEVER manufacture any independent identity attestations.
+  assert.equal(realDAClaim.exists(),false,'Booking must not mint privileged DA identity attestations');
+  assert.equal(realPlateClaim.exists(),false,'Booking must not mint privileged plate identity attestations');
+  const keyedDA=await getDoc(doc(shared,'flottaDrivers','TEST0001'));
+  const keyedPlate=await getDoc(doc(shared,'flottaVehicles','TEST0001'));
+  assert.equal(keyedDA.data().sourceIndex,0,'Privileged keyed driver source index preserved');
+  assert.equal(keyedPlate.data().sourceIndex,0,'Privileged keyed plate source index preserved');
   // Valid plate normalization survives a hyphen in the canonical original.
   await env.withSecurityRulesDisabled(ctx=>
     setDoc(fleet(ctx.firestore()),{...fleetData(2),
@@ -267,14 +268,14 @@ try{
   // frozen legacy arrays or deprecated Depot mirror capacity.
   await env.withSecurityRulesDisabled(ctx=>setDoc(
     doc(ctx.firestore(),'flottaDrivers','TEST0001'),
-    {daCode:'TEST0001',status:'aktiv',history:[{note:'test missing capacity'}]}
+    {daCode:'TEST0001',status:'aktiv',sourceIndex:0,history:[{note:'test missing capacity'}]}
   ));
   await expectPermission('missing keyed driver capacity cannot be manufactured by mirror or zero',false,
     ()=>bookFuture('2099-01-15',{capacity:0}));
   await env.withSecurityRulesDisabled(async ctx=>{
     await setDoc(fleet(ctx.firestore()),fleetData(2));
     await setDoc(doc(ctx.firestore(),'flottaDrivers','TEST0001'),{
-      daCode:'TEST0001',status:'aktiv',kapacitas:50,
+      daCode:'TEST0001',status:'aktiv',kapacitas:50,sourceIndex:0,
       history:[{note:'migrated original'}]
     });
     await setDoc(doc(ctx.firestore(),'driverCapacities','TEST0001'),{capacity:50});

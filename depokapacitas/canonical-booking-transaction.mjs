@@ -34,8 +34,6 @@ export async function commitCanonicalDepotBooking({
   const refs={
     booking:sdk.doc(db,'bookings',bookingId),
     driverClaim:sdk.doc(db,'driverClaims',driverKey),
-    driverIdentityClaim:sdk.doc(db,'flottaDriverClaims',driverId),
-    vehicleIdentityClaim:sdk.doc(db,'flottaVehicleClaims',vehicleId),
     keyedDriver:sdk.doc(db,'flottaDrivers',driverId),
     keyedVehicle:sdk.doc(db,'flottaVehicles',vehicleId),
     driver:sdk.doc(db,'drivers',driverId),
@@ -99,16 +97,22 @@ export async function commitCanonicalDepotBooking({
     if(!keyedDriver.exists()||!keyedVehicle.exists())
       throw Error('BOOKING_BLOCKED: missing_keyed_master');
     const kd=keyedDriver.data(),kv=keyedVehicle.data();
-    if(normDriver(kd.daCode)!==driverId||
+    // P0 verified source-index proof is a PRIVILEGED, immutable field of
+    // the canonical keyed document itself. A separate browser-writable
+    // flottaDriverClaims/flottaVehicleClaims document cannot authorize an
+    // alternate duplicate row in the archived source.
+    if(!Number.isSafeInteger(kd.sourceIndex)||
+       !Number.isSafeInteger(kv.sourceIndex)||
+       kd.sourceIndex!==driverIndex||kv.sourceIndex!==vehicleIndex||
+       normDriver(kd.daCode)!==driverId||
        normVehicle(kv.rendszam)!==vehicleId||
        !['aktiv','aktív'].includes(kd.status)||
        !['aktiv','aktív'].includes(kv.status))
       throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});
-    // Identity claims required by Rules for booking.
-    tx.set(refs.driverIdentityClaim,{sourceIndex:driverIndex,revision:fleetData.revision});
-    tx.set(refs.vehicleIdentityClaim,{sourceIndex:vehicleIndex,revision:fleetData.revision});
+    // Read-only identity-index proofs were verified above and by Rules.
+    // Only write booking + date-scoped reverse claim, atomically.
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
   });
   // Firestore SDK resolves the transaction only after atomic server success.

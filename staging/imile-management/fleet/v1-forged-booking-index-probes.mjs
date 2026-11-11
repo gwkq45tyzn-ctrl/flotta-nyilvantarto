@@ -42,22 +42,16 @@ const data=({driverIndex=0,vehicleIndex=0,capacity=80}={})=>({
   status:'planned',capacity,driverIndex,vehicleIndex
 });
 const newBooking=(db,opts={})=>{
-  // This ATOMIC four-document booking + reverse claim + both identity claims
-  // is the one actual Depot uses. A lone booking setDoc cannot prove authorization.
+  // This ATOMIC booking + reverse driver claim is the current fixed
+  // original Depot transaction, AFTER privileged identity claim import. A lone booking setDoc cannot prove authorization.
   const batch=writeBatch(db);
   batch.set(ref(db,'bookings',bookingId),data(opts));
   batch.set(ref(db,'driverClaims',claimId),{
     date,driverId:'DA0001',bookingId
   });
-  // Critical: the REAL original Depot transaction writes FOUR documents.
-  // Both source identity claims are getAfter() prerequisites under the full
-  // Rules. A two-document booking also gives a meaningless DENY.
-  batch.set(ref(db,'flottaDriverClaims','DA0001'),{
-    sourceIndex:opts.driverIndex??0,revision:1
-  });
-  batch.set(ref(db,'flottaVehicleClaims','ABC123'),{
-    sourceIndex:opts.vehicleIndex??0,revision:1
-  });
+  // #133 FIX: source-index claims are now PRIVILEGED and immutable. They
+  // are seeded above, and the original Depot no longer writes them.
+  // The booking + date-scoped reverse claim remain atomic.
   return batch.commit();
 };
 const findings=[];
@@ -96,11 +90,11 @@ async function main(){
       await setDoc(ref(db,'flottaSharedState','current'),snapshot);
       await setDoc(ref(db,'flottaDrivers','DA0001'),{
         id:'synthetic-driver-master',daCode:'DA0001',
-        status:'aktiv',kapacitas:keyedCapacity,revision:1,history:[{kind:'verified-synthetic'}]
+        status:'aktiv',kapacitas:keyedCapacity,sourceIndex:0,revision:1,history:[{kind:'verified-synthetic'}]
       });
       await setDoc(ref(db,'flottaVehicles','ABC123'),{
         id:'synthetic-vehicle-master',rendszam:'ABC-123',
-        status:keyedVehicleStatus,revision:1,history:[{kind:'verified-synthetic'}]
+        status:keyedVehicleStatus,sourceIndex:0,revision:1,history:[{kind:'verified-synthetic'}]
       });
       await setDoc(ref(db,'flottaDriverClaims','DA0001'),{sourceIndex:driverIndex,revision:1});
       await setDoc(ref(db,'flottaVehicleClaims','ABC123'),{sourceIndex:vehicleIndex,revision:1});
@@ -117,7 +111,7 @@ async function main(){
     assert.equal(reverse.exists(),true);
     assert.equal(saved.data().capacity,80);
     assert.equal(reverse.data().bookingId,bookingId);
-    console.log('PASS ALLOW [E+SDK]: genuine sealed Fleet + canonical indexes + 80 capacity atomic FOUR-document booking');
+    console.log('PASS ALLOW [E+SDK]: valid sealed Fleet with PRIVILEGED identity claims supports atomic booking');
 
     await seed();
     // Control: the OLD Grok setDoc-only strategy always fails because
@@ -132,6 +126,10 @@ async function main(){
       vehicles:[vehicle()]
     });
     await seed(duplicateDrivers);
+    await mustDeny('direct signed-in SDK cannot rewrite verified keyed driver sourceIndex 0→1',
+      ()=>updateDoc(ref(client,'flottaDrivers','DA0001'),{
+        sourceIndex:1,revision:2
+      }));
     // A malicious authorized SDK update of the source-identity claim might
     // be accepted, even AFTER seal. This must not be quietly ignored.
     await mustDeny('postseal SDK changes immutable driver identity claim 0→1 on duplicate DA',
@@ -147,6 +145,10 @@ async function main(){
       drivers:[driver()],
       vehicles:[vehicle('ABC-123','szerviz'),vehicle('abc 123','aktiv')]
     }));
+    await mustDeny('direct signed-in SDK cannot rewrite verified keyed vehicle sourceIndex 0→1',
+      ()=>updateDoc(ref(client,'flottaVehicles','ABC123'),{
+        sourceIndex:1,revision:2
+      }));
     await mustDeny('postseal SDK changes immutable vehicle identity claim 0→1 on duplicate plate',
       ()=>updateDoc(ref(client,'flottaVehicleClaims','ABC123'),{
         sourceIndex:1,revision:1

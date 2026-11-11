@@ -203,8 +203,8 @@ try{
     const driver=confirmed.drivers[0],vehicle=confirmed.vehicles[0];
     assert.equal(driver.daCode,'DA0001');
     assert.equal(vehicle.rendszam,'ABC-123');
-    await setDoc(doc(admin,'flottaDrivers','DA0001'),{...driver,revision:1});
-    await setDoc(doc(admin,'flottaVehicles','ABC123'),{...vehicle,revision:1});
+    await setDoc(doc(admin,'flottaDrivers','DA0001'),{...driver,sourceIndex:0,revision:1});
+    await setDoc(doc(admin,'flottaVehicles','ABC123'),{...vehicle,sourceIndex:0,revision:1});
     const [readD,readV]=await Promise.all([
       getDoc(doc(admin,'flottaDrivers','DA0001')),
       getDoc(doc(admin,'flottaVehicles','ABC123'))
@@ -212,6 +212,14 @@ try{
     assert.equal(readD.data().kapacitas,80,'trusted seed driver capacity parity');
     assert.deepEqual(readV.data().history,confirmed.vehicles[0].history,
       'trusted seed rich vehicle history parity');
+    // Trusted isolated local importer must seed IMMUTABLE source index
+    // attestations before seal. The ordinary Depot booking only reads them.
+    await setDoc(doc(admin,'flottaDriverClaims','DA0001'),{
+      sourceIndex:0,revision:confirmed.revision
+    });
+    await setDoc(doc(admin,'flottaVehicleClaims','ABC123'),{
+      sourceIndex:0,revision:confirmed.revision
+    });
     await setDoc(sourceRef,{...confirmed,sealed:true});
   });
   console.log('PASS [B+E]: synthetic privileged post-import rich keyed parity verified before immutable seal');

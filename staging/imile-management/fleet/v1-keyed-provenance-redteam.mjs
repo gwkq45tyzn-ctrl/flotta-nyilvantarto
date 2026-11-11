@@ -33,8 +33,8 @@ const originalCar={
   status:'aktiv',km:1234,gyartmany:'Ford',modell:'Transit',
   history:[{event:'service',date:'2026-01-02'}]
 };
-const richDriver={...originalDriver,revision:9,extra:{protectedNote:'keep'}};
-const richCar={...originalCar,revision:11,extra:{vin:'SYNTHETIC-VIN'}};
+const richDriver={...originalDriver,sourceIndex:0,revision:9,extra:{protectedNote:'keep'}};
+const richCar={...originalCar,sourceIndex:0,revision:11,extra:{vin:'SYNTHETIC-VIN'}};
 const failures=[];
 async function reset(){
   await env.clearFirestore();

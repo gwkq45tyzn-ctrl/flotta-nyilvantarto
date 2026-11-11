@@ -49,11 +49,11 @@ async function reset(vehicleStatus='aktiv'){
   });
   await setDoc(doc(admin,'flottaSharedState','current'),fleet());
   await setDoc(doc(admin,'flottaDrivers','DA0001'),{
-   daCode:'DA0001',status:'aktiv',kapacitas:50,
+   daCode:'DA0001',status:'aktiv',kapacitas:50,sourceIndex:0,
    name:'True canonical driver',history:[{note:'PRESERVE KEYED HISTORY'}]
   });
   await setDoc(doc(admin,'flottaVehicles','ABC123'),{
-   rendszam:'ABC-123',status:vehicleStatus,
+   rendszam:'ABC-123',status:vehicleStatus,sourceIndex:0,
    gyartmany:'Ford',modell:'Transit',
    history:[{note:'PRESERVE KEYED HISTORY'}]
   });
@@ -71,10 +71,8 @@ function directBook(date,capacity=50){
  batch.set(doc(db,'driverClaims',date+'__'+driverId),{
   date,driverId,bookingId
  });
- batch.set(doc(db,'flottaDriverClaims',driverId),
-  {sourceIndex:0,revision:1});
- batch.set(doc(db,'flottaVehicleClaims',vehicleId),
-  {sourceIndex:0,revision:1});
+ // Only the date-scoped booking + reverse driver claim are client-writeable.
+ // Source indexes are privileged and immutable fields of the keyed masters.
  return batch.commit();
 }
 async function actualBook(date){
