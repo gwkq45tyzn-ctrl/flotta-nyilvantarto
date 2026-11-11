@@ -3,6 +3,7 @@
  * Synthetic local emulator only. Expected DENY on forged creates, history wipes,
  * identity rewrites, and unauthorized seals before trusted migration.
  */
+import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
 import {doc,setDoc,updateDoc,getDoc} from 'firebase/firestore';
 import {readFile} from 'node:fs/promises';
