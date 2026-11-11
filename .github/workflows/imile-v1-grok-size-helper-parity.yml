@@ -1,0 +1,27 @@
+name: iMile V1 #185 original + Grok size helpers consistent and fail-closed
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-firestore-size-estimator.mjs'
+      - 'tools/v1-firestore-size-estimator.test.mjs'
+      - '.github/workflows/imile-v1-grok-size-helper-parity.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-size-authority-consistency:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact HEAD strict sample and hostile malformed source tests
+        run: |
+          echo "QA source $(git rev-parse HEAD)"
+          node --test tools/v1-firestore-size-gate.test.mjs tools/v1-firestore-size-estimator.test.mjs
+      - name: Release remains closed
+        run: echo "Storage estimate only; no Firestore SDK encoded-size proof, no batch drill, authorizedForImport always false"
