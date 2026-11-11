@@ -28,7 +28,7 @@ const instrumented=bridge.replace(hook,[
  '      // real original Fleet applies via onSnapshot before user edits.',
  '      appliedKeyed={',
  '        drivers:new Map(confirmedBaseline.drivers.map(d=>[d.daCode.trim().toUpperCase(),JSON.parse(JSON.stringify(d))])),',
- '        vehicles:new Map(confirmedBaseline.vehicles.map(v=>[v.rendszam.replaceAll('-', '').replaceAll(' ', '').toUpperCase(),JSON.parse(JSON.stringify(v))]))',
+ `        vehicles:new Map(confirmedBaseline.vehicles.map(v=>[v.rendszam.replaceAll('-', '').replaceAll(' ', '').toUpperCase(),JSON.parse(JSON.stringify(v))]))`,
  '      };',
  '    },submit:pushTransactional',
  '  };',
