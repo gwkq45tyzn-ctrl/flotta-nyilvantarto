@@ -1,0 +1,74 @@
+name: iMile V1 Grok workpack #184 #185 #186 same-head proof
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-pinned-backup-trust*'
+      - 'tools/v1-poisoned-source-hardstop.test.mjs'
+      - 'tools/v1-size-gate-boundary.test.mjs'
+      - 'staging/imile-management/fleet/v1-large-batch-drill.mjs'
+      - 'staging/imile-management/fleet/v1-legacy-network-intercept.e2e.mjs'
+      - '.github/workflows/imile-v1-grok-workpack-matrix.yml'
+permissions:
+  contents: read
+jobs:
+  pinned-backup-poison-and-estimator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require all unit and threat-model controls at THIS exact SHA
+        run: |
+          git rev-parse HEAD
+          node --test tools/v1-pinned-backup-trust.test.mjs \
+            tools/v1-poisoned-source-hardstop.test.mjs \
+            tools/v1-trusted-importer-attestation.test.mjs \
+            tools/v1-size-gate-boundary.test.mjs \
+            tools/v1-firestore-size-gate.test.mjs \
+            tools/v1-firestore-size-estimator.test.mjs
+  actual-440-keyed-and-sdk-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Existing SDK lockfile
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Real SDK emulator 440 rich docs + crash/restart/rollback and no seal bypass
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-scale \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-large-batch-drill.mjs"
+  stale-browser-no-network-intercept:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Synthetic Chromium dependency and binary
+        run: |
+          npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+          npm install --prefix staging/imile-management/fleet --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.58.0
+          ./staging/imile-management/fleet/node_modules/.bin/playwright install --with-deps chromium
+      - name: Genuine obsolete original HTML intercepted POST vs integrated safe gate
+        run: node staging/imile-management/fleet/v1-legacy-network-intercept.e2e.mjs
