@@ -20,10 +20,16 @@ assert.equal(bridge.split(hook).length,2,'original bridge hook must exist once')
 const instrumented=bridge.replace(hook,[
  '  // This QA hook is injected into memory ONLY; it is not production source.',
  '  window.__qaBridge={',
- '    configure:function(nextDb,currentUid,serverRev){',
+ '    configure:function(nextDb,currentUid,serverRev,confirmedBaseline){',
  '      db=nextDb; auth={currentUser:{uid:currentUid}};',
  '      memberVerified=true;migrationServerApproved=true;',
  '      currentRevision=serverRev;requeueCount=3;',
+ '      // Synthetic fixture models the fully confirmed keyed rows that the',
+ '      // real original Fleet applies via onSnapshot before user edits.',
+ '      appliedKeyed={',
+ '        drivers:new Map(confirmedBaseline.drivers.map(d=>[d.daCode.trim().toUpperCase(),JSON.parse(JSON.stringify(d))])),',
+ '        vehicles:new Map(confirmedBaseline.vehicles.map(v=>[v.rendszam.replaceAll('-', '').replaceAll(' ', '').toUpperCase(),JSON.parse(JSON.stringify(v))]))',
+ '      };',
  '    },submit:pushTransactional',
  '  };',
  '  boot();',
@@ -82,7 +88,7 @@ function runOriginalBridge(draft){
   console:{error:(...args)=>bridgeErrors.push(args.map(e=>e?.message||String(e)).join(' | ')),warn(){},log(){}},Promise,setTimeout,clearTimeout,Date,Blob,URL,JSON
  });
  vm.runInContext(instrumented,sandbox,{filename:'ACTUAL/features/firestore-bridge.js'});
- window.__qaBridge.configure(adapter,uid,1);
+ window.__qaBridge.configure(adapter,uid,1,fleet());
  return {submit:()=>window.__qaBridge.submit(),writes,bridgeErrors,ui};
 }
 const failures=[];
