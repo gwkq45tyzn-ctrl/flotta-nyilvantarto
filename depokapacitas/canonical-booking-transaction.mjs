@@ -34,8 +34,6 @@ export async function commitCanonicalDepotBooking({
   const refs={
     booking:sdk.doc(db,'bookings',bookingId),
     driverClaim:sdk.doc(db,'driverClaims',driverKey),
-    driverIdentityClaim:sdk.doc(db,'flottaDriverClaims',driverId),
-    vehicleIdentityClaim:sdk.doc(db,'flottaVehicleClaims',vehicleId),
     keyedDriver:sdk.doc(db,'flottaDrivers',driverId),
     keyedVehicle:sdk.doc(db,'flottaVehicles',vehicleId),
     driver:sdk.doc(db,'drivers',driverId),
@@ -49,14 +47,13 @@ export async function commitCanonicalDepotBooking({
   const confirmation=await sdk.runTransaction(db,async tx=>{
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
     const [oldBook,oldClaim,driver,vehicle,capacity,fleet,approval,
-      keyedDriver,keyedVehicle,driverIdentityClaim,vehicleIdentityClaim]=await Promise.all([
+      keyedDriver,keyedVehicle]=await Promise.all([
       tx.get(refs.booking),tx.get(refs.driverClaim),
       tx.get(refs.driver),tx.get(refs.vehicle),tx.get(refs.capacity),
       tx.get(refs.fleet),tx.get(refs.approval),
       // Canonical identity masters must be SEEDED before booking.
       // Never create/overwrite them in a booking transaction.
-      tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle),
-      tx.get(refs.driverIdentityClaim),tx.get(refs.vehicleIdentityClaim)
+      tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle)
     ]);
     if(oldBook.exists()||oldClaim.exists())
       throw Error('BOOKING_BLOCKED: already_occupied');
@@ -97,21 +94,17 @@ export async function commitCanonicalDepotBooking({
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>normDriver(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
-    // Identity-index proof must be seeded in the privileged import; direct
-    // SDK authors may NEVER create or amend it during a booking. Client
-    // attempts cannot promote duplicate archived rows to canonical.
-    if(!driverIdentityClaim.exists()||!vehicleIdentityClaim.exists()||
-       driverIdentityClaim.data().sourceIndex!==driverIndex||
-       vehicleIdentityClaim.data().sourceIndex!==vehicleIndex||
-       !Number.isSafeInteger(driverIdentityClaim.data().revision)||
-       !Number.isSafeInteger(vehicleIdentityClaim.data().revision)||
-       driverIdentityClaim.data().revision>fleetData.revision||
-       vehicleIdentityClaim.data().revision>fleetData.revision)
-      throw Error('BOOKING_BLOCKED: privileged_identity_proof_missing_or_drift');
     if(!keyedDriver.exists()||!keyedVehicle.exists())
       throw Error('BOOKING_BLOCKED: missing_keyed_master');
     const kd=keyedDriver.data(),kv=keyedVehicle.data();
-    if(normDriver(kd.daCode)!==driverId||
+    // P0 verified source-index proof is a PRIVILEGED, immutable field of
+    // the canonical keyed document itself. A separate browser-writable
+    // flottaDriverClaims/flottaVehicleClaims document cannot authorize an
+    // alternate duplicate row in the archived source.
+    if(!Number.isSafeInteger(kd.sourceIndex)||
+       !Number.isSafeInteger(kv.sourceIndex)||
+       kd.sourceIndex!==driverIndex||kv.sourceIndex!==vehicleIndex||
+       normDriver(kd.daCode)!==driverId||
        normVehicle(kv.rendszam)!==vehicleId||
        !['aktiv','aktív'].includes(kd.status)||
        !['aktiv','aktív'].includes(kv.status))
