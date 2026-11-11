@@ -173,31 +173,23 @@ try{
     null,{timeout:20000});
   console.log('PASS [B+E]: actual original Depot UI shows server-confirmed Fleet rev 1 and normalized plate');
 
-  // Real user action in original Fleet form, while original Depot page is open.
+  // Preseal original Fleet must be truly read-only in the ORIGINAL GUI,
+  // not just via failed server saves. Click the real "edit" button: modal
+  // must NOT open; no phantom local change or pending SDK write can exist.
   await flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first()
     .click();
-  await flottaPage.locator('#modal.active #km').fill('99999');
-  await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]')
-    .click();
-
-  // The source identity archive is deliberately read-only before a
-  // privileged, verified seal. The browser must NOT be able to change KM
-  // (or normalized DA/plate arrays) in the old unsealed source.
-  try{
-    await flottaPage.waitForFunction(oldKm=>{
-      const car=typeof vehicles!=='undefined'&&vehicles.find(v=>v.rendszam==='ABC-123');
-      return !!car && car.km===oldKm;
-    },fleetData.vehicles[0].km,{timeout:20000});
-  }catch(error){
-    const diagnostic=await flottaPage.evaluate(()=>({
-      km:typeof vehicles==='undefined'?null:vehicles.find(v=>v.rendszam==='ABC-123')?.km,
-      syncStatus:document.getElementById('syncStatus')?.textContent,
-      pending:localStorage.getItem('flotta_pending_v16')!==null,
-      modalActive:document.querySelector('#modal')?.className
-    }));
-    console.error('PRESEAL ORIGINAL FLEET READONLY DIAGNOSTIC',JSON.stringify(diagnostic));
-    throw error;
-  }
+  await flottaPage.waitForFunction(()=>
+    document.getElementById('syncStatus')?.textContent
+      ?.includes('szerkesztés nem engedélyezett'),null,{timeout:12000});
+  const presealUI=await flottaPage.evaluate(()=>({
+    modalActive:document.getElementById('modal')?.classList.contains('active'),
+    vehicleKm:typeof vehicles==='undefined'?null:
+      vehicles.find(v=>v.rendszam==='ABC-123')?.km,
+    pending:localStorage.getItem('flotta_pending_v16')!==null
+  }));
+  assert.equal(presealUI.modalActive,false,'preseal original edit dialog must remain blocked');
+  assert.equal(presealUI.vehicleKm,fleetData.vehicles[0].km);
+  assert.equal(presealUI.pending,false,'preseal must never stage a misleading browser save');
   const persisted=await serverRead('flottaSharedState/current');
   assert.equal(persisted.revision,1,'preseal source revision must stay frozen');
   assert.equal(persisted.vehicles[0].km,fleetData.vehicles[0].km);
