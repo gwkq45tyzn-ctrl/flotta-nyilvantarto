@@ -1,0 +1,20 @@
+# #133 P0 booking identity index forgery — independent security review
+
+Status: REPRODUCED P0. FULL RELEASE NO-GO. Synthetic local Firebase emulator only.
+Evidence: Draft PR #179, Actions #42985805947. Signed-in FULL atomic batches (bookings + driverClaims + flottaDriverClaims + flottaVehicleClaims) were authorized in FIVE hostile privileged-seeded duplicate-source scenarios, while unique legal booking ALLOWED and wrong unrelated ID / capacity 500 / keyed car in service DENIED.
+
+## Root cause
+
+Browser sends booking.driverIndex / booking.vehicleIndex and may co-write flottaDriverClaims / flottaVehicleClaims binding the SAME caller-chosen index. Checking the chosen source index against caller-supplied claims proves only that the caller told the same story twice; it does NOT prove global normalized uniqueness of archived arrays. Arbitrary-length Firestore list uniqueness cannot be established by a client-provided count map or merely by getAfter at a caller-chosen index. The #177 array-immutability fix prevents browser introduction of duplicates but DOES NOT protect an already duplicated privileged/legacy seeded archive.
+
+## Required robust server-side design
+
+1. Treat independently reviewed trusted migration and legacy writer shutdown as real P0 gates. Privileged importer must normalize EVERY original DA and plate using EXACT production rules, reject duplicates and malformed IDs, verify complete rich source/history/unknown-field parity, full SHA and Firestore encoded sizes, then create canonical keyed masters and provenance/seal. Browser never creates approval or seal. A deliberately malicious privileged IAM actor can always bypass Firestore Rules, including any proof docs; external preflight, protected identity, immutable backup, independent reviewer and writer cutover are required for trust.
+2. Make normalized-keyed driver and vehicle docs the ONLY authority for booking status, capacity, eligibility and business identity; stop authorizing any booking from an archive row selected by the browser's driverIndex/vehicleIndex. Either remove client-supplied indices from the new booking schema altogether or validate solely against a PRE-EXISTING immutable privileged per-ID binding, never a claim that the browser can create/update in the same batch.
+3. If the archived source is still consulted for integrity, require a privileged-only, immutable sealed identity migration receipt tied to the frozen source SHA, source version and verified complete uniqueness counts/list. Client-supplied counter maps do not attest uniqueness. Missing, mismatched, stale or partial proof MUST deny new bookings; signed-in client cannot mint/mutate proof. No Rules-only scheme can prevent a privileged actor from forging BOTH data and its own attestation.
+4. Change actual depokapacitas/canonical-booking-transaction.mjs, full Firestore restricted Rules, UI status, claim ownership and all original emulator/Chromium E2E in one separately reviewed QA PR. Preserve driverClaims occupancy lock, immutable historical booking capacity 80, current keyed planning 70, car service/unservice, offline, revoked UID and rich edit/history. Do not remove negative red-team tests for convenience.
+5. Required tests: real signed-in full atomic SDK positive unique source + all claims; DENY duplicate normalized DA first AND second index; DENY duplicate normalized plate first AND second index, combined forge, forged claim rewrite, missing seal/proof, current keyed car in service, excess keyed capacity, stale account. Then true 2-Chromium original Fleet/Depot E2E with checked source SHA and no silent old writers. Do not claim these tests are complete just because an isolated booking setDoc was denied.
+
+## Release policy
+
+NO cloud/production Firebase Rules or Hosting deployment, main merge, actual data/migration, IAM/UID changes or paid resources. No full V1 GO before a frozen SHA with all required CI green, independently reviewed Grok and ChatGPT GO, verified real importer/Apps Script inventory/cutover/rollback, and explicit owner authorization.
