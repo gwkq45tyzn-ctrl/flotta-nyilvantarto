@@ -5,7 +5,7 @@ import {assessSources,liveIndicatorPresentation} from './source-health.mjs';
 const now=2_000_000;
 const fresh=()=>({loaded:true,error:false,fromCache:false,pending:false,serverAt:now-1000});
 const core=['demands','bookings','drivers','vehicles'];
-const extra=['driverCapacities','results','attendance','sourceRows','fleetRecords','fleetAssignments','flottaSharedState','flottaMigrationApproval'];
+const extra=['driverCapacities','results','attendance','sourceRows','fleetRecords','fleetAssignments','flottaSharedState','flottaMigrationApproval','flottaDrivers','flottaVehicles'];
 const all=[...core,...extra];
 const meta=Object.fromEntries(all.map(key=>[key,fresh()]));
 
@@ -35,10 +35,10 @@ assert.doesNotMatch(liveIndicatorPresentation({status:'cached',trusted:false}).t
 const app=readFileSync(new URL('./app.js',import.meta.url),'utf8');
 assert.match(app,/function updateLiveIndicator\(\)/);
 assert.match(app,/required:liveSources/);
-assert.match(app,/const liveSources=\[\.\.\.watchedCollections,'flottaSharedState','flottaMigrationApproval'\]/);
+assert.match(app,/const liveSources=\[\.\.\.watchedCollections,'flottaSharedState','flottaMigrationApproval','flottaDrivers','flottaVehicles'\]/);
 assert.match(app,/state\.sourceMeta\.flottaSharedState=/);
 assert.match(app,/onSnapshot\(collection\(db,name\),\{includeMetadataChanges:true\}/);
 assert.match(app,/updateLiveIndicator\(\)/);
 assert.match(app,/window\.addEventListener\(name,\(\)=>\{updateLiveIndicator\(\)/);
 assert.doesNotMatch(app,/meta\.fromCache\?'● Gyorsítótárazott kapcsolat'/);
-console.log('PASS: 12 source aggregate health states, including original Fleet and server migration approval; offline/error/cache/pending/stale fail closed');
+console.log('PASS: 12 source aggregate health states, including original Fleet, keyed masters and server migration approval; offline/error/cache/pending/stale fail closed');
