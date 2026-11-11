@@ -960,15 +960,21 @@ service cloud.firestore {
         && request.resource.data.drivers is list
         && request.resource.data.fuelCards is list
         && request.resource.data.contacts is list
-        // After sealed migration, legacy arrays are read-only.
-        // Identity changes must go through keyed documents.
-        // Seal may be set ONLY by a separately approved privileged migration.
-        // A browser can neither forge 'sealed:true' nor unseal/strip it.
-        // Old pre-cutover Fleet snapshots without this field still save normally.
+        // P0 #133/#141 fail-closed: imported legacy identity arrays are
+        // IMMUTABLE for browser SDK on BOTH sides of trusted seal.
+        // The original preseal stage is read-only; trusted privileged import
+        // must validate unique normalized identities before it can seal.
+        // After seal, all actual editable driver/vehicle fields live in keyed
+        // flottaDrivers/flottaVehicles with independent rich field guards.
+        // Arbitrary preseal list append/rename cannot be proven unique
+        // server-side by user-supplied count maps or client-side filter().
         && request.resource.data.get('sealed', false) == resource.data.get('sealed', false)
-        && (resource.data.get('sealed', false) != true
-          || (request.resource.data.drivers == resource.data.drivers
-            && request.resource.data.vehicles == resource.data.vehicles));
+        && request.resource.data.drivers == resource.data.drivers
+        && request.resource.data.vehicles == resource.data.vehicles
+        // Protect associated archived rich metadata against preseal edits
+        // that would silently diverge from the signed manifest.
+        && request.resource.data.fuelCards == resource.data.fuelCards
+        && request.resource.data.contacts == resource.data.contacts;
         // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
         // True uniqueness requires one document per identity. See
         // docs/STRUCTURAL_IDENTITY_MODEL.md.
