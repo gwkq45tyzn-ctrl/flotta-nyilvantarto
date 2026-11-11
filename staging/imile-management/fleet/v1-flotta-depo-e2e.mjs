@@ -294,6 +294,106 @@ try{
     null,{timeout:12000});
   console.log('PASS [B+E] SECOND signed-in original Fleet browser sees updated KEYED KM 100100 without reload');
 
+  // V1 actual postseal operational acceptance: update the REAL original
+  // Fleet driver capacity form and verify the actual Depot shared Fleet screen
+  // sees it, then the booking server stores the CURRENT keyed capacity.
+  const editDriverButton=flottaPage.locator('#driverTable button[onclick^="editDriver"]').first();
+  await editDriverButton.click();
+  await flottaPage.locator('#driverModal.active #driverCapacity').fill('70');
+  await flottaPage.locator('#driverModal.active #driverForm button[type="submit"]').click();
+  let currentDriver;
+  for(let attempt=0;attempt<40;attempt++){
+    currentDriver=await serverRead('flottaDrivers/DA0001');
+    if(currentDriver.kapacitas===70)break;
+    await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  assert.equal(currentDriver.kapacitas,70,
+    'POSTSEAL: original Fleet driver form must actually change keyed capacity 80→70');
+  await depotPage.locator('#shell [data-view="sharedFleet"]').click();
+  await depotPage.waitForFunction(()=>
+    document.getElementById('content')?.textContent?.includes('Élő, szerverről igazolt keyed Flotta-törzs.')&&
+    document.getElementById('content')?.textContent?.includes('70'),
+    null,{timeout:25000});
+  console.log('PASS [B+E]: original driver capacity 80→70 reaches ACTUAL Depot shared Fleet UI automatically');
+
+  // The original Fleet's real quick status SELECT is a production user event.
+  // A service vehicle must DISAPPEAR from Depot booking options immediately.
+  await flottaPage.locator('#vehicleTable select[onchange^="quickStatusChange"]').first()
+    .selectOption('szerviz');
+  let vehicleDuringService;
+  for(let attempt=0;attempt<40;attempt++){
+    vehicleDuringService=await serverRead('flottaVehicles/ABC123');
+    if(vehicleDuringService.status==='szerviz')break;
+    await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  assert.equal(vehicleDuringService.status,'szerviz');
+  await depotPage.locator('#shell [data-view="planning"]').click();
+  await depotPage.waitForFunction(()=>{
+    const sel=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
+    return !!sel && ![...sel.options].some(o=>o.value==='ABC123');
+  },null,{timeout:25000});
+  console.log('PASS [B+E]: service car is NOT bookable from original Depot UI');
+
+  await flottaPage.locator('#vehicleTable select[onchange^="quickStatusChange"]').first()
+    .selectOption('aktiv');
+  let restored;
+  for(let attempt=0;attempt<40;attempt++){
+    restored=await serverRead('flottaVehicles/ABC123');
+    if(restored.status==='aktiv')break;
+    await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  assert.equal(restored.status,'aktiv');
+  await depotPage.waitForFunction(()=>{
+    const sel=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
+    return !!sel && [...sel.options].some(o=>o.value==='ABC123');
+  },null,{timeout:25000});
+  console.log('PASS [B+E]: restored vehicle becomes available in Depot booking list without reload');
+
+  // Use a distinct future day; earlier 80-capacity booking is immutable.
+  // This tests a NEW booking with 70, never rewrites a historical 80 snapshot.
+  const laterDay=new Date(Date.parse(today+'T12:00:00Z')+2*86400000)
+    .toISOString().slice(0,10);
+  await depotPage.locator('#datePick').fill(laterDay);
+  await depotPage.locator('#datePick').dispatchEvent('change');
+  const secondBooking=depotPage.locator('#content form[data-form="booking"]');
+  await secondBooking.locator('select[name="driverId"]').selectOption('DA0001');
+  await secondBooking.locator('select[name="vehicleId"]').selectOption('ABC123');
+  await secondBooking.locator('input[name="district"]').fill('IX');
+  await secondBooking.locator('select[name="status"]').selectOption('planned');
+  await secondBooking.locator('button[type="submit"]').click();
+  await depotPage.waitForFunction(()=>
+    document.getElementById('content')?.textContent?.includes('Napi foglalások · 1'),
+    null,{timeout:25000});
+  const newBooking=await serverRead('bookings/'+laterDay+'__ABC123');
+  assert.equal(newBooking.capacity,70,
+    'POSTSEAL new Depot booking must use fresh server-keyed 70, not archived 80');
+  assert.equal((await serverRead('bookings/'+tomorrow+'__ABC123')).capacity,80,
+    'Existing earlier booking historical record must preserve original snapshot');
+  console.log('PASS [B+E]: ACTUAL Depot booking transaction stores 70 after Fleet 80→70, earlier 80 snapshot intact');
+
+  // A disconnected Depot may not present stale sealed masters as bookable.
+  await ctxDepot.setOffline(true);
+  await depotPage.waitForFunction(()=>{
+    const badge=document.getElementById('liveIndicator');
+    const select=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
+    return badge?.textContent?.includes('zárolva')&&
+      (!select||![...select.options].some(o=>o.value==='ABC123'));
+  },null,{timeout:20000});
+  console.log('PASS [B+E]: offline Depot blocks previously live keyed car');
+  await ctxDepot.setOffline(false);
+
+  // Server-side revoked user must not regain operational access on reload.
+  // This is a synthetic privileged admin-only fixture update, not a UI bypass.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    await setDoc(doc(ctx.firestore(),'users',result.localId),
+      {name:'SYNTHETIC REVOKED',active:false,role:'admin'});
+  });
+  await depotPage.reload({waitUntil:'domcontentloaded'});
+  await depotPage.locator('#denied').waitFor({state:'visible',timeout:30000});
+  console.log('PASS [B+E]: revoked user cannot access original Depot on reload');
+
+
+
   await flottaPage.locator('#flottaLogout').click();
   await flottaPage.waitForFunction(()=>
     document.body.classList.contains('flotta-locked'),
