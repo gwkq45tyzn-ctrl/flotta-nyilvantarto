@@ -218,6 +218,12 @@ async function main(){
       await updateDoc(cp,{sourceSha256:'0'.repeat(64)});
       await assert.rejects(migrateBatches(1),/FORGED_OR_STALE_CHECKPOINT/);
       await updateDoc(cp,{sourceSha256:expectedSha});
+      // A missing journal cannot be treated as a clean import even when a
+      // driver document happens to exist. Restore only the test checkpoint.
+      await deleteDoc(cp);
+      await assert.rejects(migrateBatches(1),/UNJOURNALED_PARTIAL_IMPORT/);
+      await setDoc(cp,{phase:'importing',sourceSha256:expectedSha,
+        sourceRevision:1,completed:[items[0]],checkpointVersion:1});
       await rollbackBeforeSeal();
       await rollbackBeforeSeal(); // safe second rollback
       console.log('PASS [E]: corrupted checkpoint rejected; preseal rollback idempotent');
@@ -233,6 +239,20 @@ async function main(){
       await setDoc(refFor(db,tampered),expected[tampered]);
       await migrateBatches();
       assert.equal((await deriveProgress()).partial.complete,true);
+      // Extra privileged imports must block the final seal, even if every
+      // expected record is present and all checkpoint counters look valid.
+      const rogue=doc(db,'flottaVehicles','ROGUE999');
+      await setDoc(rogue,{id:'unexpected',rendszam:'ROGUE-999',
+        status:'aktiv',kapacitas:100,history:[]});
+      await assert.rejects(verifiedSeal(),/KEYED_TAMPER_OR_EXTRA_RECORDS/);
+      await deleteDoc(rogue);
+      // Changing an original non-driver source field after backup must
+      // invalidate the trusted source digest before any seal write.
+      await updateDoc(master,{contacts:[]});
+      await assert.rejects(verifiedSeal(),/SOURCE_HASH_OR_REVISION_DRIFT/);
+      await updateDoc(master,{contacts:snapshot.contacts});
+      assert.equal((await deriveProgress()).partial.complete,true);
+      console.log('PASS [E]: extra keyed identity and changed original contacts independently deny seal');
       const sourceBeforeSeal=await getDoc(master);
       assert.equal(sourceBeforeSeal.data().sealed,false);
       await verifiedSeal();
