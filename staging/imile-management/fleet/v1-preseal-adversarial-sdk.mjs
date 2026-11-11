@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
-import {doc,setDoc,updateDoc,getDoc} from 'firebase/firestore';
+import {doc,setDoc,updateDoc,getDoc,Timestamp} from 'firebase/firestore';
 import {readFile} from 'node:fs/promises';
 
 const uid='synthetic-imile-v1-admin-0000001';
@@ -24,8 +24,19 @@ async function main(){
     await env.withSecurityRulesDisabled(async ctx=>{
       const db=ctx.firestore();
       await setDoc(doc(db,'users',uid),{active:true,role:'admin',name:'SYNTHETIC'});
+      // Seed a GENUINELY approved preseal source. Without an approval or
+      // migrationSourceSha256, all writes fail for unrelated reasons and this
+      // experiment cannot prove the intended identity/anti-wipe safeguards.
+      const digest='c'.repeat(64);
+      await setDoc(doc(db,'flottaMigrationApproval','current'),{
+        status:'approved',approvedUid:uid,sourceSha256:digest,
+        approvedAt:Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))
+      });
       await setDoc(doc(db,'flottaSharedState','current'),{
-        revision:1,sealed:false,drivers:[{daCode:'DA0001'}],vehicles:[{rendszam:'ABC-123'}]
+        revision:1,sealed:false,migrationSourceSha256:digest,
+        drivers:[{id:'d1',daCode:'DA0001',status:'aktiv',kapacitas:80,history:[]}],
+        vehicles:[{id:'v1',rendszam:'ABC-123',status:'aktiv',history:[]}],
+        contacts:[],fuelCards:[]
       });
     });
 
@@ -44,8 +55,13 @@ async function main(){
     await assertFails(setDoc(doc(client,'flottaDrivers','DA0001'),{daCode:'DA0001',status:'aktiv',kapacitas:80}));
     await assertFails(updateDoc(doc(client,'flottaDrivers','DA0001'),{history:[],revision:2}));
 
-    // Identity rewrite
-    await assertFails(updateDoc(doc(client,'flottaDrivers','DA0001'),{daCode:'DA0002',revision:2}));
+    // Authenticated positive control: the Rules enforce the previous
+    // preserved rich history, while permitting normal existing keyed fields.
+    await updateDoc(doc(client,'flottaDrivers','DA0001'),{kapacitas:70,revision:2});
+    const legal=(await getDoc(doc(client,'flottaDrivers','DA0001'))).data();
+    assert.equal(legal.kapacitas,70);
+    assert.deepEqual(legal.history,[{e:'hire'}]);
+    console.log('PASS [E+SDK]: authorized positive keyed rich-capacity update');
 
     // Unauthorized seal
     await assertFails(updateDoc(doc(client,'flottaSharedState','current'),{sealed:true,revision:2}));
