@@ -343,10 +343,24 @@ try{
     await new Promise(resolve=>setTimeout(resolve,200));
   }
   assert.equal(restored.status,'aktiv');
-  await depotPage.waitForFunction(()=>{
-    const sel=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
-    return !!sel && [...sel.options].some(o=>o.value==='ABC123');
-  },null,{timeout:25000});
+  try {
+    await depotPage.waitForFunction(()=>{
+      const sel=document.querySelector('#content form[data-form="booking"] select[name="vehicleId"]');
+      return !!sel && [...sel.options].some(o=>o.value==='ABC123');
+    },null,{timeout:25000});
+  } catch (error) {
+    const diagnostic=await depotPage.evaluate(()=>({
+      path:location.pathname,
+      live:document.getElementById('liveIndicator')?.textContent,
+      content:document.getElementById('content')?.textContent?.slice(0,650),
+      vehicleOptions:[...document.querySelectorAll('#content form[data-form="booking"] select[name="vehicleId"] option')]
+        .map(x=>({value:x.value,text:x.textContent})),
+      shellHidden:document.getElementById('shell')?.hidden
+    }));
+    console.error('POSTSEAL RESTORE DEPOT DIAGNOSTIC',
+      JSON.stringify({keyedVehicleStatus:restored?.status,diagnostic,errors}));
+    throw error;
+  }
   console.log('PASS [B+E]: restored vehicle becomes available in Depot booking list without reload');
 
   // Use a distinct future day; earlier 80-capacity booking is immutable.
