@@ -183,7 +183,7 @@ test('unconfirmed cache or pending snapshots cannot overwrite Fleet even after i
   assert.equal(client.applications(),applications);
 });
 
-test('confirmed write in one browser appears in another without reload',async()=>{
+test('two approved unsealed browsers cannot overwrite original Fleet before unique-ID cutover',async()=>{
   const server=makeServer(fixture(),{approved:true});
   const first=makeClient(server,{verified:true,localKm:0});
   const second=makeClient(server,{verified:true,localKm:0});
@@ -196,7 +196,8 @@ test('confirmed write in one browser appears in another without reload',async()=
   first.save();
   await tick();
   await tick();
-  assert.equal(server.state.vehicles[0].km,250,'Server must have the confirmed change');
-  assert.equal(second.km(),250,'Second browser must apply the confirmed snapshot');
-  assert.equal(first.pending(),false,'First browser pending backup cleared after confirmed commit');
+  assert.equal(server.state.vehicles[0].km,10,'Preseal archived Fleet must stay immutable');
+  assert.equal(second.km(),10,'Other browser must never see a forged preseal edit');
+  assert.equal(first.km(),10,'Rejected preseal edit must restore last confirmed Fleet UI state');
+  assert.equal(first.pending(),false,'No pending backup for an explicitly denied preseal edit');
 });
