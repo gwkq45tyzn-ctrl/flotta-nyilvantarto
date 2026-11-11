@@ -64,9 +64,9 @@ async function reset(sealed=true){
   const snap=fleet();if(!sealed)delete snap.sealed;
   await setDoc(doc(admin,'flottaSharedState','current'),snap);
   await setDoc(doc(admin,'flottaDrivers','DA0001'),{
-   ...fleet().drivers[0],revision:9,extra:{privateNote:'PRESERVE'}});
+   ...fleet().drivers[0],sourceIndex:0,revision:9,extra:{privateNote:'PRESERVE'}});
   await setDoc(doc(admin,'flottaVehicles','ABC123'),{
-   ...fleet().vehicles[0],revision:10,extra:{inspection:'PRESERVE'}});
+   ...fleet().vehicles[0],sourceIndex:0,revision:10,extra:{inspection:'PRESERVE'}});
  });
 }
 function runOriginalBridge(draft){
