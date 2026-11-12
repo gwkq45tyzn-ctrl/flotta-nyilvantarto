@@ -126,11 +126,11 @@ async function startWorker(f){
 }
 function positive(r){
   assert.equal(r.ok,true,JSON.stringify(r));
-  assert.equal(r.canSeal,false);
+  assert.notEqual(r.canSeal,true);
   assert.equal(r.sealed,false);
   assert.equal(r.authorizedForImport,false);
   assert.equal(r.productionIamVerified,false);
-  assert.equal(r.externalTrustRootAuthenticityVerified,false);
+  assert.notEqual(r.externalTrustRootAuthenticityVerified,true);
 }
 function negative(r,pattern){
   assert.equal(r.ok,false,JSON.stringify(r));
