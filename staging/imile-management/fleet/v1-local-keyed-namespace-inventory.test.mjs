@@ -13,6 +13,7 @@ import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importe
 import {observeLocalEmulatorKeyedInventory} from './v1-local-keyed-namespace-inventory.mjs';
 import {createAtomicPresealInventory} from '../../../tools/v1-atomic-preseal-inventory.mjs';
 import {createServerSealBoundary} from '../../../tools/v1-server-seal-boundary.mjs';
+import {createServerOnlySeal} from '../../../tools/v1-server-only-seal.mjs';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 
 const projectId='demo-imile-v1-inventory-parity';
@@ -75,7 +76,31 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       const completed=await importer.applyBatch(ids);
       assert.equal(completed.ok,true,JSON.stringify(completed));
       assert.equal(completed.verifiedCount,3);
-      const inventory=()=>observeLocalEmulatorKeyedInventory({
+      const knownSeal=createServerOnlySeal({
+        externalSignerAuthenticated:true,privilegedImporterVerified:true
+      });
+      const knownSet=()=>knownSeal.inspectBoundedKnownSet({
+        db,projectId,plan,expectedEpoch:epoch,
+        independentlyPinnedSha:pin,expectedRevision:1
+      });
+      const bounded=await knownSet();
+      assert.equal(bounded.ok,true,JSON.stringify(bounded));
+      assert.equal(bounded.knownWriteSetSnapshotVerified,true);
+      assert.equal(bounded.knownWriteSetCount,3);
+      assert.equal(bounded.knownReadDocumentCount,7);
+      assert.equal(bounded.canSeal,false);
+      assert.equal(bounded.atomicNamespaceSnapshotVerified,false);
+      assert.equal(bounded.productionIamVerified,false);
+      assert.equal(knownSeal.attemptSeal(bounded).ok,false);
+      assert.equal((await knownSeal.seal()).ok,false);
+      const forgedPin=await knownSeal.inspectBoundedKnownSet({
+        db,projectId,plan,expectedEpoch:epoch,
+        independentlyPinnedSha:'f'.repeat(64),expectedRevision:1
+      });
+      assert.equal(forgedPin.ok,false);
+      assert.equal(forgedPin.canSeal,false);
+      console.log('PASS [E+SDK]: actual 7-document transaction full rich known-set parity with epoch/independent pin; NO namespace atomicity or seal');
+            const inventory=()=>observeLocalEmulatorKeyedInventory({
         db,projectId,plan,expectedEpoch:epoch
       });
       const preseal=createAtomicPresealInventory({
@@ -131,6 +156,18 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
         revision:1,migrationSourceSha256:pin,masterSha256:'f'.repeat(64)};
       const orphanClaim=doc(db,'flottaDriverClaims','DA9999');
       await setDoc(orphanClaim,wrongClaim);
+      // Critical counterexample: the true 7-document TRANSACTION remains
+      // positive because an unknown forged claim ID was not in its read set.
+      // Hence it can NEVER confer a server seal or whole-namespace proof.
+      const afterOrphanKnownSet=await knownSet();
+      assert.equal(afterOrphanKnownSet.ok,true,JSON.stringify(afterOrphanKnownSet));
+      assert.equal(afterOrphanKnownSet.knownWriteSetSnapshotVerified,true);
+      assert.equal(afterOrphanKnownSet.atomicNamespaceSnapshotVerified,false);
+      assert.equal(afterOrphanKnownSet.canSeal,false);
+      assert.equal(knownSeal.attemptSeal(bounded).ok,false);
+      assert.equal(knownSeal.attemptSeal(afterOrphanKnownSet).ok,false);
+      assert.equal((await knownSeal.seal()).ok,false);
+      console.log('PASS DENY [E+SDK]: unknown privileged orphan is outside actual bounded transaction set; prior/current positive known-set proof cannot seal');
       // Previously clean scan cannot be used as a seal decision: concurrent
       // privileged write can create a new claim AFTER observation.
       assert.equal(clean.ok,true);
@@ -165,11 +202,19 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       const master=doc(db,'flottaDrivers','DA0001');
       await updateDoc(master,{history:[{kind:'TAMPERED',extra:'not in signed source'}]});
       checkDenied(await inventory(),/RICH_MASTER_MISMATCH:drivers\/DA0001/);
+      const badMasterKnownSet=await knownSet();
+      assert.equal(badMasterKnownSet.ok,false);
+      assert.match(badMasterKnownSet.reason,/KNOWN_RICH_MASTER_OR_IMMUTABLE_CLAIM_MISMATCH/);
+      assert.equal(badMasterKnownSet.canSeal,false);
       await setDoc(master,expectedDriver);
       const claim=doc(db,'flottaDriverClaims','DA0001');
       const originalClaim=(await getDoc(claim)).data();
       await updateDoc(claim,{sourceIndex:12345});
       checkDenied(await inventory(),/CLAIM_PARITY_MISMATCH:drivers\/DA0001/);
+      const badClaimKnownSet=await knownSet();
+      assert.equal(badClaimKnownSet.ok,false);
+      assert.match(badClaimKnownSet.reason,/KNOWN_RICH_MASTER_OR_IMMUTABLE_CLAIM_MISMATCH/);
+      assert.equal(badClaimKnownSet.canSeal,false);
       await setDoc(claim,originalClaim);
       console.log('PASS DENY [E+SDK]: matching IDs but tampered nested history or sourceIndex rejected');
 
@@ -186,6 +231,10 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
 
       const rollback=await importer.rollbackBeforeSeal();
       assert.equal(rollback.ok,true,JSON.stringify(rollback));
+      const releasedKnownSet=await knownSet();
+      assert.equal(releasedKnownSet.ok,false);
+      assert.match(releasedKnownSet.reason,/UNVERIFIED_OR_STALE_EPOCH_CHECKPOINT/);
+      assert.equal(releasedKnownSet.canSeal,false);
       for(const name of ['flottaDrivers','flottaVehicles',
         'flottaDriverClaims','flottaVehicleClaims'])
         assert.equal((await getDocs(collection(db,name))).size,0);
