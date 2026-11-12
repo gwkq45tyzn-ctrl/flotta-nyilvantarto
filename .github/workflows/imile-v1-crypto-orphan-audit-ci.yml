@@ -1,0 +1,62 @@
+name: iMile V1 #223 independent real Ed25519 and rich SDK orphan namespace audit
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-orphan-inventory.mjs'
+      - 'tools/v1-orphan-inventory.test.mjs'
+      - 'tools/v1-signed-manifest-contract.mjs'
+      - 'staging/imile-management/fleet/v1-local-keyed-namespace-inventory.mjs'
+      - 'staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs'
+      - '.github/workflows/imile-v1-crypto-orphan-audit-ci.yml'
+permissions:
+  contents: read
+jobs:
+  real-ed25519-synthetic-keypair-and-rich-canonical-plan-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Actual asymmetric signature, full-rich parity, spoofing and untrusted manifest attacks
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-signed-manifest-contract.mjs
+          node --check tools/v1-orphan-inventory.mjs
+          node --test tools/v1-orphan-inventory.test.mjs \
+            tools/v1-authenticated-source-contract.test.mjs \
+            tools/v1-pinned-backup-trust.test.mjs
+      - name: No actual owner signing root or production IAM
+        run: echo "Test-key generated in volatile CI only. Cryptographic integrity is not owner-trust root provenance, deployment approval or release."
+  real-original-rules-firestore-4-collection-namespace-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Pin local Firebase SDK
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Required actual Firestore SDK under ORIGINAL full restricted Rules
+        run: |
+          git rev-parse HEAD
+          node --check staging/imile-management/fleet/v1-local-keyed-namespace-inventory.mjs
+          node --check staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-inventory-parity \
+            --config firebase.depo-qa.json \
+            "node --test staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs"
+      - name: Fail-closed seal boundary
+        run: echo "Four Firestore SDK collection queries are NON-ATOMIC. No source signer authenticity, IAM, namespace atomicity or actual seal proven."
