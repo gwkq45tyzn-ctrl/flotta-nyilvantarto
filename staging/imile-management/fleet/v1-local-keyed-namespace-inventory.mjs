@@ -6,7 +6,7 @@
  * scans are NOT one transactionally consistent snapshot. A privileged
  * out-of-plan writer can inject after the scan. NEVER authorize seal.
  */
-import {collection,doc,getDoc,getDocs} from 'firebase/firestore';
+import {collection,doc,getDocs,runTransaction} from 'firebase/firestore';
 import {sha256} from '../../../tools/v1-migration-dryrun.mjs';
 import {inventoryKeyedState} from '../../../tools/v1-orphan-inventory.mjs';
 
@@ -36,7 +36,9 @@ export async function observeLocalEmulatorKeyedInventory({
     return deny('PIN_AND_EPOCH_REQUIRED');
   try {
     const lock=doc(db,LOCK);
-    const before=await getDoc(lock);
+    // Reads of the LOCK itself are in separate Firestore transactions.
+    // This STILL cannot atomically protect four other collection scans.
+    const before=await runTransaction(db,tx=>tx.get(lock));
     if(!before.exists())return deny('NO_PERSISTED_IMPORT_EPOCH');
     const l=before.data();
     const ids=[
@@ -63,7 +65,7 @@ export async function observeLocalEmulatorKeyedInventory({
         }
       }
     }
-    const after=await getDoc(lock);
+    const after=await runTransaction(db,tx=>tx.get(lock));
     if(!after.exists()||sha256(after.data())!==sha256(l))
       return deny('LOCK_CHANGED_DURING_NONATOMIC_SCAN');
     const parity=inventoryKeyedState(plan,observed);
