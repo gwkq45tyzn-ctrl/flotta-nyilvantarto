@@ -16,6 +16,10 @@ import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importe
 import {createDemoManualPresealRecovery} from './v1-demo-manual-preseal-recovery.mjs';
 import {createServerSealBoundary} from '../../../tools/v1-server-seal-boundary.mjs';
 import {createServerOnlySeal} from '../../../tools/v1-server-only-seal.mjs';
+import {createLocal440SignedChunkReceipts} from './v1-local-440-signed-chunk-receipts.mjs';
+import {createLocalSignedRegistryHighwater} from './v1-local-durable-signed-registry.mjs';
+import {generateKeyPairSync,createHash,sign as cryptoSign} from 'node:crypto';
+import {canonicalStringify} from '../../../features/migration-manifest.mjs';
 
 const projectId='demo-imile-v1-scaled-rich';
 const LOCK='v1MigrationSyntheticLocks/primary';
@@ -207,6 +211,132 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
             assert.equal(c.data().sourceIndex,entry.data.sourceIndex);
           }
         }
+        // EXACT original source signing, 19 bounded full-rich SDK receipts,
+        // and a separately checked 19-receipt aggregate: no production seal.
+        const root=generateKeyPairSync('ed25519');
+        const signer=generateKeyPairSync('ed25519');
+        const spki=k=>k.publicKey.export({format:'der',type:'spki'});
+        const fingerprint=k=>createHash('sha256').update(spki(k)).digest('hex');
+        const signed=(payload,key)=>({
+          algorithm:'Ed25519',payload,
+          signatureBase64:cryptoSign(null,
+            Buffer.from(canonicalStringify(payload),'utf8'),
+            key.privateKey).toString('base64')
+        });
+        const now=Date.now();
+        const valid={notBeforeMs:now-120000,expiresAtMs:now+3600000};
+        const registryPayload={
+          schema:'imile-v1-offline-owner-signer-registry-v1',
+          purpose:'synthetic-root-signed-fleet-manifest-registry',
+          registryAudience:'demo-imile-v1-owner-registry',
+          sourceProjectId:projectId,sequence:1,...valid,
+          signers:[{
+            signerId:'local-test-owner',keyVersion:1,
+            publicKeySpkiBase64:spki(signer).toString('base64'),
+            status:'active',...valid
+          }],
+          revokedSignerFingerprints:[]
+        };
+        const bundle=signed(registryPayload,root);
+        const manifest=signed({
+          schema:'imile-v1-offline-fleet-manifest-v1',
+          purpose:'synthetic-preseal-dry-run',
+          signerId:'local-test-owner',projectId,
+          sourceSha256:pin,sourceRevision:1,
+          canonicalPlanDigest:sha256(ids)
+        },signer);
+        const rootSha=fingerprint(root);
+        const rootSpki=spki(root).toString('base64');
+        const registryGate=createLocalSignedRegistryHighwater({
+          db:dbA,projectId,rootPublicKeySpkiBase64:rootSpki,
+          independentlyPinnedRootSha256:rootSha
+        });
+        const regResult=await registryGate.adoptRootSignedRegistry(bundle);
+        accepted(regResult);
+        assert.equal(regResult.sequence,1);
+        const attestor=createLocal440SignedChunkReceipts({
+          db:dbB,projectId,rootPublicKeySpkiBase64:rootSpki,
+          independentlyPinnedRootSha256:rootSha
+        });
+        const evidence={
+          registryBundle:bundle,manifest,snapshot:raw,backup,
+          independentlyPinnedSourceSha256:pin,expectedEpoch:3
+        };
+        const signedChunkCount=Math.ceil(ids.length/CHUNK);
+        let chunkWrites=0;
+        for(let i=0;i<signedChunkCount;i++){
+          const result=await attestor.recordChunk(evidence,i);
+          accepted(result);
+          assert.equal(result.chunkIndex,i);
+          assert.equal(result.receiptCreated,true);
+          assert.equal(result.fencedEpoch,3);
+          chunkWrites++;
+        }
+        assert.equal(chunkWrites,19);
+        const signedAggregate=await attestor.aggregate(evidence);
+        accepted(signedAggregate);
+        assert.equal(signedAggregate.verifiedReceiptCount,19);
+        assert.equal(signedAggregate.knownPairs,440);
+        assert.equal(signedAggregate.aggregateCreated,true);
+        assert.equal((await attestor.aggregate(evidence)).aggregateCreated,false);
+        const firstChunk=await attestor.recordChunk(evidence,0);
+        accepted(firstChunk);
+        assert.equal(firstChunk.receiptCreated,false);
+        console.log('PASS [E+SDK 440]: two real Ed25519 signed original rich source, root-signed registry highwater, 19 actual 24-pair/last-8-pair transactional full-rich claim receipts and aggregate; never seal');
+
+        const forgedManifest=structuredClone(manifest);
+        forgedManifest.payload.sourceSha256='f'.repeat(64);
+        denied(await attestor.recordChunk({...evidence,manifest:forgedManifest},0),
+          /SIGNED_440_SOURCE_PREFLIGHT_DENIED/);
+        denied(await attestor.aggregate({...evidence,expectedEpoch:4}),
+          /SOURCE_EPOCH_OR_COMPLETE_440_JOURNAL_INVALID/);
+        const claimRef=doc(dbB,'flottaDriverClaims','DA0000');
+        const originalClaim=(await getDoc(claimRef)).data();
+        await updateDoc(claimRef,{masterSha256:'f'.repeat(64)});
+        denied(await attestor.recordChunk(evidence,0),
+          /SIGNED_440_RICH_MASTER_OR_CLAIM_MISMATCH/);
+        await setDoc(claimRef,originalClaim);
+        const receiptRef=doc(dbB,'v1Synthetic440SignedChunks','00');
+        const receiptOriginal=(await getDoc(receiptRef)).data();
+        await updateDoc(receiptRef,{count:0});
+        denied(await attestor.aggregate(evidence),
+          /MISSING_OR_FORGED_SIGNED_440_CHUNK_RECEIPT/);
+        await setDoc(receiptRef,receiptOriginal);
+        accepted(await attestor.aggregate(evidence));
+        console.log('PASS DENY [E+SDK 440]: wrong signature/source, stale epoch, forged rich claim and forged persisted signed chunk receipt');
+
+        const olderHighwater=(await getDoc(doc(
+          dbB,'v1SyntheticOwnerRegistryHighwater','current'
+        ))).data();
+        const revokedSignedRegistry=signed({
+          ...registryPayload,sequence:2,
+          revokedSignerFingerprints:[fingerprint(signer)]
+        },root);
+        const revocationResult=await registryGate.adoptRootSignedRegistry(
+          revokedSignedRegistry
+        );
+        accepted(revocationResult);
+        denied(await attestor.recordChunk(evidence,0),
+          /REGISTRY_REVOKED_DRIFT_OR_PRIVILEGED_RESET/);
+        denied(await attestor.aggregate(evidence),
+          /REGISTRY_REVOKED_DRIFT_OR_PRIVILEGED_RESET/);
+        console.log('PASS DENY [E+SDK 440]: root-signed signer revocation at registry seq2 invalidates previous signed chunk/aggregate attempt');
+
+        // Genuine PRIVILEGED counterexample. Other test-only actor can
+        // setDoc() old registry seq1 after the newer revocation: broken
+        // production antirollback if Admin SDK writer isolation unknown.
+        await setDoc(
+          doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'),
+          olderHighwater
+        );
+        const afterPrivilegedReset=await attestor.recordChunk(evidence,0);
+        accepted(afterPrivilegedReset);
+        assert.equal(afterPrivilegedReset.canSeal,false);
+        accepted(await attestor.aggregate(evidence));
+        denied(await attestor.seal(),
+          /NO_PRODUCTION_OWNER_IAM_CLOSED_WRITERS_OR_ATOMIC_SEAL/);
+        console.log('PASS VULNERABILITY [E+SDK 440]: separate privileged writer reset revoked highwater seq2 to seq1, old signed receipts accepted again; no production GO');
+
         // A single full 440-pair transaction is NOT the solution:
         // the bounded known-document proof must refuse the oversized
         // source, not mislabel a partial subset as a whole namespace.
