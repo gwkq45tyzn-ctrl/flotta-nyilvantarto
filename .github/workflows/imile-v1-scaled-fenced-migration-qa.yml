@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 jobs:
-  actual-180-rich-masters-180-claims-and-bounded-recovery:
+  actual-440-rich-masters-440-claims-and-bounded-recovery:
     runs-on: ubuntu-24.04
     timeout-minutes: 27
     steps:
@@ -36,4 +36,4 @@ jobs:
             --config firebase.depo-qa.json \
             "node --test tools/v1-scaled-fenced-migration.test.mjs"
       - name: No privileged release authority
-        run: echo "180 synthetic rich masters+180 claims DEMO only. No actual source signer, service identity/IAM, unattended crash recovery or seal. FULL V1 NO-GO."
+        run: echo "440 synthetic rich masters+440 claims DEMO only. No actual source signer, service identity/IAM, unattended crash recovery or seal. FULL V1 NO-GO."
