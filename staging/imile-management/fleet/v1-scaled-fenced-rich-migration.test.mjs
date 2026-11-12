@@ -10,10 +10,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
-import {collection,doc,getDoc,getDocs,setDoc,updateDoc} from 'firebase/firestore';
+import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importer.mjs';
 import {createDemoManualPresealRecovery} from './v1-demo-manual-preseal-recovery.mjs';
+import {createServerSealBoundary} from '../../../tools/v1-server-seal-boundary.mjs';
 
 const projectId='demo-imile-v1-scaled-rich';
 const LOCK='v1MigrationSyntheticLocks/primary';
@@ -205,6 +206,39 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
             assert.equal(c.data().sourceIndex,entry.data.sourceIndex);
           }
         }
+        // Cutover-negative on the FULL 440-record rich source:
+        // 4 independent collection queries under a stable epoch are not
+        // a privileged-write freeze; inject orphan AFTER prior clean scan.
+        const sealBoundary=createServerSealBoundary({
+          externalTrustRootAuthenticated:true,
+          privilegedImporterVerified:true,
+          productionIamVerified:true
+        });
+        const richPreview=()=>sealBoundary.inspectLocalEmulator({
+          db:dbB,projectId,plan,expectedEpoch:3
+        });
+        const green=await richPreview();
+        assert.equal(green.ok,true,JSON.stringify(green));
+        assert.equal(green.diagnosticMasterCount,440);
+        assert.equal(green.diagnosticClaimCount,440);
+        assert.equal(green.canSeal,false);
+        assert.equal(sealBoundary.attemptSeal(green).ok,false);
+        const privilegedOrphan=doc(dbA,'flottaDriverClaims','DA9999');
+        await setDoc(privilegedOrphan,{
+          normalizedId:'DA9999',sourceIndex:0,revision:1,
+          migrationSourceSha256:pin,
+          masterSha256:'f'.repeat(64),
+          history:[{kind:'FORGED_TEST_ONLY'}]
+        });
+        const raced=await richPreview();
+        assert.equal(raced.ok,false);
+        assert.ok(raced.issues.some(x=>/ORPHAN_CLAIM/.test(x)),
+          JSON.stringify(raced));
+        assert.equal(sealBoundary.attemptSeal(green).ok,false);
+        assert.equal(sealBoundary.attemptSeal(raced).ok,false);
+        assert.equal((await sealBoundary.seal()).ok,false);
+        await deleteDoc(privilegedOrphan); // authorized synthetic test cleanup
+        console.log('PASS DENY [E+SDK 440]: actual privileged orphan after clean 440 rich masters/claims preview, no cached or current seal permitted');
         denied(await second.seal(),/SEAL_REFUSED/);
         console.log('PASS [E+SDK]: 440 real FULL rich keyed masters + 440 immutable claims, 100% SHA readback, no seal');
 
