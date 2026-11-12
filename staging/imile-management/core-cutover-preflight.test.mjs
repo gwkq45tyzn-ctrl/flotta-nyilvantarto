@@ -93,4 +93,49 @@ check('module only returns immutable top-level result and no write enable flag',
  assert.equal(p.writesAllowed,false);assert.equal(p.personalDataIncluded,false);
  assert.equal(p.sourceOriginVerified,false);assert.equal(Object.isFrozen(p),true);
 });
+check('missing daily capacity is NOT silently accepted as an explicit zero',()=>{
+ const x=legacy();
+ const report=assessFleetCutover({legacy:x,staging:staging(),proof:proof()});
+ assert.equal(report.counts.driversMissingOrInvalidCapacity,1);
+ assert.ok(report.holds.some(h=>h.reason==='fleet_driver_capacity_unverified'&&h.count===1));
+ x.drivers[0].kapacitas=0;
+ const explicitZero=assessFleetCutover({legacy:x,staging:staging(),proof:proof()});
+ assert.equal(explicitZero.counts.driversMissingOrInvalidCapacity,0);
+ assert.equal(explicitZero.holds.some(h=>h.reason==='fleet_driver_capacity_unverified'),false);
+});
+check('unknown driver and vehicle status always need manual resolution',()=>{
+ const x=legacy();x.drivers[0].status='ismeretlen';x.vehicles[0].status='unknown';
+ const report=assessFleetCutover({legacy:x,staging:staging(),proof:proof()});
+ assert.deepEqual([report.counts.driversUnknownStatus,report.counts.vehiclesUnknownStatus],[1,1]);
+ assert.ok(report.holds.some(h=>h.reason==='fleet_driver_status_unverified'&&h.count===1));
+ assert.ok(report.holds.some(h=>h.reason==='fleet_vehicle_status_unverified'&&h.count===1));
+});
+check('synthetic unequal source has complete four-array count, redacted status and capacity blockers',()=>{
+ const x={
+  vehicles:Array.from({length:14},(_,i)=>({
+   id:'vehicle-internal-'+i,rendszam:'XYZ'+String(i+100).padStart(3,'0'),
+   gyartmany:'Synthetic',modell:'Van',status:'aktiv',
+   history:i===0?[{event:'synthetic',privateExtra:'no-leak'}]:[]
+  })),
+  drivers:Array.from({length:12},(_,i)=>({
+   id:'driver-internal-'+i,daCode:'TEST'+String(i).padStart(4,'0'),
+   name:'Synthetic operator '+i,status:i<3?'ismeretlen':'aktiv',
+   agency:'Synthetic',history:[],kapacitas:i===11?0:undefined
+  })),
+  fuelCards:Array.from({length:14},(_,i)=>({id:'synthetic-card-'+i})),
+  contacts:Array.from({length:5},(_,i)=>({id:'synthetic-contact-'+i}))
+ };
+ const report=assessFleetCutover({legacy:x,staging:{drivers:[],vehicles:[]},proof:proof()});
+ assert.equal(report.counts.legacyVehicles,14);
+ assert.equal(report.counts.legacyDrivers,12);
+ assert.equal(report.counts.legacyFuelCards,14);
+ assert.equal(report.counts.legacyContacts,5);
+ assert.equal(report.counts.driversMissingOrInvalidCapacity,11);
+ assert.equal(report.counts.driversUnknownStatus,3);
+ assert.equal(report.readiness,'blocked');
+ const serialized=JSON.stringify(report);
+ for(const secret of ['privateExtra','Synthetic operator','driver-internal','synthetic-card'])
+  assert.ok(!serialized.includes(secret),secret);
+});
+
 console.log('PASS: '+n+' cutover guards, legacy history coverage, central sync and redacted output');
