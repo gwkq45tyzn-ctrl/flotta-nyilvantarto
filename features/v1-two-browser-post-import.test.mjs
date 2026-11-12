@@ -21,9 +21,23 @@ test('two-browser post-import: gateOldSync prevents dual write', () => {
   assert.match(bridge, /pullRemote = function/);
 });
 
-test('two-browser post-import: rules use getAfter for eligibility', () => {
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*drivers\[/);
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*vehicles\[/);
+test('two-browser post-import: live keyed authority plus frozen original Fleet index are both enforced', () => {
+  // The old test expected the original drivers array to be read by Rules
+  // for capacity. That is deliberately no longer authoritative after seal.
+  // Demand the current normalized-keyed driver capacity AND the original
+  // frozen vehicle identity as well as immutable import source indices.
+  assert.ok(rules.includes(
+    'let keyed = getAfter(/databases/$(database)/documents/flottaDrivers/$(driverId)).data'
+  ),'capacity must be read from the live keyed Fleet driver');
+  assert.ok(rules.includes(
+    'getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam'
+  ),'original frozen plate identity must be verified');
+  assert.ok(rules.includes(
+    'getAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex'
+  ),'driver source index must be server-verified');
+  assert.ok(rules.includes(
+    'getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex'
+  ),'vehicle source index must be server-verified');
 });
 
 test('two-browser post-import: booked capacity from current canonical KEYED Fleet, not stale legacy array', () => {
