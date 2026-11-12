@@ -207,8 +207,10 @@
     }
     const found = new Map();
     for (const item of rows) {
+      if (!item || typeof item!=='object' || Array.isArray(item)) return null;
       const id = item.key, raw = item.data;
-      if (!id || id !== normalizer(raw[field]) || found.has(id)) return null;
+      if (!raw || typeof raw!=='object' || Array.isArray(raw) ||
+          !id || id !== normalizer(raw[field]) || found.has(id)) return null;
       const archivedRow = expected.get(id);
       // Unknown keyed documents are not members of the attested Fleet archive.
       if (!archivedRow) return null;
