@@ -187,11 +187,11 @@ try{
       approved(await a.call('apply',{ids:['drivers/DA0000']}));
       // A separate OS test process simulates a malicious extra privileged
       // claim for the NEXT intended batch, not just a hardcoded result.
-      approved(await b.call('injectTestOnlyClaim',{
+      assert.equal((await b.call('injectTestOnlyClaim',{
         claimPath:'flottaDriverClaims/DA0001',
         claimData:{sourceIndex:1,masterSha256:'f'.repeat(64),
           revision:1,migrationSourceSha256:'f'.repeat(64)}
-      }));
+      })).ok,true);
       refused(await a.call('apply',{ids:['drivers/DA0001']}),/UNEXPECTED_EXISTING_MASTER_OR_CLAIM/);
       const unchanged=await b.call('counts');
       assert.deepEqual(unchanged.lock.verifiedIds,['drivers/DA0000']);
@@ -206,9 +206,9 @@ try{
     await withWorkers(async(a,b)=>{
       approved(await a.call('begin'));
       approved(await a.call('apply',{ids:['drivers/DA0000']}));
-      approved(await b.call('tamperTestOnlyClaim',{
+      assert.equal((await b.call('tamperTestOnlyClaim',{
         claimPath:'flottaDriverClaims/DA0000'
-      }));
+      })).ok,true);
       refused(await a.call('apply',{ids:['drivers/DA0001']}),/PREVIOUS_VERIFIED_RICH_DOCUMENT_TAMPERED/);
       approved(await b.call('claimRecovery',{epoch:1}));
       refused(await b.call('rollback',{limit:1}),/RICH_MASTER_OR_IMMUTABLE_CLAIM_DRIFT/);
