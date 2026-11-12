@@ -20,7 +20,7 @@ const deny=r=>{
   assert.equal(r.atomicNamespaceSnapshotVerified,false);
   assert.equal(r.closedWriterSetVerified,false);
 };
-test('no producer signer, no privileged importer and no actual closed writer set deny seal',()=>{
+test('no producer signer, no privileged importer and no actual closed writer set deny seal',async()=>{
   const b=createServerSealBoundary();
   deny(b.attemptSeal({}));
   deny(b.attemptSeal(null));
@@ -28,7 +28,7 @@ test('no producer signer, no privileged importer and no actual closed writer set
   deny(b.attemptSeal({masters:440,claims:440}));
   assert.match(b.attemptSeal().reason,/AUTHORITY_UNAVAILABLE/);
 });
-test('caller-invented root/IAM booleans and "atomic" inventory fields never authorize anything',()=>{
+test('caller-invented root/IAM booleans and "atomic" inventory fields never authorize anything',async()=>{
   const b=createServerSealBoundary({
     externalTrustRootAuthenticated:true,
     privilegedImporterVerified:true,
@@ -46,7 +46,7 @@ test('caller-invented root/IAM booleans and "atomic" inventory fields never auth
   deny(await b.seal({ownerApproved:true,productionIamVerified:true}));
   deny(await b.claimProductionImporter({serviceAccount:'fake'}));
 });
-test('fake clean scan before late orphan is never promoted to a seal token',()=>{
+test('fake clean scan before late orphan is never promoted to a seal token',async()=>{
   const b=createServerSealBoundary();
   const early={ok:true,masters:440,claims:440,sourceIndexVerified:true};
   const late={ok:false,masters:440,claims:441,orphanClaim:'DA9999'};
@@ -54,7 +54,7 @@ test('fake clean scan before late orphan is never promoted to a seal token',()=>
   deny(b.attemptSeal(late));
   deny(await b.seal({earlierCleanScan:early}));
 });
-test('user cannot redefine boundary to grant real production privileges',()=>{
+test('user cannot redefine boundary to grant real production privileges',async()=>{
   const b=createServerSealBoundary();
   b.productionIamVerified=true;
   b.canSeal=true;
