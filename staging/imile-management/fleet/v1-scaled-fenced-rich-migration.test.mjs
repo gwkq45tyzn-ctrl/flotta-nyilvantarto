@@ -29,7 +29,7 @@ const source=()=>({
     history:[{kind:'start',details:{who:'no-real-employee',i,
       nested:[{language:'árvíztűrő',token:'S'+i}]}},
       {kind:'capacity',value:i%75}],
-    unknownRich:{preserve:{nested:{tags:['β','árvíz',String(i)]}}},
+    unknownRich:{preserve:{nested:{tags:['β','árvíz',String(i)]}},
       extraArray:[i,{intValue:i*7}]}
   })),
   vehicles:Array.from({length:VEHICLE_COUNT},(_,i)=>({
