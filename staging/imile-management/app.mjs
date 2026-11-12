@@ -36,7 +36,8 @@ if (!ready) {
       $('cutoverLink').hidden=profile.role!=='admin';
       $('depoLink').hidden=!entries.some(x=>x.id==='depo'&&x.enabled);
       $('fleetLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled);
-      $('fleetMasterLink').hidden=!entries.some(x=>x.id==='fleet'&&x.enabled);
+      // Retain the old QA element for regression compatibility, never expose it as V1 Fleet.
+      $('fleetMasterLink').hidden=true;
       $('userSummary').textContent=(profile.name||user.email||'Belső felhasználó')+' · '+profile.role;
       show('menu');
     } catch(error) {

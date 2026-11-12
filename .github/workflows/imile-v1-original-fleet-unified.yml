@@ -1,0 +1,35 @@
+name: iMile V1 original complete Fleet unified menu and source hardstop
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'staging/imile-management/index.html'
+      - 'staging/imile-management/app.mjs'
+      - 'features/firestore-bridge.js'
+      - 'features/v1-original-fleet-unified.test.cjs'
+      - '.github/workflows/imile-v1-original-fleet-unified.yml'
+permissions:
+  contents: read
+jobs:
+  original-fleet-integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact SHA and JS syntax
+        run: |
+          git rev-parse HEAD
+          node --check features/firestore-bridge.js
+          node --check staging/imile-management/app.mjs
+          node --check features/v1-original-fleet-unified.test.cjs
+      - name: Actual original Fleet routes and poison-source regression
+        run: |
+          node --test features/v1-original-fleet-unified.test.cjs
+          node --test features/firestore-bridge.runtime-regressions.test.cjs
+      - name: Safety gate
+        run: echo "No production migration, deploy, source attestations or IAM; V1 production GO still blocked."

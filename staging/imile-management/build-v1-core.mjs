@@ -86,6 +86,16 @@ try{
     mkdirSync(dirname(dest),{recursive:true});
     cpSync(join(root,file),dest);
   }
+  // Reduced offline bundle excludes Reports. Remove its navigation entry
+  // from the COPIED bridge only; the original repository bridge remains full.
+  const candidateBridge=join(target,'features/firestore-bridge.js');
+  let bridgeSource=readFileSync(candidateBridge,'utf8');
+  const reportsRoute="      ['./staging/imile-management/reports/index.html','Napi riportok']";
+  if(!bridgeSource.includes(reportsRoute))
+    throw Error('Integrated bridge reports route changed: re-review');
+  bridgeSource=bridgeSource.replace(reportsRoute,'      // Reports deferred in narrow core QA bundle');
+  writeFileSync(candidateBridge,bridgeSource);
+
   // Preserve original Fleet index.html EXACTLY, including its data model/UX.
   const old=readFileSync(join(root,'index.html'));
   const fleet=readFileSync(join(target,'index.html'));
@@ -97,8 +107,11 @@ try{
   const reports=/<article class="card module reports">[\s\S]*?<\/article>/;
   if(!reports.test(html))throw Error('Report module scope anchor changed');
   html=html.replace(reports,'<!-- OFD + In-Hub excluded from V1; V1.1 only -->');
-  html=html.replace(
-    /<a class="action secondary" href="\.\/fleet\/operations\.html" id="fleetMasterLink">[^<]*<\/a>/,
+  // Full hub keeps a permanently hidden legacy QA anchor for historical
+  // tests; the reduced offline core bundle must omit the URL entirely.
+  const legacyQaAnchor=/<a\b[^>]*href="\.\/fleet\/operations\.html"[^>]*id="fleetMasterLink"[^>]*>[^<]*<\/a>/;
+  if(!legacyQaAnchor.test(html))throw Error('Legacy Fleet QA anchor changed: re-review');
+  html=html.replace(legacyQaAnchor,
     '<span id="fleetMasterLink" hidden aria-hidden="true"></span>');
   html=html.replace('az In-Hub/OFD riportkészítő','a szűkített Flotta + Depó V1 ellenőrző csomag');
   if(html.includes('href="./reports/index.html"')||html.includes('href="./fleet/operations.html"'))

@@ -196,19 +196,31 @@
       : s => typeof s === 'string' && /^[A-Za-z0-9 -]{4,40}$/.test(s) ? s.replace(/[ -]/g,'').toUpperCase() : '';
     const field = kind === 'drivers' ? 'daCode' : 'rendszam';
     const expected = new Map();
-    archived.forEach((r,i) => expected.set(normalizer(r[field]),{index:i,id:r.id}));
+    for (let i=0;i<archived.length;i++) {
+      const r=archived[i];
+      if (!r || typeof r!=='object' || Array.isArray(r)) return null;
+      const normalized=normalizer(r[field]);
+      // A privileged duplicate in the frozen original source must not be
+      // disguised as a single healthy keyed identity in the live Fleet UI.
+      if (!normalized || expected.has(normalized)) return null;
+      expected.set(normalized,{index:i,id:r.id});
+    }
     const found = new Map();
     for (const item of rows) {
+      if (!item || typeof item!=='object' || Array.isArray(item)) return null;
       const id = item.key, raw = item.data;
-      if (!id || id !== normalizer(raw[field]) || found.has(id)) return null;
+      if (!raw || typeof raw!=='object' || Array.isArray(raw) ||
+          !id || id !== normalizer(raw[field]) || found.has(id)) return null;
       const archivedRow = expected.get(id);
-      const stableId = raw.id || archivedRow?.id || 'keyed-' + id;
+      // Unknown keyed documents are not members of the attested Fleet archive.
+      if (!archivedRow) return null;
+      const stableId = raw.id || archivedRow.id || 'keyed-' + id;
       if (archivedRow && archivedRow.id && stableId !== archivedRow.id) return null;
       found.set(id,{...raw,id:stableId});
     }
     // A completed migration must have all its original rich identities.
     // Partial import cannot silently produce a truncated Fleet UI.
-    if ([...expected.keys()].some(id => !id || !found.has(id))) return null;
+    if (found.size!==expected.size || [...expected.keys()].some(id => !found.has(id))) return null;
     return [...found].sort(([a],[b]) =>
       (expected.get(a)?.index ?? Number.MAX_SAFE_INTEGER) -
       (expected.get(b)?.index ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b)
@@ -784,12 +796,42 @@
     }).catch(console.error);
   }
 
+  // Extend the full original Fleet without editing its proven HTML blob.
+  // These are navigation links only; every destination verifies Firebase Auth.
+  function ensureUnifiedNavigation() {
+    if (typeof document.querySelector !== 'function' ||
+        typeof document.createElement !== 'function') return;
+    const header=document.querySelector('.flotta-session-header');
+    if (!header || document.getElementById('flottaUnifiedLinks')) return;
+    const nav=document.createElement('nav');
+    nav.id='flottaUnifiedLinks';
+    nav.setAttribute('aria-label','iMile Management modulok');
+    const links=[
+      ['./staging/imile-management/index.html','Közös főmenü'],
+      ['./depokapacitas/index.html','DepóKapacitás'],
+      ['./staging/imile-management/reports/index.html','Napi riportok']
+    ];
+    for(const [href,label] of links){
+      const link=document.createElement('a');
+      link.href=href;
+      link.textContent=label;
+      link.style.cssText='display:inline-block;padding:7px 11px;margin-right:6px;border-radius:8px;background:#e8efff;color:#1e40af;text-decoration:none;font-size:.85rem;font-weight:650';
+      nav.appendChild(link);
+    }
+    header.insertBefore(nav,document.getElementById('flottaLogout')||null);
+    // Legacy Apps Script settings stay in original source for archive
+    // parity, but are not a supported cloud writer for unified V1.
+    const oldSetup=document.querySelector('button[onclick="configureBackend()"]');
+    if(oldSetup)oldSetup.hidden=true;
+  }
+
   function boot() {
     const tryPatch = () => {
       if (typeof fleetSimpleLogin === 'function' && typeof save === 'function') {
         patchLogin();
         patchSessionGate();
         gateOldSync();
+        ensureUnifiedNavigation();
         resumeIfSession();
       } else {
         setTimeout(tryPatch, 40);
