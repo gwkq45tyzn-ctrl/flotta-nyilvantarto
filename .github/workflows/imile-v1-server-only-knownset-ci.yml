@@ -1,0 +1,80 @@
+name: iMile V1 #232 bounded source known-set transaction, forbidden server seal
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-server-only-seal.mjs'
+      - 'tools/v1-server-only-seal.test.mjs'
+      - 'staging/imile-management/fleet/v1-local-knownset-transaction.mjs'
+      - 'staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs'
+      - 'staging/imile-management/fleet/v1-scaled-fenced-rich-migration.test.mjs'
+      - '.github/workflows/imile-v1-server-only-knownset-ci.yml'
+permissions:
+  contents: read
+jobs:
+  anti-forgery-and-no-untrusted-server-seal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact SHA, parsed tests, forged root/IAM/green scan DENY
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-server-only-seal.mjs
+          node --check tools/v1-server-only-seal.test.mjs
+          node --check staging/imile-management/fleet/v1-local-knownset-transaction.mjs
+          node --test tools/v1-server-only-seal.test.mjs \
+            tools/v1-server-seal-boundary.test.mjs
+  original-rules-actual-bounded-transaction-and-unknown-orphan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Real 7-document Firestore read transaction under original restricted Rules
+        run: |
+          git rev-parse HEAD
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-inventory-parity \
+            --config firebase.depo-qa.json \
+            "node --test staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs"
+  full-440-rich-source-nonseal-limit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Original 440 master+claim importer+rollback with bounded transaction refusal and late privileged orphan
+        run: |
+          git rev-parse HEAD
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-scaled-rich \
+            --config firebase.depo-qa.json \
+            "node --test tools/v1-scaled-fenced-migration.test.mjs"
+      - name: Forbidden release path
+        run: echo "Scope synthetic demo known-set read snapshot only; no atomic whole namespace, real signer, IAM, authorized privileged importer or seal. P0 stays RED."
