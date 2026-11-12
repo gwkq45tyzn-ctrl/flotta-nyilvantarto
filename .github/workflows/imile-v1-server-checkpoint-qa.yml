@@ -1,0 +1,32 @@
+name: iMile V1 #207-#208 checkpoint anti-poison exact-head QA
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-server-importer-checkpoint.mjs'
+      - 'tools/v1-server-importer-checkpoint.test.mjs'
+      - '.github/workflows/imile-v1-server-checkpoint-qa.yml'
+permissions:
+  contents: read
+jobs:
+  local-server-checkpoint-negative-and-positive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact-head source and hostile controls, no real credentials
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-server-importer-checkpoint.mjs
+          node --test tools/v1-server-importer-checkpoint.test.mjs \
+            tools/v1-privileged-importer-local.test.mjs \
+            tools/v1-pinned-backup-trust.test.mjs \
+            tools/v1-trusted-importer-attestation.test.mjs \
+            tools/v1-poisoned-source-hardstop.test.mjs
+      - name: Do not mistake journal for imported or durable state
+        run: echo "Synthetic no-IAM/no-Firestore/no-write journal only. Source identity external proof, durable checkpoints, verified writes and final seal remain NO-GO."
