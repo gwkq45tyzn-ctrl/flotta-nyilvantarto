@@ -12,6 +12,7 @@ import {doc,getDoc,getDocs,collection,setDoc,updateDoc,deleteDoc} from 'firebase
 import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importer.mjs';
 import {observeLocalEmulatorKeyedInventory} from './v1-local-keyed-namespace-inventory.mjs';
 import {createAtomicPresealInventory} from '../../../tools/v1-atomic-preseal-inventory.mjs';
+import {createServerSealBoundary} from '../../../tools/v1-server-seal-boundary.mjs';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 
 const projectId='demo-imile-v1-inventory-parity';
@@ -93,6 +94,28 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       assert.equal(actualPreview.authorizedForImport,false);
       assert.equal((await preseal.seal()).ok,false);
       console.log('PASS [E+SDK]: real transactional lock reads plus four rich collection scans yield only NONATOMIC preseal review, never seal');
+      const serverBoundary=createServerSealBoundary({
+        externalTrustRootAuthenticated:true,
+        privilegedImporterVerified:true,
+        productionIamVerified:true
+      });
+      const serverReview=()=>serverBoundary.inspectLocalEmulator({
+        db,projectId,plan,expectedEpoch:epoch
+      });
+      const cleanBoundary=await serverReview();
+      assert.equal(cleanBoundary.ok,true,JSON.stringify(cleanBoundary));
+      assert.equal(cleanBoundary.diagnosticFullRichParity,true);
+      assert.equal(cleanBoundary.diagnosticMasterCount,3);
+      assert.equal(cleanBoundary.diagnosticClaimCount,3);
+      assert.equal(cleanBoundary.diagnosticEpoch,epoch);
+      assert.equal(cleanBoundary.canSeal,false);
+      assert.equal(cleanBoundary.authorizedForImport,false);
+      assert.equal(cleanBoundary.productionIamVerified,false);
+      assert.equal(cleanBoundary.closedWriterSetVerified,false);
+      assert.equal(cleanBoundary.atomicNamespaceSnapshotVerified,false);
+      assert.equal(serverBoundary.attemptSeal(cleanBoundary).ok,false);
+      assert.equal((await serverBoundary.seal()).ok,false);
+      console.log('PASS [E+SDK]: actual original-Rules server-boundary inspection matches 3 rich pairs, cannot seal with caller-forged IAM/root flags');
       const clean=await inventory();
       assert.equal(clean.ok,true,JSON.stringify(clean));
       assert.equal(clean.expectedCount,3);
@@ -113,6 +136,15 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       assert.equal(clean.ok,true);
       assert.equal(clean.canSeal,false);
       checkDenied(await inventory(),/ORPHAN_CLAIM:drivers\/DA9999/);
+      const afterLatePrivilegedOrphan=await serverReview();
+      assert.equal(afterLatePrivilegedOrphan.ok,false);
+      assert.ok(afterLatePrivilegedOrphan.issues.some(x=>/ORPHAN_CLAIM/.test(x)),
+        JSON.stringify(afterLatePrivilegedOrphan));
+      assert.equal(afterLatePrivilegedOrphan.canSeal,false);
+      assert.equal(serverBoundary.attemptSeal(cleanBoundary).ok,false);
+      assert.equal(serverBoundary.attemptSeal(afterLatePrivilegedOrphan).ok,false);
+      assert.equal((await serverBoundary.seal({useCachedGreen:true})).ok,false);
+      console.log('PASS DENY [E+SDK]: actual privileged orphan inserted AFTER a genuine green boundary inspection still cannot be sealed');
       const afterInjection=await preview();
       assert.equal(afterInjection.ok,false);
       assert.equal(afterInjection.canSeal,false);
