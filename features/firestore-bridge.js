@@ -796,12 +796,42 @@
     }).catch(console.error);
   }
 
+  // Extend the full original Fleet without editing its proven HTML blob.
+  // These are navigation links only; every destination verifies Firebase Auth.
+  function ensureUnifiedNavigation() {
+    if (typeof document.querySelector !== 'function' ||
+        typeof document.createElement !== 'function') return;
+    const header=document.querySelector('.flotta-session-header');
+    if (!header || document.getElementById('flottaUnifiedLinks')) return;
+    const nav=document.createElement('nav');
+    nav.id='flottaUnifiedLinks';
+    nav.setAttribute('aria-label','iMile Management modulok');
+    const links=[
+      ['./staging/imile-management/index.html','Közös főmenü'],
+      ['./depokapacitas/index.html','DepóKapacitás'],
+      ['./staging/imile-management/reports/index.html','Napi riportok']
+    ];
+    for(const [href,label] of links){
+      const link=document.createElement('a');
+      link.href=href;
+      link.textContent=label;
+      link.style.cssText='display:inline-block;padding:7px 11px;margin-right:6px;border-radius:8px;background:#e8efff;color:#1e40af;text-decoration:none;font-size:.85rem;font-weight:650';
+      nav.appendChild(link);
+    }
+    header.insertBefore(nav,document.getElementById('flottaLogout')||null);
+    // Legacy Apps Script settings stay in original source for archive
+    // parity, but are not a supported cloud writer for unified V1.
+    const oldSetup=document.querySelector('button[onclick="configureBackend()"]');
+    if(oldSetup)oldSetup.hidden=true;
+  }
+
   function boot() {
     const tryPatch = () => {
       if (typeof fleetSimpleLogin === 'function' && typeof save === 'function') {
         patchLogin();
         patchSessionGate();
         gateOldSync();
+        ensureUnifiedNavigation();
         resumeIfSession();
       } else {
         setTimeout(tryPatch, 40);
