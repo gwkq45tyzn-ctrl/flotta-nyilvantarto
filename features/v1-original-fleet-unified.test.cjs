@@ -8,6 +8,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const crypto=require('node:crypto');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const fleet=read('index.html');
@@ -19,13 +20,13 @@ test('one unified V1 routes to ORIGINAL rich Fleet, Depot and reports, not proto
   assert.match(portal,/id="fleetLink"[^>]*|href="\.\.\/\.\.\/index\.html" id="fleetLink"/);
   assert.match(portal,/href="\.\.\/\.\.\/depokapacitas\/index\.html" id="depoLink"/);
   assert.match(portal,/href="\.\/reports\/index\.html" id="reportsLink"/);
-  assert.doesNotMatch(portal,/id="fleetMasterLink"/);
+  assert.match(portal,/id="fleetMasterLink" hidden aria-hidden="true"/);
   assert.doesNotMatch(app,/\$\('fleetMasterLink'\)/);
   for(const href of [
     './staging/imile-management/index.html',
     './depokapacitas/index.html',
     './staging/imile-management/reports/index.html'
-  ]) assert.ok(fleet.includes('href="'+href+'"'),href);
+  ]) assert.ok(bridge.includes(href),'original Fleet bridge route: '+href);
 });
 test('ORIGINAL complete Fleet remains intact with rich features and guarded cloud bridge',()=>{
   for(const exact of ['function snapshot()','function applySnapshot(',
