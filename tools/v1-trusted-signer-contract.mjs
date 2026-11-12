@@ -176,6 +176,14 @@ export class TrustedSignerContract {
         if(entry.signerId===this.#signer)
           matches.push({...entry,fingerprint:key.fingerprint});
       }
+      // A higher root-signed registry is authoritative for this SINGLE
+      // in-memory TEST instance even if its signer is now revoked/disabled.
+      // Never allow fallback to an earlier active registry after seeing
+      // an authentic newer revocation. No persistence across restarts.
+      if(r.sequence>this.#seenSeq){
+        this.#seenSeq=r.sequence;
+        this.#seenRegistryDigest=registryDigest;
+      }
       if(matches.length===0)return fail('SIGNER_ID_MISMATCH_EXTERNAL_REGISTRY');
       const current=matches.reduce((a,b)=>
         !a||b.keyVersion>a.keyVersion?b:a,null);
@@ -206,12 +214,7 @@ export class TrustedSignerContract {
       if(!sourceProof.ok)return fail(
         'RICH_SOURCE_MANIFEST_SIGNATURE_OR_BACKUP_DENIED: '+sourceProof.reason
       );
-      // Highest accepted signed registry version is IN-MEMORY ONLY:
-      // not a durable or externally authenticated production antirollback.
-      if(r.sequence>this.#seenSeq){
-        this.#seenSeq=r.sequence;
-        this.#seenRegistryDigest=registryDigest;
-      }
+      // Registry high water already updated on valid signed registry.
       return success({
         localRootFingerprint:this.#pinnedRootSha,
         localRegistrySequence:r.sequence,
