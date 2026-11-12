@@ -279,8 +279,6 @@
     .flotta-session-header{display:flex;align-items:center;justify-content:flex-end;gap:10px;
       padding:.6rem 0 1rem;font-size:.9rem}
     .flotta-session-header button{background:#334155;padding:7px 12px;font-size:.85rem}
-    .flotta-module-link{display:inline-block;padding:7px 11px;border-radius:8px;background:#e8efff;color:#1e40af;font-size:.85rem;font-weight:650;text-decoration:none;margin-right:6px}
-    .flotta-module-link:hover,.flotta-module-link:focus-visible{background:#dbeafe;text-decoration:underline}
 </style>
 </head>
 <body class="flotta-locked">
@@ -316,14 +314,9 @@
   <div class="container">
     <div class="flotta-session-header">
       <span id="flottaSessionName"></span>
-      <nav aria-label="iMile Management modulok">
-        <a class="flotta-module-link" href="./staging/imile-management/index.html">Közös főmenü</a>
-        <a class="flotta-module-link" href="./depokapacitas/index.html">DepóKapacitás</a>
-        <a class="flotta-module-link" href="./staging/imile-management/reports/index.html">Napi riportok</a>
-      </nav>
       <button type="button" onclick="fleetSimpleLogout()" id="flottaLogout">Kijelentkezés</button>
     </div>
-    <div style="margin:0.6rem 0 1rem;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 2px 5px #0001;display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><strong id="syncStatus" role="status" aria-live="polite">Kapcsolódás...</strong><span title="A régi Apps Script központi kapcsolat csak a biztonságos átállás után kapcsolható ki teljesen; az új közös V1-ben nem állítható át." style="font-size:.85rem;color:#475569">Közös Firestore kapcsolat · az ellenőrzött importig írásvédett</span><button type="button" class="secondary" onclick="exportData()">↓ JSON biztonsági mentés</button></div>
+    <div style="margin:0.6rem 0 1rem;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 2px 5px #0001;display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><strong id="syncStatus" role="status" aria-live="polite">Kapcsolódás...</strong><button type="button" class="secondary" onclick="configureBackend()">⚙️ Központi mentés beállítása</button><button type="button" class="secondary" onclick="exportData()">↓ JSON biztonsági mentés</button></div>
     <div class="stats" id="stats"></div>
 
     <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem;">
