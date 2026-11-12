@@ -21,7 +21,7 @@ test('one unified V1 routes to ORIGINAL rich Fleet, Depot and reports, not proto
   assert.match(portal,/href="\.\.\/\.\.\/depokapacitas\/index\.html" id="depoLink"/);
   assert.match(portal,/href="\.\/reports\/index\.html" id="reportsLink"/);
   assert.match(portal,/id="fleetMasterLink" hidden aria-hidden="true"/);
-  assert.doesNotMatch(app,/\$\('fleetMasterLink'\)/);
+  assert.match(app,/\$\('fleetMasterLink'\)\.hidden=true/);
   for(const href of [
     './staging/imile-management/index.html',
     './depokapacitas/index.html',
