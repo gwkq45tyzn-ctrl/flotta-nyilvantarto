@@ -1,0 +1,57 @@
+name: iMile V1 #210 fencing same-SHA process and persisted emulator controls
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-durable-checkpoint-fencing.mjs'
+      - 'tools/v1-durable-checkpoint-fencing.test.mjs'
+      - 'staging/imile-management/fleet/v1-local-emulator-persistent-fencing.mjs'
+      - 'staging/imile-management/fleet/v1-local-emulator-persistent-fencing.test.mjs'
+      - '.github/workflows/imile-v1-fencing-qa.yml'
+permissions:
+  contents: read
+jobs:
+  in-process-cross-instance-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact SHA strict source plan and concurrent in-process importer tests
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-durable-checkpoint-fencing.mjs
+          node --test tools/v1-durable-checkpoint-fencing.test.mjs \
+            tools/v1-server-importer-checkpoint.test.mjs \
+            tools/v1-privileged-importer-local.test.mjs
+  actual-sdk-persisted-epoch-and-stale-writer-denial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Lockfile-pinned local Firestore SDK (no production resources)
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Emulator-only transaction contested lease and poisoned checkpoint tests
+        run: |
+          node --check staging/imile-management/fleet/v1-local-emulator-persistent-fencing.mjs
+          node --check staging/imile-management/fleet/v1-local-emulator-persistent-fencing.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-fencing \
+            --config firebase.depo-qa.json \
+            "node staging/imile-management/fleet/v1-local-emulator-persistent-fencing.test.mjs"
+      - name: No release authority
+        run: echo "Scope LOCAL EMULATOR persisted plan only. Production IAM, real source provenance, keyed writes, server readback and seal remain NO-GO."
