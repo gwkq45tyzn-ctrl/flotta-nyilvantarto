@@ -247,7 +247,7 @@ test('signed rotation to version 2 rejects old signer signature, and signed regi
     snapshot:f.raw,backup:f.backup
   });
   accepted(c.verify(input()));
-  const oldBundle=f.registryBundle;
+  const oldBundle=clone(f.registryBundle);
   const next=keypair();
   f.registry.sequence=2;
   f.registry.signers.push({
@@ -272,7 +272,7 @@ test('new signed revocation blocks fallback to older accepted registry even when
     snapshot:f.raw,backup:f.backup
   });
   accepted(c.verify(input()));
-  const older=f.registryBundle;
+  const older=clone(f.registryBundle);
   f.registry.sequence=2;
   f.registry.revokedSignerFingerprints=[f.signer.fingerprint];
   f.registryBundle=signEnvelope(f.registry,f.root);
@@ -281,7 +281,7 @@ test('new signed revocation blocks fallback to older accepted registry even when
   denied(c.verify(input()),/LOCAL_REGISTRY_REPLAY_OR_EQUIVOCATION_DENIED/);
 });
 test('registry is not durable across new instances, proof flags never claim antirollback after restart',()=>{
-  const f=make(),oldRegistry=f.registryBundle;
+  const f=make(),oldRegistry=clone(f.registryBundle);
   const contract=createTrustedSignerContract(f.contractConfig);
   const input=()=>({
     registryBundle:f.registryBundle,manifest:f.signedManifest,
