@@ -1,0 +1,33 @@
+name: iMile V1 #235 actual signed offline owner registry and signed rich-source cryptographic chain
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-trusted-signer-contract.mjs'
+      - 'tools/v1-trusted-signer-contract.test.mjs'
+      - 'docs/V1_TRUSTED_SIGNER_STATUS.md'
+      - '.github/workflows/imile-v1-signed-registry-chain-ci.yml'
+permissions:
+  contents: read
+jobs:
+  two-ed25519-signature-chain-positive-and-hostile-negative:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact HEAD source and actual Node Ed25519 verification + registry revocation/rotation antirollback
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-trusted-signer-contract.mjs
+          node --check tools/v1-trusted-signer-contract.test.mjs
+          node --test tools/v1-trusted-signer-contract.test.mjs \
+            tools/v1-orphan-inventory.test.mjs \
+            tools/v1-atomic-preseal-and-trustroot.test.mjs \
+            tools/v1-authenticated-source-contract.test.mjs
+      - name: Crucial scope
+        run: echo "Synthetic keys only. Root fingerprint supplied to constructor is NOT independently owner-authenticated. Offline clock/registry can rollback across processes. NO IAM, NO SEAL."
