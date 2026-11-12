@@ -15,6 +15,7 @@ import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryru
 import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importer.mjs';
 import {createDemoManualPresealRecovery} from './v1-demo-manual-preseal-recovery.mjs';
 import {createServerSealBoundary} from '../../../tools/v1-server-seal-boundary.mjs';
+import {createServerOnlySeal} from '../../../tools/v1-server-only-seal.mjs';
 
 const projectId='demo-imile-v1-scaled-rich';
 const LOCK='v1MigrationSyntheticLocks/primary';
@@ -206,7 +207,24 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
             assert.equal(c.data().sourceIndex,entry.data.sourceIndex);
           }
         }
-        // Cutover-negative on the FULL 440-record rich source:
+        // A single full 440-pair transaction is NOT the solution:
+        // the bounded known-document proof must refuse the oversized
+        // source, not mislabel a partial subset as a whole namespace.
+        const knownSeal=createServerOnlySeal({
+          externalSignerAuthenticated:true,
+          privilegedImporterVerified:true
+        });
+        const tooWide=await knownSeal.inspectBoundedKnownSet({
+          db:dbB,projectId,plan,expectedEpoch:3,
+          independentlyPinnedSha:pin,expectedRevision:1
+        });
+        assert.equal(tooWide.ok,false);
+        assert.match(tooWide.reason,/BOUNDED_MAX_24/);
+        assert.equal(tooWide.canSeal,false);
+        assert.equal(tooWide.atomicNamespaceSnapshotVerified,false);
+        assert.equal((await knownSeal.seal()).ok,false);
+        console.log('PASS DENY [E+SDK 440]: bounded known-write-set transaction cannot falsely certify 440 pairs or seal');
+                // Cutover-negative on the FULL 440-record rich source:
         // 4 independent collection queries under a stable epoch are not
         // a privileged-write freeze; inject orphan AFTER prior clean scan.
         const sealBoundary=createServerSealBoundary({
