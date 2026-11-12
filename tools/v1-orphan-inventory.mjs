@@ -1,36 +1,81 @@
 /**
- * Local canonical keyed/claim namespace inventory and orphan detection.
- * Fail-closed if out-of-plan docs, claims without masters, masters without claims,
- * or sourceIndex mismatches are found. Synthetic only. Never seals.
+ * Local FULL RICH keyed master + immutable claim content and namespace audit.
+ *
+ * This checks a MATERIALIZED observation, NOT an atomic Firestore snapshot.
+ * A caller-provided observation is not authoritative. Even a genuine SDK
+ * collection listing can race privileged out-of-plan writes; cannot seal.
+ * There is NO production signer, IAM verification or release authorization.
  */
 import {sha256} from './v1-migration-dryrun.mjs';
 
-export function inventoryKeyedState(plan, observed) {
-  const expected = new Set();
-  const issues = [];
-  for (const d of plan.drivers || []) expected.add('drivers/' + d.id);
-  for (const v of plan.vehicles || []) expected.add('vehicles/' + v.id);
-
-  const masters = new Set(Object.keys(observed.masters || {}));
-  const claims = new Set(Object.keys(observed.claims || {}));
-
-  for (const key of expected) {
-    if (!masters.has(key)) issues.push('MISSING_MASTER:' + key);
-    if (!claims.has(key)) issues.push('MISSING_CLAIM:' + key);
-  }
-  for (const key of masters) {
-    if (!expected.has(key)) issues.push('ORPHAN_MASTER:' + key);
-  }
-  for (const key of claims) {
-    if (!expected.has(key)) issues.push('ORPHAN_CLAIM:' + key);
-  }
-  if (issues.length) return {ok: false, issues, sealed: false, authorizedForImport: false};
+const SCOPE='LOCAL_MATERIALIZED_INVENTORY_CONTENT_CHECK_ONLY';
+const shape=o=>o!==null&&typeof o==='object'&&!Array.isArray(o)&&
+  (Object.getPrototypeOf(o)===Object.prototype||Object.getPrototypeOf(o)===null);
+const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+const result=(ok,issues=[],extra={})=>({
+  ok,issues,reason:ok?'FULL_RICH_MATERIALIZED_INVENTORY_MATCH_ONLY':'INVENTORY_PARITY_DENIED',
+  sealed:false,authorizedForImport:false,productionIamVerified:false,
+  authenticatedSourceSignerVerified:false,authoritativeNamespaceVerified:false,
+  atomicNamespaceSnapshotVerified:false,canSeal:false,proofScope:SCOPE,...extra
+});
+const expectedEntry=(kind,item,pin)=>{
+  if(!shape(item)||typeof item.id!=='string'||!item.id||!shape(item.data)||
+      !Number.isSafeInteger(item.data.sourceIndex)||item.data.sourceIndex<0||
+      !Number.isSafeInteger(item.data.revision)||item.data.revision<1)
+    throw Error('INVALID_RICH_KEYED_PLAN_ENTRY');
+  const data=item.data;
+  const id=item.id;
+  const prefix=kind==='drivers'?'drivers/':'vehicles/';
   return {
-    ok: true,
-    sealed: false,
-    authorizedForImport: false,
-    productionIamVerified: false,
-    expectedCount: expected.size,
-    reason: 'INVENTORY_MATCH_NO_SEAL'
+    key:prefix+id,master:data,
+    claim:{
+      normalizedId:id,sourceIndex:data.sourceIndex,revision:data.revision,
+      migrationSourceSha256:pin,masterSha256:sha256(data)
+    }
   };
+};
+export function inventoryKeyedState(plan,observed){
+  const issues=[];
+  try{
+    if(!shape(plan)||!Array.isArray(plan.drivers)||
+      !Array.isArray(plan.vehicles)||typeof plan.sourceSha256!=='string'||
+      !/^[a-f0-9]{64}$/.test(plan.sourceSha256))
+      return result(false,['INVALID_CANONICAL_PLAN']);
+    if(!shape(observed)||!shape(observed.masters)||!shape(observed.claims))
+      return result(false,['UNTRUSTED_OR_INCOMPLETE_OBSERVATION']);
+    const expected=new Map();
+    for(const kind of ['drivers','vehicles']){
+      for(const item of plan[kind]){
+        const entry=expectedEntry(kind,item,plan.sourceSha256);
+        if(expected.has(entry.key))issues.push('DUPLICATE_EXPECTED_KEY:'+entry.key);
+        expected.set(entry.key,entry);
+      }
+    }
+    const m=observed.masters,c=observed.claims;
+    const keys=[...expected.keys()];
+    for(const [key,entry] of expected){
+      if(!own(m,key))issues.push('MISSING_MASTER:'+key);
+      else{
+        try{if(sha256(m[key])!==sha256(entry.master))issues.push('RICH_MASTER_MISMATCH:'+key)}
+        catch{issues.push('INVALID_MASTER_CONTENT:'+key)}
+      }
+      if(!own(c,key))issues.push('MISSING_CLAIM:'+key);
+      else{
+        try{if(sha256(c[key])!==sha256(entry.claim))issues.push('CLAIM_PARITY_MISMATCH:'+key)}
+        catch{issues.push('INVALID_CLAIM_CONTENT:'+key)}
+      }
+    }
+    for(const key of Object.keys(m)){
+      if(!expected.has(key))issues.push('ORPHAN_MASTER:'+key);
+    }
+    for(const key of Object.keys(c)){
+      if(!expected.has(key))issues.push('ORPHAN_CLAIM:'+key);
+    }
+    return result(issues.length===0,issues,{
+      expectedCount:keys.length,observedMasterCount:Object.keys(m).length,
+      observedClaimCount:Object.keys(c).length,canonicalPlanDigest:sha256(keys)
+    });
+  }catch(e){
+    return result(false,[String(e.message||e)]);
+  }
 }
