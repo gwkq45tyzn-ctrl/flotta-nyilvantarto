@@ -1,0 +1,61 @@
+name: iMile V1 #241 two Ed25519 signed rich source + persisted highwater + fenced epoch transaction
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-signed-source-highwater.mjs'
+      - 'tools/v1-signed-source-highwater.test.mjs'
+      - 'staging/imile-management/fleet/v1-local-signed-source-epoch-binding.mjs'
+      - 'staging/imile-management/fleet/v1-signed-source-test-fixture.mjs'
+      - 'staging/imile-management/fleet/v1-signed-source-os-worker.mjs'
+      - 'staging/imile-management/fleet/v1-signed-source-epoch-binding.test.mjs'
+      - '.github/workflows/imile-v1-signed-source-epoch-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed-and-both-ed25519-signatures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Exact SHA, local root-signed registry plus rich source and fake IAM negative tests
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-signed-source-highwater.mjs
+          node --test tools/v1-signed-source-highwater.test.mjs \
+            tools/v1-trusted-signer-contract.test.mjs \
+            tools/v1-durable-registry-antirollback.test.mjs
+  original-rules-real-3-os-process-root-source-epoch-claim-receipt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Local synthetic SDK dependencies only
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Mandatory Firestore SDK emulator, original restricted Rules, two Ed25519 chains, 3 separate Node processes and privileged reset
+        run: |
+          git rev-parse HEAD
+          node --check staging/imile-management/fleet/v1-local-signed-source-epoch-binding.mjs
+          node --check staging/imile-management/fleet/v1-signed-source-os-worker.mjs
+          node --check staging/imile-management/fleet/v1-signed-source-epoch-binding.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-source-epoch-binding \
+            --config firebase.depo-qa.json \
+            "node --test staging/imile-management/fleet/v1-signed-source-epoch-binding.test.mjs"
+      - name: No release or IAM authority from local proof
+        run: echo "Privileged test reset can revalidate revoked signer. No real owner root, no IAM, no whole namespace snapshot, no seal. Original P0 must remain RED."
