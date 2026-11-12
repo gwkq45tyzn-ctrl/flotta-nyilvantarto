@@ -24,7 +24,10 @@ const descriptions={
  approval_or_backup_missing:h=>labels[h.gate]||'Jóváhagyási feltétel',
  master_data_conflict:h=>'Törzsadat-ütközés: '+h.count+' rekord',
  unmigrated_master_records:h=>'Át nem vett törzsadatok: '+h.vehicles+' jármű, '+h.drivers+' futár',
- legacy_detail_not_migrated:h=>'Régi részletes adatok ('+h.category+'): '+h.count
+ legacy_detail_not_migrated:h=>'Régi részletes adatok ('+h.category+'): '+h.count,
+ fleet_driver_capacity_unverified:h=>'Hiányzó vagy érvénytelen napi futárkapacitás: '+h.count+' futár. Az értéket a Flottában szükséges jóváhagyni.',
+ fleet_driver_status_unverified:h=>'Nem ellenőrzött futárstátusz: '+h.count+' futár. Nem kezelhető aktívként.',
+ fleet_vehicle_status_unverified:h=>'Nem ellenőrzött járműstátusz: '+h.count+' autó. Nem kezelhető elérhetőként.'
 };
 let currentUid=null,lastReport=null,runSequence=0;
 const status=(msg,error=false)=>{$('status').textContent=msg;$('status').className=error?'error':'';};
@@ -52,6 +55,9 @@ function present(report){
  const stats=[
   ['Régi járművek',report.counts.legacyVehicles],
   ['Régi futárok',report.counts.legacyDrivers],
+  ['Hiányzó futárkapacitás',report.counts.driversMissingOrInvalidCapacity],
+  ['Nem ellenőrzött futárstátusz',report.counts.driversUnknownStatus],
+  ['Nem ellenőrzött autóstátusz',report.counts.vehiclesUnknownStatus],
   ['Tankolókártyák',report.counts.legacyFuelCards],
   ['Kapcsolatok',report.counts.legacyContacts],
   ['Korábbi események',report.counts.legacyHistoryEvents],
