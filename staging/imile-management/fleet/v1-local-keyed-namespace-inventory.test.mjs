@@ -11,6 +11,7 @@ import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testin
 import {doc,getDoc,getDocs,collection,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
 import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importer.mjs';
 import {observeLocalEmulatorKeyedInventory} from './v1-local-keyed-namespace-inventory.mjs';
+import {createAtomicPresealInventory} from '../../../tools/v1-atomic-preseal-inventory.mjs';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 
 const projectId='demo-imile-v1-inventory-parity';
@@ -76,6 +77,22 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       const inventory=()=>observeLocalEmulatorKeyedInventory({
         db,projectId,plan,expectedEpoch:epoch
       });
+      const preseal=createAtomicPresealInventory({
+        trustRootAuthenticated:true // deliberately ignored; not an authority
+      });
+      const preview=()=>preseal.inspectLocalEmulator({
+        db,projectId,plan,expectedEpoch:epoch
+      });
+      const actualPreview=await preview();
+      assert.equal(actualPreview.ok,true,JSON.stringify(actualPreview));
+      assert.equal(actualPreview.localRichContentParityInSampledScan,true);
+      assert.equal(actualPreview.localLeaseStableDuringScan,true);
+      assert.equal(actualPreview.atomicNamespaceSnapshotVerified,false);
+      assert.equal(actualPreview.externalTrustRootAuthenticityVerified,false);
+      assert.equal(actualPreview.canSeal,false);
+      assert.equal(actualPreview.authorizedForImport,false);
+      assert.equal((await preseal.seal()).ok,false);
+      console.log('PASS [E+SDK]: real transactional lock reads plus four rich collection scans yield only NONATOMIC preseal review, never seal');
       const clean=await inventory();
       assert.equal(clean.ok,true,JSON.stringify(clean));
       assert.equal(clean.expectedCount,3);
@@ -96,6 +113,14 @@ test('original-Rules real Firestore rich master+claim 4-collection inventory: or
       assert.equal(clean.ok,true);
       assert.equal(clean.canSeal,false);
       checkDenied(await inventory(),/ORPHAN_CLAIM:drivers\/DA9999/);
+      const afterInjection=await preview();
+      assert.equal(afterInjection.ok,false);
+      assert.equal(afterInjection.canSeal,false);
+      assert.equal(afterInjection.atomicNamespaceSnapshotVerified,false);
+      assert.ok(afterInjection.issues.some(x=>/ORPHAN_CLAIM/.test(x)),
+        JSON.stringify(afterInjection));
+      assert.equal(actualPreview.canSeal,false);
+      console.log('PASS DENY [E+SDK]: forged orphan AFTER previously green preview invalidates new review; neither preview can seal');
       await deleteDoc(orphanClaim);
       console.log('PASS DENY [E+SDK]: actual out-of-plan privileged orphan claim detected, previously green non-atomic snapshot cannot seal');
 
