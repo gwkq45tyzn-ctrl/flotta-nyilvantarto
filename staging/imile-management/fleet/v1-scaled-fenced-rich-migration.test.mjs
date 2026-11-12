@@ -167,7 +167,7 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
         console.log('PASS [E+SDK]: manual test-only epoch-2 fencing + 48 rich records/claims verified and rolled back in two bounded transactions');
 
         // A fresh owner can start at a NEW epoch. All 440 original source
-        // records are written in 8 real Firestore transactions, 2 document
+        // records are written in 19 real Firestore transactions, 2 document
         // types each, plus checkpoint updates. No metadata/history is lost.
         const second=mk(dbB);
         const secondStart=await second.begin(raw,backup);
