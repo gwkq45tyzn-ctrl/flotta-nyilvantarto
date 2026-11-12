@@ -17,7 +17,7 @@ import {createDemoManualPresealRecovery} from './v1-demo-manual-preseal-recovery
 
 const projectId='demo-imile-v1-scaled-rich';
 const LOCK='v1MigrationSyntheticLocks/primary';
-const DRIVER_COUNT=120,VEHICLE_COUNT=60,CHUNK=24;
+const DRIVER_COUNT=220,VEHICLE_COUNT=220,CHUNK=24;
 const uid='synthetic-imile-v1-scaled-admin-000001';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
 const source=()=>({
@@ -61,7 +61,7 @@ const denied=(r,regex)=>{
   assert.equal(r.authorizedForImport,false);
   if(regex)assert.match(r.reason,regex);
 };
-test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, interrupted fail-closed and bounded manual rollback',async()=>{
+test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, interrupted fail-closed and bounded manual rollback',async()=>{
   if(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8787'||
     process.env.GOOGLE_APPLICATION_CREDENTIALS||
     process.env.FIREBASE_SERVICE_ACCOUNT)
@@ -166,7 +166,7 @@ test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, 
         assert.equal((await getDocs(collection(dbA,'flottaDriverClaims'))).size,0);
         console.log('PASS [E+SDK]: manual test-only epoch-2 fencing + 48 rich records/claims verified and rolled back in two bounded transactions');
 
-        // A fresh owner can start at a NEW epoch. All 180 original source
+        // A fresh owner can start at a NEW epoch. All 440 original source
         // records are written in 8 real Firestore transactions, 2 document
         // types each, plus checkpoint updates. No metadata/history is lost.
         const second=mk(dbB);
@@ -206,10 +206,10 @@ test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, 
           }
         }
         denied(await second.seal(),/SEAL_REFUSED/);
-        console.log('PASS [E+SDK]: 180 real FULL rich keyed masters + 180 immutable claims, 100% SHA readback, no seal');
+        console.log('PASS [E+SDK]: 440 real FULL rich keyed masters + 440 immutable claims, 100% SHA readback, no seal');
 
         // A second manual test-only recovery uses bounded 24-pair
-        // transactions to roll back 360 real emulator documents. The
+        // transactions to roll back 880 real emulator documents. The
         // stale writer is fenced by epoch-4, and after cleanup new
         // privileged claims/master docs are absent.
         const recoveryAll=recover(dbA);
@@ -226,7 +226,7 @@ test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, 
           complete=res.complete;total+=res.removed;deleteBatches++;
           assert.ok(deleteBatches<20);
         }
-        assert.equal(total,180);
+        assert.equal(total,440);
         assert.equal(deleteBatches,Math.ceil(ids.length/CHUNK));
         for(const c of ['flottaDrivers','flottaVehicles',
           'flottaDriverClaims','flottaVehicleClaims'])
@@ -234,7 +234,7 @@ test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, 
         assert.equal((await getDoc(doc(dbA,LOCK))).data().phase,'released');
         assert.equal((await getDoc(doc(dbA,'flottaSharedState','current'))).exists(),false);
         assert.equal((await getDoc(doc(dbA,'flottaMigrationApproval','current'))).exists(),false);
-        console.log('PASS [E+SDK]: 360 actual documents removed with full rich per-batch parity; expired writer cannot continue');
+        console.log('PASS [E+SDK]: 880 actual documents removed with full rich per-batch parity; expired writer cannot continue');
 
         // Final negative: record tamper under the next epoch must BLOCK
         // recovery. There is no unaudited cleanup on failure.
@@ -258,12 +258,12 @@ test('180 ACTUAL rich keyed masters + 180 immutable claims under epoch fencing, 
         console.log('PASS DENY [E+SDK]: tampered rich record freezes recovery and stale writer without deleting evidence');
 
         console.log(JSON.stringify({
-          verdict:'SCOPED_SYNTHETIC_EMULATOR_ONLY',fullRichMasterCount:180,
-          identityClaimCount:180,originalRestrictedRulesUsed:true,
+          verdict:'SCOPED_SYNTHETIC_EMULATOR_ONLY',fullRichMasterCount:440,
+          identityClaimCount:440,originalRestrictedRulesUsed:true,
           persistedEpochs:[1,2,3,4,5,6],batchSize:CHUNK,
-          committedBatches:batches,verifiedReadback:180,
+          committedBatches:batches,verifiedReadback:440,
           afterCrashAutoResumeAllowed:false,
-          manualSyntheticRollbackVerified:180,
+          manualSyntheticRollbackVerified:440,
           poisonDeniedBeforeWrite:true,
           tamperedRecoveryFailClosed:true,
           sealed:false,authorizedForImport:false,
