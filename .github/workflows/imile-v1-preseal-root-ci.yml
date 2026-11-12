@@ -1,0 +1,60 @@
+name: iMile V1 #226 verified local trust-root lifecycle and non-atomic preseal review
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-trust-root-bootstrap.mjs'
+      - 'tools/v1-atomic-preseal-inventory.mjs'
+      - 'tools/v1-atomic-preseal-and-trustroot.test.mjs'
+      - 'staging/imile-management/fleet/v1-local-keyed-namespace-inventory.mjs'
+      - 'staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs'
+      - '.github/workflows/imile-v1-preseal-root-ci.yml'
+permissions:
+  contents: read
+jobs:
+  local-ed25519-root-fingerprint-expiry-and-revocation-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Actual pinned Ed25519 DER fingerprint, no caller clock, revocation and offline preseal hard-stop
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-trust-root-bootstrap.mjs
+          node --check tools/v1-atomic-preseal-inventory.mjs
+          node --test tools/v1-atomic-preseal-and-trustroot.test.mjs \
+            tools/v1-orphan-inventory.test.mjs \
+            tools/v1-authenticated-source-contract.test.mjs
+  original-rules-real-sdk-nonatomic-preseal-toctou:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Locked SDK installed inside synthetic-only staging test directory
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Original Firestore Rules, transaction lock reads, real rich claim scans and forged-after-preview NO-SEAL
+        run: |
+          git rev-parse HEAD
+          node --check staging/imile-management/fleet/v1-local-keyed-namespace-inventory.mjs
+          node --check staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-inventory-parity \
+            --config firebase.depo-qa.json \
+            "node --test staging/imile-management/fleet/v1-local-keyed-namespace-inventory.test.mjs"
+      - name: Scope limitation
+        run: echo "Real four-collection SDK scan is NOT one atomic snapshot; test root is NOT independently owner-authorized; P0 and production seal remain NO-GO."
