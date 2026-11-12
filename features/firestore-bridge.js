@@ -196,19 +196,29 @@
       : s => typeof s === 'string' && /^[A-Za-z0-9 -]{4,40}$/.test(s) ? s.replace(/[ -]/g,'').toUpperCase() : '';
     const field = kind === 'drivers' ? 'daCode' : 'rendszam';
     const expected = new Map();
-    archived.forEach((r,i) => expected.set(normalizer(r[field]),{index:i,id:r.id}));
+    for (let i=0;i<archived.length;i++) {
+      const r=archived[i];
+      if (!r || typeof r!=='object' || Array.isArray(r)) return null;
+      const normalized=normalizer(r[field]);
+      // A privileged duplicate in the frozen original source must not be
+      // disguised as a single healthy keyed identity in the live Fleet UI.
+      if (!normalized || expected.has(normalized)) return null;
+      expected.set(normalized,{index:i,id:r.id});
+    }
     const found = new Map();
     for (const item of rows) {
       const id = item.key, raw = item.data;
       if (!id || id !== normalizer(raw[field]) || found.has(id)) return null;
       const archivedRow = expected.get(id);
-      const stableId = raw.id || archivedRow?.id || 'keyed-' + id;
+      // Unknown keyed documents are not members of the attested Fleet archive.
+      if (!archivedRow) return null;
+      const stableId = raw.id || archivedRow.id || 'keyed-' + id;
       if (archivedRow && archivedRow.id && stableId !== archivedRow.id) return null;
       found.set(id,{...raw,id:stableId});
     }
     // A completed migration must have all its original rich identities.
     // Partial import cannot silently produce a truncated Fleet UI.
-    if ([...expected.keys()].some(id => !id || !found.has(id))) return null;
+    if (found.size!==expected.size || [...expected.keys()].some(id => !found.has(id))) return null;
     return [...found].sort(([a],[b]) =>
       (expected.get(a)?.index ?? Number.MAX_SAFE_INTEGER) -
       (expected.get(b)?.index ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b)
