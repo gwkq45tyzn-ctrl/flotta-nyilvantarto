@@ -26,7 +26,7 @@ jobs:
           node --check tools/v1-trusted-signer-contract.mjs
           node --check tools/v1-trusted-signer-contract.test.mjs
           node --test tools/v1-trusted-signer-contract.test.mjs \
-            tools/v1-signed-manifest-contract.test.mjs \
+            tools/v1-orphan-inventory.test.mjs \
             tools/v1-atomic-preseal-and-trustroot.test.mjs \
             tools/v1-authenticated-source-contract.test.mjs
       - name: Crucial scope
