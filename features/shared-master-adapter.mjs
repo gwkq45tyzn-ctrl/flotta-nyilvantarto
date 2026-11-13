@@ -19,8 +19,9 @@ const vehicleStatus=s=>{
 };
 const driverActive=s=>['aktiv','aktív'].includes(str(s).toLowerCase());
 const capacityOf=d=>{
-  const raw=d.kapacitas??d.capacity??0;
-  if(typeof raw==='string'&&!raw.trim())return 0;
+  // Missing courier capacity must remain UNKNOWN, not an approved zero.
+  const raw=d.kapacitas??d.capacity;
+  if(raw===undefined||raw===null||(typeof raw==='string'&&!raw.trim()))return null;
   const n=Number(raw);
   return Number.isSafeInteger(n)&&n>=0&&n<=10000?n:null;
 };

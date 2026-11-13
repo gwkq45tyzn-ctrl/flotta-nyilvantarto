@@ -13,7 +13,7 @@ const fleet=()=>projectSharedFleetSnapshot({
   ],
   drivers:[
     {id:'internally-generated',daCode:'DA0001',name:'Minta Futár',
-      agency:'Minta Vállalkozó',status:'aktiv',phone:'PRIVATE-000'}
+      agency:'Minta Vállalkozó',status:'aktiv',kapacitas:0,phone:'PRIVATE-000'}
   ],fuelCards:[{id:'private-fuel'}],contacts:[{id:'private-contact'}]
 },{fromCache:false,hasPendingWrites:false});
 const records=()=>({
@@ -53,7 +53,7 @@ assert.ok(orphans.items.some(x=>x.status==='onlyDepo'));
 const riskSource=projectSharedFleetSnapshot({
   revision:4,
   vehicles:[{id:'a',rendszam:'ABC123',status:'szerviz'}],
-  drivers:[{id:'b',daCode:'DA0001',name:'Minta Futár',agency:'Minta Vállalkozó',status:'inaktiv'}],
+  drivers:[{id:'b',daCode:'DA0001',name:'Minta Futár',agency:'Minta Vállalkozó',status:'inaktiv',kapacitas:0}],
   fuelCards:[],contacts:[]
 },{fromCache:false,hasPendingWrites:false});
 const risky=reconcileSharedMaster(riskSource,records(),sources());
