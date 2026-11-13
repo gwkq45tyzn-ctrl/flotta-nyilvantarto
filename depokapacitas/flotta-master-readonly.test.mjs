@@ -5,7 +5,7 @@ const fixture=()=>({
   vehicles:[{id:'internal-car',rendszam:'ABC-123',status:'aktiv',gyartmany:'Ford',
     modell:'Transit',km:1234,history:[{type:'service'}]}],
   drivers:[{id:'legacy-generated',daCode:'DA001',name:'Teszt Futár',
-    agency:'Minta Kft',status:'aktiv',phone:'000',history:[{type:'status'}]}],
+    agency:'Minta Kft',status:'aktiv',kapacitas:0,phone:'000',history:[{type:'status'}]}],
   fuelCards:[{id:'private-card'}],contacts:[{id:'private-contact'}]
 });
 const verified=projectSharedFleetSnapshot(fixture(),{fromCache:false,hasPendingWrites:false});
@@ -38,5 +38,10 @@ const duplicate=projectSharedFleetSnapshot({...fixture(),
  {fromCache:false,hasPendingWrites:false});
 assert.equal(duplicate.status,'review');
 assert.ok(duplicate.issues.some(i=>i.reason==='duplicate normalized DA code'));
+const unverified=fixture();delete unverified.drivers[0].kapacitas;
+const withheld=projectSharedFleetSnapshot(unverified,{fromCache:false,hasPendingWrites:false});
+assert.equal(withheld.status,'review','Missing courier capacity cannot become authorized 0');
+assert.deepEqual(withheld.drivers,[]);
+assert.ok(withheld.issues.some(x=>x.reason.includes('capacity')));
 assert.equal(emptySharedFleetPreview().status,'waiting');
 console.log('PASS: original Fleet shared master is preview-only, redacted and server-confirmed');
