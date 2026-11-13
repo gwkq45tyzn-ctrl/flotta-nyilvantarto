@@ -1,0 +1,32 @@
+name: iMile V1 source backup readonly validation
+on:
+  pull_request:
+    paths:
+      - 'tools/v1-readonly-backup-validation.mjs'
+      - 'tools/v1-readonly-backup-validation.test.mjs'
+      - 'tools/v1-migration-dryrun.mjs'
+      - '.github/workflows/imile-v1-rich-backup-readonly.yml'
+  push:
+    branches:
+      - 'qa/v1-grok-backup-independent-fix-20261113'
+permissions:
+  contents: read
+jobs:
+  real-fleet-shape-offline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Source syntax, original four-array preflight, privacy and migration regression
+        run: |
+          git rev-parse HEAD
+          node --check tools/v1-readonly-backup-validation.mjs
+          node --check tools/v1-readonly-backup-validation.test.mjs
+          node --test tools/v1-readonly-backup-validation.test.mjs
+          node --test tools/v1-migration-dryrun.test.mjs
+      - name: Never mutate or deploy
+        run: echo 'READ-ONLY QA, synthetic data only, no import, Firebase, Apps Script or release authority'

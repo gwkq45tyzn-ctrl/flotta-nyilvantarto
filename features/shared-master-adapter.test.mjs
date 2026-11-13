@@ -12,8 +12,8 @@ const snapshot={
   ],
   drivers:[
     {id:'flotta-local-id',daCode:'DA001',name:'Teszt Futár',
-      agency:'Minta Vállalkozó',status:'aktiv',phone:'000',history:[{type:'status'}]},
-    {id:'other-internal-id',daCode:'DA002',name:'Második Futár',status:'inaktiv'}
+      agency:'Minta Vállalkozó',status:'aktiv',kapacitas:80,phone:'000',history:[{type:'status'}]},
+    {id:'other-internal-id',daCode:'DA002',name:'Második Futár',status:'inaktiv',kapacitas:0}
   ],
   fuelCards:[{id:'synthetic-fuel-card',history:[{type:'card'}]}],
   contacts:[{id:'synthetic-contact'}]
@@ -34,7 +34,8 @@ assert.equal(plan.drivers[0].name,'Teszt Futár');
 assert.equal(plan.drivers[0].vendor,'Minta Vállalkozó');
 assert.equal(plan.drivers[0].active,true);
 assert.equal(plan.drivers[1].active,false);
-assert.equal(plan.drivers[0].capacity,0); // no capacity was provided
+assert.equal(plan.drivers[0].capacity,80);
+assert.equal(plan.drivers[1].capacity,0); // explicitly approved zero
 assert.deepEqual(depoToFleetVehicle(plan.vehicles[0]),snapshot.vehicles[0]);
 assert.deepEqual(depoToFleetDriver(plan.drivers[0]),snapshot.drivers[0]);
 assert.equal(depoToFleetVehicle(plan.writes.vehicles[0].data),null); // never claim lossless restore from projection
@@ -48,7 +49,13 @@ assert.equal(plan.writes.drivers[0].id,'DA001');
 const modified=fleetVehicleToDepo(snapshot.vehicles[0]);
 modified.flotta.km=1;
 assert.equal(snapshot.vehicles[0].km,45000); // no side effects
-assert.equal(fleetDriverToDepo({...snapshot.drivers[0],daCode:''}),null); // refuse fallback to local id
+assert.equal(fleetDriverToDepo({...snapshot.drivers[0],daCode:''}),null);
+assert.equal(fleetDriverToDepo({...snapshot.drivers[0],kapacitas:undefined}),null); // absent is not zero
+assert.equal(fleetDriverToDepo({...snapshot.drivers[0],kapacitas:''}),null);
+const missingCapacity=planSharedMigration({...snapshot,drivers:[{...snapshot.drivers[0],kapacitas:undefined}]});
+assert.equal(missingCapacity.ready,false);
+assert.equal(missingCapacity.counts.drivers,0);
+assert.ok(missingCapacity.issues.some(x=>x.reason.includes('capacity'))); // refuse fallback to local id
 assert.equal(depoVehicleWrite({...modified,id:'wrong'}),null);
 assert.equal(depoDriverWrite({...plan.drivers[0],capacity:100000}),null);
 const duplicate=planSharedMigration({

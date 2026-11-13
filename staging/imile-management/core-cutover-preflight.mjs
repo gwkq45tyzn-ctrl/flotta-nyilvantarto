@@ -20,6 +20,21 @@ const countExtra=(rows,fields)=>rows.reduce((n,row)=>n+
 const countHistory=rows=>rows.reduce((n,row)=>n+
  (Array.isArray(row?.history)?row.history.length:0),0);
 const countsOf=rows=>Array.isArray(rows)?rows.length:0;
+// Audit the ORIGINAL rich source; never infer missing business capacity as
+// verified zero. This never returns driver identifiers or other private data.
+const knownDriverStatus=new Set(['aktiv','aktív','inaktiv','inaktív']);
+const knownVehicleStatus=new Set(['aktiv','aktív','szerviz','leállított','leallitott']);
+const dailyCapacityProvided=d=>{
+ const raw=d?.kapacitas??d?.capacity;
+ if(raw===undefined||raw===null||typeof raw==='string'&&!raw.trim())return false;
+ const n=Number(raw);
+ return Number.isSafeInteger(n)&&n>=0&&n<=10000;
+};
+const fleetOperationalChecks=({drivers,vehicles})=>({
+ driversMissingOrInvalidCapacity:drivers.filter(d=>!dailyCapacityProvided(d)).length,
+ driversUnknownStatus:drivers.filter(d=>!knownDriverStatus.has(String(d?.status??'').trim().toLowerCase())).length,
+ vehiclesUnknownStatus:vehicles.filter(v=>!knownVehicleStatus.has(String(v?.status??'').trim().toLowerCase())).length
+});
 const exactBool=(x,name)=>{if(typeof x!=='boolean')throw Error(name+' must be explicitly true or false');return x;};
 export function assessFleetCutover({legacy,staging,proof}={}){
  if(!legacy||typeof legacy!=='object'||Array.isArray(legacy))
@@ -38,6 +53,7 @@ export function assessFleetCutover({legacy,staging,proof}={}){
  for(const name of ['fuelCards','contacts'])if(!Array.isArray(legacy[name]))
   throw Error('Hiányos régi Flotta export: '+name);
  const {vehicles,drivers,fuelCards,contacts}=legacy;
+ const operational=fleetOperationalChecks({drivers,vehicles});
  const history=countHistory(vehicles)+countHistory(drivers);
  const populatedVehicleMetadata=countExtra(vehicles,LEGACY_FIELDS);
  const populatedDriverMetadata=countExtra(drivers,DRIVER_FIELDS);
@@ -52,6 +68,9 @@ export function assessFleetCutover({legacy,staging,proof}={}){
   {type:'legacyActiveVehicleAssignments',count:activeLegacyAssignments}
  ].filter(x=>x.count>0);
  const holds=[
+  ...(operational.driversMissingOrInvalidCapacity? [{reason:'fleet_driver_capacity_unverified',count:operational.driversMissingOrInvalidCapacity}]:[]),
+  ...(operational.driversUnknownStatus? [{reason:'fleet_driver_status_unverified',count:operational.driversUnknownStatus}]:[]),
+  ...(operational.vehiclesUnknownStatus? [{reason:'fleet_vehicle_status_unverified',count:operational.vehiclesUnknownStatus}]:[]),
   ...Object.entries(proof).filter(([k,v])=>v===false).map(([key])=>({reason:'approval_or_backup_missing',gate:key})),
   ...(source.counts.blockers? [{reason:'master_data_conflict',count:source.counts.blockers}]:[]),
   ...(source.counts.newDrivers+source.counts.newVehicles? [{
@@ -65,6 +84,9 @@ export function assessFleetCutover({legacy,staging,proof}={}){
   legacyFuelCards:fuelCards.length,legacyContacts:contacts.length,
   legacyHistoryEvents:history,
   legacyActiveVehicleAssignments:activeLegacyAssignments,
+  driversMissingOrInvalidCapacity:operational.driversMissingOrInvalidCapacity,
+  driversUnknownStatus:operational.driversUnknownStatus,
+  vehiclesUnknownStatus:operational.vehiclesUnknownStatus,
   newDrivers:source.counts.newDrivers,newVehicles:source.counts.newVehicles,
   matchedDrivers:source.counts.matchedDrivers,matchedVehicles:source.counts.matchedVehicles,
   conflictingDrivers:source.counts.conflictingDrivers,
