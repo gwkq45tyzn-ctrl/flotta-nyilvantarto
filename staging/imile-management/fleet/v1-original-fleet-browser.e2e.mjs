@@ -43,6 +43,7 @@ const initial={
 };
 let env,server,browser;
 const forbiddenRequests=[];
+const forbiddenLegacy=[];
 try{
   const endpoint='http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key';
   const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -81,7 +82,10 @@ try{
     if(url.startsWith('http://127.0.0.1:')||url.startsWith('https://www.gstatic.com/')){
       route.continue();return;
     }
-    forbiddenRequests.push(url.split('?')[0]);route.abort();
+    const pathname=url.split('?')[0];
+    forbiddenRequests.push(pathname);
+    if(pathname.includes('script.google.com/macros/s/')||pathname.includes('script.googleusercontent.com'))forbiddenLegacy.push(pathname);
+    route.abort();
   });
   await context.addInitScript(localState=>{
     localStorage.setItem('flotta_nyilvantarto_v16',JSON.stringify(localState));
@@ -99,7 +103,32 @@ try{
     'Untrusted Fleet legacy session cannot unlock UI');
   assert.equal(await page.evaluate(()=>window.fleetGateSession()),null,
     'Legacy session must be rejected by early patched bridge');
+  // ACTUAL original index.html + real bridge, not a mock of gateOldSync.
+  // Both old function names must already be replaced before Auth SDK loads.
+  // An old direct pushRemote() function has no session guard; the bridge must
+  // therefore intercept even manually scheduled historical callbacks.
+  assert.equal(await page.evaluate(()=>String(window.pushRemote).includes('Régi Apps Script írás letiltva')),true,
+    'Legacy writer must be replaced before any Firebase login');
+  assert.equal(await page.evaluate(()=>String(window.pullRemote).includes('Régi Apps Script olvasás letiltva')),true,
+    'Legacy reader must be replaced before any Firebase login');
+  await page.evaluate(()=>{
+    window.pushRemote();window.pullRemote();
+    setTimeout(()=>window.pushRemote(),25);
+    setTimeout(()=>window.pullRemote(),40);
+  });
+  await page.waitForTimeout(180);
+  assert.deepEqual(forbiddenLegacy,[],'Old reader/writer forbidden before sign-in');
   const before=await page.evaluate(()=>localStorage.getItem('flotta_nyilvantarto_v16'));
+  // Invalid credential must never switch the legacy writer back on.
+  await page.locator('#flottaUsername').fill('imilemanagement');
+  await page.locator('#flottaPassword').fill('synthetic-invalid-password');
+  await page.locator('#flottaLoginSubmit').click();
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(()=>document.body.classList.contains('flotta-locked')),true,
+    'Wrong synthetic password must not unlock real original Fleet');
+  await page.evaluate(()=>{window.pushRemote();window.pullRemote();});
+  await page.waitForTimeout(100);
+  assert.deepEqual(forbiddenLegacy,[],'Bad Auth must not call Apps Script');
   await page.locator('#flottaUsername').fill('imilemanagement');
   await page.locator('#flottaPassword').fill(password);
   await page.locator('#flottaLoginSubmit').click();
@@ -131,10 +160,36 @@ try{
     'Original save() must not create preimport pending data');
   assert.equal(forbiddenRequests.length,0,
     'Original Fleet must not call Apps Script/unknown host: '+forbiddenRequests.join(','));
+  // Even an authenticated pre-import session must not call the old endpoint.
+  await page.evaluate(()=>{
+    window.pushRemote();window.pullRemote();
+    setTimeout(()=>window.pushRemote(),20);
+  });
+  await page.waitForTimeout(150);
+  assert.deepEqual(forbiddenLegacy,[],'Signed-in browser attempted legacy writer');
+  // Simulate a temporary offline period in a fully loaded REAL browser page.
+  await context.setOffline(true);
+  await page.evaluate(()=>{window.pushRemote();window.pullRemote();});
+  await page.waitForTimeout(100);
+  assert.deepEqual(forbiddenLegacy,[],'Offline original Fleet called Apps Script');
+  await context.setOffline(false);
+  // The HTML must patch the writer again after a hard page reload while a
+  // former sessionStorage login still exists and Auth is being restored.
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>typeof window.pushRemote==='function'&&
+    String(window.pushRemote).includes('Régi Apps Script írás letiltva'),null,{timeout:15000});
+  await page.evaluate(()=>{window.pushRemote();window.pullRemote();});
+  await page.waitForTimeout(150);
+  assert.deepEqual(forbiddenLegacy,[],'Reload restored legacy Apps Script calls');
+  console.log('PASS [B+E]: REAL original Fleet + actual bridge forbids legacy read/write on forged old session, bad login, signed-in, queued callback, offline and reload');
   console.log('PASS [B+E]: REAL original Fleet pre-import is read-only, no Apps Script calls or remote overwrite');
+  await page.waitForFunction(()=>!document.body.classList.contains('flotta-locked'),null,{timeout:35000});
   await page.locator('#flottaLogout').click();
   await page.waitForFunction(()=>document.body.classList.contains('flotta-locked'),
     null,{timeout:15000});
+  await page.evaluate(()=>{window.pushRemote();window.pullRemote();});
+  await page.waitForTimeout(100);
+  assert.deepEqual(forbiddenLegacy,[],'Logout re-enabled Apps Script');
   assert.equal(errors.length,0,'Fleet page errors: '+errors.join('; '));
   console.log('PASS [B+E]: REAL Fleet UI logout re-locks with no JS page errors');
 }finally{
