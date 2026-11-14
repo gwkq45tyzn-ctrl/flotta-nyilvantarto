@@ -25,6 +25,12 @@ export const SOURCE_FILES=Object.freeze([
   {role:'reports-business-contract',path:'staging/imile-management/reports/REPORTS_AND_STATS_SPEC_HU.md'},
   {role:'in-hub-ofd-report-workbench',path:'staging/imile-management/reports/report-app.mjs'},
   {role:'in-hub-ofd-report-calculation',path:'staging/imile-management/reports/report-core.mjs'},
+  {role:'report-desktop-html',path:'staging/imile-management/reports/index.html'},
+  {role:'report-xlsx-read-write',path:'staging/imile-management/reports/xlsx-lite.mjs'},
+  {role:'report-ofd-statistics',path:'staging/imile-management/reports/report-statistics.mjs'},
+  {role:'report-inventory-statistics',path:'staging/imile-management/reports/inventory-statistics.mjs'},
+  {role:'shared-session-policy',path:'staging/imile-management/session-policy.mjs'},
+  {role:'depot-firebase-public-config',path:'depokapacitas/firebase-config.js'},
   {role:'reports-two-browser-acceptance',path:'staging/imile-management/fleet/v1-reports-two-browser.e2e.mjs'},
   {role:'ofd-save-two-browser-acceptance',path:'staging/imile-management/fleet/v1-ofd-save-two-browser.e2e.mjs'}
 ]);
