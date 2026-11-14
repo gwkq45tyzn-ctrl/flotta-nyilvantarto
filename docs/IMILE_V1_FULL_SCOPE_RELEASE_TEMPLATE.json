@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "description": "FULL iMile Management V1 scope contract ONLY; structural completeness is not release authorization",
+  "sourceReleaseIssue": 83,
+  "releaseCandidate": {
+    "commitSha": null,
+    "sourceBundleSha256": null,
+    "webArtifactSha256": null,
+    "deployedRulesSha256": null,
+    "migrationPlanSha256": null,
+    "targetFirebaseProject": null,
+    "targetEnvironment": "production",
+    "frozen": false
+  },
+  "scope": {
+    "kind": "full-v1-desktop",
+    "includedModules": [
+      "original-flotta",
+      "depo-capacity",
+      "shared-driver-and-vehicle-master",
+      "in-hub-inventory",
+      "ofd-monitoring",
+      "excel-reports",
+      "common-auth-and-restricted-rules"
+    ],
+    "excludedFutureFeatures": [
+      "attendance-pwa",
+      "courier-self-service-auth",
+      "photo-upload",
+      "anpr",
+      "geofence"
+    ]
+  },
+  "independentAuditors": {
+    "grok": {
+      "verdict": "PENDING",
+      "reviewedSha": null,
+      "independentEvidenceUrl": null
+    },
+    "chatgpt": {
+      "verdict": "PENDING",
+      "reviewedSha": null,
+      "independentEvidenceUrl": null
+    }
+  },
+  "requiredExternalEvidence": {
+    "currentRichFleetBackupSha256": null,
+    "sourceParityToLiveFirestore": null,
+    "actualDriverCapacitiesAndStatusApproval": null,
+    "currentDeployedAppsScriptWriterAndTriggerInventory": null,
+    "liveFirebaseAuthUidAndIamPrincipals": null,
+    "trustedIndependentSignerRootAndDurableAntiRollback": null,
+    "actualFirestoreEncodedSize": null,
+    "deployedArtifactAndRulesReadback": null,
+    "originalOperationalReportDatasetParity": null,
+    "targetBillingSparkAndDataGovernance": null
+  },
+  "releaseGateS1toS12": {
+    "S1": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S2": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S3": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S4": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S5": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S6": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S7": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S8": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S9": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S10": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S11": {
+      "verdict": "PENDING",
+      "evidence": []
+    },
+    "S12": {
+      "verdict": "PENDING",
+      "evidence": []
+    }
+  },
+  "ownerAuthorization": {
+    "verdict": "PENDING",
+    "exactSha": null,
+    "approvalReference": null
+  },
+  "deployment": {
+    "status": "BLOCKED",
+    "scheduled": false,
+    "performed": false
+  }
+}
