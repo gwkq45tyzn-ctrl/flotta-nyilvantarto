@@ -44,8 +44,39 @@ export function inventoryHistory(docs){
  if(!Array.isArray(docs))throw Error('Nincs ellenőrzött raktárstatisztika.');
  const byKey=new Map(),errors=[];
  for(const d of docs){
-  if(!d||!validDay(d.date)||!word(d.station)||!Number.isSafeInteger(d.total)||d.total<0||
-   d.key!==docKey(d.date,d.station)){
+  if(!d||!validDay(d.date)||!word(d.station)||
+    !Number.isSafeInteger(d.total)||d.total<1||d.total>10000000||
+    d.key!==docKey(d.date,d.station)||
+    !Array.isArray(d.dates)||!d.dates.length||d.dates.length>180||
+    !Array.isArray(d.areas)||!d.areas.length||d.areas.length>250){
+   errors.push('invalid_inventory_report');continue;
+  }
+  // Persisted Inventory documents can be altered by privileged/legacy
+  // writers. Historical stats must reconcile the actual dated area rows
+  // instead of displaying a forged aggregate as a verified total.
+  const uniqueDates=new Set(d.dates);
+  const uniqueAreas=new Set(d.areas.map(a=>
+    typeof a?.area==='string'?a.area.trim():null));
+  if(uniqueDates.size!==d.dates.length||
+     d.dates.some(day=>!validDay(day)||day>d.date)||
+     uniqueAreas.size!==d.areas.length){
+   errors.push('invalid_inventory_report');continue;
+  }
+  let sum=0,valid=true;
+  for(const area of d.areas){
+   if(!area||!word(area.area)||!Array.isArray(area.counts)||
+      area.counts.length!==d.dates.length){
+    valid=false;break;
+   }
+   for(const count of area.counts){
+    if(!Number.isSafeInteger(count)||count<0||count>10000000){
+     valid=false;break;
+    }
+    sum+=count;
+   }
+   if(!valid)break;
+  }
+  if(!valid||sum!==d.total){
    errors.push('invalid_inventory_report');continue;
   }
   if(byKey.has(d.key)){errors.push('duplicate_inventory_report');continue;}
@@ -54,5 +85,5 @@ export function inventoryHistory(docs){
  const days=[...byKey.values()].sort((a,b)=>b.date.localeCompare(a.date)||
   a.station.localeCompare(b.station,'hu'));
  return {rows:days.map(d=>({date:d.date,station:d.station,total:d.total,
-  areas:Array.isArray(d.areas)?d.areas.length:0})),errors};
+  areas:d.areas.length})),errors};
 }
