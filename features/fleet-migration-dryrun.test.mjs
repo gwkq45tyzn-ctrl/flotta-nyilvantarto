@@ -8,7 +8,7 @@ const source=()=>({
     status:'aktiv',history:[{type:'service',km:1500}],
     note:'PRIVATE VEHICLE INFORMATION'}],
   drivers:[{id:'local-d1',daCode:'DA0001',name:'PRIVATE DRIVER NAME',
-    agency:'TEST VENDOR',status:'aktiv',phone:'PRIVATE PHONE NUMBER'}],
+    agency:'TEST VENDOR',status:'aktiv',kapacitas:80,phone:'PRIVATE PHONE NUMBER'}],
   fuelCards:[{id:'private-card'}],contacts:[{id:'private-contact'}]
 });
 const input=()=>({local:source(),server:source(),backup:source()});
@@ -57,6 +57,14 @@ oversize.server.vehicles[0].note='x'.repeat(830000);
 r=prepareFleetMigrationDryRun(oversize);
 assert.ok(r.holds.some(x=>x.code==='JSON_SIZE_BUDGET_EXCEEDED'&&x.source==='server'));
 assert.equal(r.firestoreEncodedSizeVerified,false);
+
+const missingCapacity=input();
+delete missingCapacity.local.drivers[0].kapacitas;
+delete missingCapacity.server.drivers[0].kapacitas;
+delete missingCapacity.backup.drivers[0].kapacitas;
+r=prepareFleetMigrationDryRun(missingCapacity);
+assert.equal(r.status,'blocked');
+assert.ok(r.holds.some(x=>x.code==='UNRESOLVED_MASTER_MAPPING'));
 
 const missing=prepareFleetMigrationDryRun({local:source(),backup:source()});
 assert.ok(missing.holds.some(x=>x.code==='MISSING_OR_INVALID_SOURCE'&&x.source==='server'));
