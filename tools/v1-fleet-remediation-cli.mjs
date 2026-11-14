@@ -9,8 +9,8 @@
  *     --patches /tmp/explicit-capacities.json --expected-sha <audit-sha> \
  *     --output /tmp/v1-candidate-private.json
  */
-import {readFileSync,writeFileSync,statSync} from 'node:fs';
-import {resolve,relative,isAbsolute,sep} from 'node:path';
+import {readFileSync,writeFileSync,statSync,realpathSync} from 'node:fs';
+import {resolve,relative,isAbsolute,sep,dirname,basename} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {
   auditFleetSourceForImport,buildExplicitFleetRemediationCandidate
@@ -41,12 +41,21 @@ function privateJson(path){
   }catch(_){throw Error('PRIVATE_SOURCE_UNAVAILABLE_OR_NOT_JSON');}
 }
 function refuseRepoOutput(output){
-  const full=resolve(output),rel=relative(REPO_ROOT,full);
+  const full=resolve(output);
+  // A caller could name /tmp/out/link-to-repo/private.json where link-to-repo
+  // is a symlink to the Git checkout. Lexical resolve/relative alone misses
+  // that leak. Canonicalize the existing parent *before* touching any source.
+  let canonicalParent;
+  try{canonicalParent=realpathSync(dirname(full));}
+  catch(_){throw Error('PRIVATE_OUTPUT_PARENT_UNAVAILABLE');}
+  const canonicalOutput=resolve(canonicalParent,basename(full));
+  const canonicalRepo=realpathSync(REPO_ROOT);
+  const rel=relative(canonicalRepo,canonicalOutput);
   // A source candidate contains personal and vehicle data. Never create it
-  // under Git checkout even when accidentally given a plausible file name.
+  // under Git checkout, including via symlinked parent directories.
   if(rel===''||(rel!=='..'&&!rel.startsWith('..'+sep)&&!isAbsolute(rel)))
     throw Error('PRIVATE_OUTPUT_MUST_BE_OUTSIDE_GIT_CHECKOUT');
-  return full;
+  return canonicalOutput;
 }
 function redacted(audit){
   return {
