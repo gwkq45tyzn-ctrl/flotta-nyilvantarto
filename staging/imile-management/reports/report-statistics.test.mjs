@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {ofd} from './report-core.mjs';
-import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,docKey} from './report-statistics.mjs';
+import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,docKey,exactStoredPerformanceNoOp} from './report-statistics.mjs';
 const header=['OFD Date','DA','DA Code','Vendor','OFD','Delivered','Station'];
 const record=(code,ofdN,del,station='DS(AKE)',vendor='V',day='2026-10-30')=>
  [day,'Driver '+code,code,vendor,ofdN,del,station];
@@ -97,6 +97,35 @@ test('snapshot content order stable',()=>{
  assert.deepEqual(s[0].rows.map(x=>x.daCode),['D1','D2']);
 });
 test('report must be ready before saving',()=>assert.throws(()=>planPerformanceSnapshots({status:'missing',kind:'ofd'})));
+test('unchanged stored OFD payload is a true idempotent no-op',()=>{
+ const p=planPerformanceSnapshots(report([record('D1',9,6)]))[0];
+ const hash='a'.repeat(64);
+ const old={...structuredClone(p),contentHash:hash,status:'final'};
+ assert.equal(exactStoredPerformanceNoOp(old,p,hash,'final'),true);
+ assert.equal(exactStoredPerformanceNoOp(old,p,hash,'provisional'),false);
+ assert.equal(exactStoredPerformanceNoOp(old,p,'0'.repeat(64),'final'),false);
+});
+test('stored OFD same hash with poisoned courier rows must not silently skip replace',()=>{
+ const p=planPerformanceSnapshots(report([record('D1',9,6)]))[0];
+ const hash='b'.repeat(64);
+ const old={...structuredClone(p),contentHash:hash,status:'provisional'};
+ old.rows[0].delivered=2; // old hash is forged; source rows are NOT same
+ assert.equal(exactStoredPerformanceNoOp(old,p,hash,'provisional'),false);
+ old.rows[0].delivered=6;
+ old.rows[0].vendor='ATTACKER-VENDOR';
+ assert.equal(exactStoredPerformanceNoOp(old,p,hash,'provisional'),false);
+});
+test('stored OFD same hash but counters/row count or key drift refuses no-op',()=>{
+ const p=planPerformanceSnapshots(report([record('D1',9,6)]))[0],hash='c'.repeat(64);
+ const old={...structuredClone(p),contentHash:hash,status:'final'};
+ for(const patch of [{totalOFD:99},{totalDelivered:99},{courierCount:2},
+  {key:'wrong'},{date:'2026-10-31'},{station:'OTHER'},
+  {rows:null},{rows:[]}])
+  assert.equal(exactStoredPerformanceNoOp({...old,...patch},p,hash,'final'),false,
+   JSON.stringify(patch));
+ assert.equal(exactStoredPerformanceNoOp({...old,rows:[null]},p,hash,'final'),false);
+ assert.equal(exactStoredPerformanceNoOp(undefined,p,hash,'final'),false);
+});
 const example=planPerformanceSnapshots(report([record('D1',10,8)]))[0];
 const hash=await snapshotHash(example);assert.match(hash,/^[a-f0-9]{64}$/);assert.equal(hash,await snapshotHash(example));n++;
 console.log('PASS: '+n+' snapshot storage identity, weighted statistics and SHA256 cases');
