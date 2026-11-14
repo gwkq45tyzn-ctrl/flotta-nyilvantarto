@@ -168,7 +168,7 @@ try{
     const source=readFileSync(join(target,file),'utf8');
     const refs=references(file,source);
     if(file.endsWith('.html')){
-      for(const hit of source.matchAll(/<a\\b[^>]*?\\bhref=['"]([^'"]+)['"][^>]*>/gi))
+      for(const hit of source.matchAll(/<a\b[^>]*?\bhref=['"]([^'"]+)['"][^>]*>/gi))
         refs.push(hit[1]);
     }
     for(const ref of refs){
