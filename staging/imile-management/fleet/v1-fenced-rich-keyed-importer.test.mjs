@@ -10,7 +10,11 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
 import {doc,getDoc,setDoc,deleteDoc,updateDoc,collection,getDocs} from 'firebase/firestore';
-import {createLocalFencedRichKeyedImporter} from './v1-fenced-rich-keyed-importer.mjs';
+import {
+  createLocalFencedRichKeyedImporter,
+  rejectFoldedSourceKeys,
+  rejectNonCanonicalKeyedEntries
+} from './v1-fenced-rich-keyed-importer.mjs';
 import {createLocalEmulatorFencing} from './v1-local-emulator-persistent-fencing.mjs';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 
@@ -88,6 +92,28 @@ test('actual ORIGINAL Rules, rich keyed/claims and fenced epochs: clean ALLOW, p
         deny(await poisonedImporter.begin(poisonous,poisonBackup),
           /PRESEAL_SOURCE_ATTESTATION_DENIED/);
         assert.equal((await getDoc(doc(aDb,LOCK))).exists(),false);
+        // Importer-owned gate, before preflight: ABC-123 and abc 123 share
+        // one canonical document key. No lock and no keyed write.
+        const folded=source();
+        folded.vehicles.push({id:'source-v-2',rendszam:'abc 123',status:'aktiv',history:[]});
+        const foldedGate=rejectFoldedSourceKeys(folded);
+        assert.equal(foldedGate.ok,false);
+        assert.equal(foldedGate.reason,'IMPORTER_FOLDED_PLATE_KEY');
+        assert.equal(rejectNonCanonicalKeyedEntries([
+          {kind:'vehicles',id:'vehicles/ALIAS',masterData:{rendszam:'ABC-123'}}
+        ]).reason,'IMPORTER_NONCANONICAL_KEY');
+        assert.equal(rejectNonCanonicalKeyedEntries([
+          {kind:'vehicles',id:'vehicles/ABC123',masterData:{rendszam:'ABC-123'}},
+          {kind:'vehicles',id:'vehicles/ABC123',masterData:{rendszam:'abc 123'}}
+        ]).reason,'IMPORTER_FOLDED_PLATE_KEY');
+        const plateImporter=createLocalFencedRichKeyedImporter({
+          db:aDb,projectId,trustedPinnedSha:sha256(folded)
+        });
+        deny(await plateImporter.begin(folded,{type:'not-a-backup'}),
+          /^IMPORTER_FOLDED_PLATE_KEY$/);
+        assert.equal((await getDoc(doc(aDb,LOCK))).exists(),false);
+        assert.equal((await getDocs(collection(aDb,'flottaVehicles'))).size,0);
+        console.log('PASS DENY [E]: importer rejects separator-folded plates before preflight and before any write');
         assert.equal((await getDocs(collection(aDb,'flottaDrivers'))).size,0);
         console.log('PASS DENY [E]: privileged test adapter refuses poisoned source BEFORE any lock/keyed write');
 

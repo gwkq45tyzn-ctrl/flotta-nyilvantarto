@@ -115,7 +115,10 @@ test('missing or duplicate IDs and partial Fleet data are never valid',()=>{
   const a=params(); delete a.fleet.fuelCards;
   assert.equal(reasons(a),'invalid_full_fleet_snapshot');
   const b=params(); b.fleet.drivers.push({...b.fleet.drivers[0],id:'other'});
-  assert.equal(reasons(b),'invalid_canonical_master_projection');
+  assert.equal(reasons(b),'duplicate_normalized_driver');
+  const plate=params();
+  plate.fleet.vehicles.push({...plate.fleet.vehicles[0],id:'other-car',rendszam:'abc 123'});
+  assert.equal(reasons(plate),'duplicate_normalized_plate');
   const c=params(); c.depotDriver=null; c.depotVehicle=null;
   assert.equal(reasons(c),'server_read_parity_ready');
   c.fleet.drivers[0].status='inaktiv';
