@@ -31,4 +31,29 @@ test('Vállalkozói mutató súlyozott',()=>{const r=ofd([ho,o('D1',5,5),o('D2',
 test('Kézbesített nem lehet több OFD-nél',()=>assert.equal(ofd([ho,o('D1',4,5)]).status,'blocked'));
 test('Eltérő nap külön csoport',()=>assert.equal(ofd([ho,o('D1',5,4,'V','2026-10-29'),o('D1',5,4)]).vendors.length,2));
 test('Üres OFD nem nulla',()=>assert.equal(ofd([ho]).totalOfd,null));
+test('Azonos DA ismétlődő, egyenként safe sorok unsafe összege tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0),o('D1',1,0)]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalOfd,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Külön futárok, azonos vállalkozó unsafe csoportösszege tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0),o('D2',1,0)]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalDelivered,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Eltérő vállalkozók unsafe napi globális összesítése tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0,'V1'),
+    o('D2',1,0,'V2')]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalOfd,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Határértéken még pontos egész OFD megmarad, normalizálás nem veszít sort',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0,'V1')]);
+  assert.equal(r.status,'ready');
+  assert.equal(r.totalOfd,Number.MAX_SAFE_INTEGER);
+  assert.equal(r.rows[0].ofd,Number.MAX_SAFE_INTEGER);
+});
 console.log('PASS: '+passed+' In-Hub/DA OFD report contracts and safe metrics');
