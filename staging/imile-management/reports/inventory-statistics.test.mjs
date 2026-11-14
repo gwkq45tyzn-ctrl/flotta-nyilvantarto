@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {inhub} from './report-core.mjs';
-import {planInventorySnapshot,inventoryHistory,inventoryHash} from './inventory-statistics.mjs';
+import {planInventorySnapshot,inventoryHistory,inventoryHash,exactStoredInventoryNoOp} from './inventory-statistics.mjs';
 const h=['Waybill Number','LM Receive Date','Consignee city','Consignee zipcode','Inventory Station'];
 const m=[h,['001','2026-10-29','Budapest','1117','DS(AKE)'],
  ['002','2026-10-30','Szigetszentmiklós','2310','DS(AKE)']];
@@ -62,6 +62,31 @@ t('missing or empty stored Inventory areas cannot be disguised as a zero',()=>{
  const result=inventoryHistory([{...s,areas:[],total:0}]);
  assert.equal(result.rows.length,0);
  assert.deepEqual(result.errors,['invalid_inventory_report']);
+});
+t('genuinely unchanged stored Inventory content is idempotent',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31'),hash='a'.repeat(64);
+ const old={...structuredClone(s),contentHash:hash};
+ assert.equal(exactStoredInventoryNoOp(old,s,hash),true);
+ assert.equal(exactStoredInventoryNoOp(old,s,'0'.repeat(64)),false);
+});
+t('forged Inventory same hash with altered area/date buckets refuses no-op',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31'),hash='b'.repeat(64);
+ const old={...structuredClone(s),contentHash:hash};
+ old.areas[0].counts[0]+=1;
+ assert.equal(exactStoredInventoryNoOp(old,s,hash),false);
+ old.areas[0].counts[0]-=1;
+ old.dates[0]='2026-10-28';
+ assert.equal(exactStoredInventoryNoOp(old,s,hash),false);
+});
+t('forged Inventory same hash with total, station, key or structure drift refuses no-op',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31'),hash='c'.repeat(64);
+ const old={...structuredClone(s),contentHash:hash};
+ for(const patch of [{total:100},{station:'DS(IKA)'},{key:'other'},
+  {date:'2026-10-30'},{areas:[]},{areas:null},{dates:null},{dates:[]}]){
+  assert.equal(exactStoredInventoryNoOp({...old,...patch},s,hash),false,
+   JSON.stringify(patch));
+ }
+ assert.equal(exactStoredInventoryNoOp(undefined,s,hash),false);
 });
 const snap=planInventorySnapshot(inhub(m),m,'2026-10-31');
 assert.match(await inventoryHash(snap),/^[a-f0-9]{64}$/);passed++;
