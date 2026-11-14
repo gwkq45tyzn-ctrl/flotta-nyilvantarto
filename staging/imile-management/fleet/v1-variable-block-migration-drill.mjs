@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {collection,doc,deleteDoc,getDoc,getDocs,setDoc,updateDoc,writeBatch}
+import {collection,doc,deleteDoc,getDoc,getDocs,setDoc,updateDoc,writeBatch,runTransaction}
   from 'firebase/firestore';
 import {sha256} from '../../../tools/v1-migration-dryrun.mjs';
 import {
@@ -218,7 +218,7 @@ class VariableBlockSession{
       if(!assessed.ok)throw Error(assessed.reason);
     }
   }
-  async importNext(){
+  async importNext(options={}){
     const fenceSnap=await getDoc(this.journalRef);
     if(fenceSnap.exists()&&fenceSnap.data().rollbackFence)
       throw Error('ROLLBACK_FENCE_HELD');
@@ -226,29 +226,69 @@ class VariableBlockSession{
     if(state.closed)throw Error('CLOSED_REPLAY_DENIED');
     if(state.committed>=this.chunks.length)
       return {done:true,committed:state.committed,writes:0};
-    const chunk=this.chunks[state.committed];
-    const batch=writeBatch(this.db);
-    if(!state.journal){
-      batch.set(this.sourceRef,{
-        ...this.source,revision:1,sealed:false,
-        migrationSourceSha256:this.prepared.sourceSha256
+    // Test-only barrier forces two local sessions to observe the SAME
+    // checkpoint. This staging emulator class is never a production importer.
+    if(options.afterVerify)await options.afterVerify(state);
+    const index=state.committed;
+    const chunk=this.chunks[index];
+    const receiptRef=doc(this.db,RECEIPTS,String(index).padStart(4,'0'));
+    const paths=chunk.flatMap(pair=>[
+      doc(this.db,...pair.masterPath.split('/')),
+      doc(this.db,...pair.claimPath.split('/'))
+    ]);
+    // A batch.set() blindly overwrote the same journal and documents when
+    // two importNext() calls observed committedChunks=N concurrently.
+    // Atomic read + write on the persisted journal provides a CAS barrier
+    // against two cooperating writers and a racing rollback cursor update.
+    await runTransaction(this.db,async tx=>{
+      const [journalSnap,sourceSnap,receiptSnap]=await Promise.all([
+        tx.get(this.journalRef),tx.get(this.sourceRef),tx.get(receiptRef)
+      ]);
+      if(state.journal){
+        if(!journalSnap.exists()||
+           journalSnap.data().committedChunks!==index||
+           journalSnap.data().sourceSha256!==this.prepared.sourceSha256||
+           journalSnap.data().rollbackFence||
+           journalSnap.data().closed===true)
+          throw Error('STALE_IMPORT_CHECKPOINT');
+        if(!sourceSnap.exists()||sourceSnap.data().sealed!==false||
+           sourceSnap.data().revision!==1||
+           sourceSnap.data().migrationSourceSha256!==this.prepared.sourceSha256)
+          throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+        for(const block of BLOCKS){
+          if(sha256(sourceSnap.data()[block])!==sha256(this.source[block]))
+            throw Error('SOURCE_BLOCK_DRIFT');
+        }
+      }else if(journalSnap.exists()||sourceSnap.exists()){
+        throw Error('STALE_IMPORT_CHECKPOINT');
+      }
+      if(receiptSnap.exists())throw Error('CHUNK_RECEIPT_ALREADY_EXISTS');
+      // No writes until ALL target paths have been checked in the same
+      // transaction; a competing first writer must not overwrite them.
+      const current=await Promise.all(paths.map(ref=>tx.get(ref)));
+      if(current.some(snap=>snap.exists()))
+        throw Error('CHUNK_PATH_ALREADY_EXISTS');
+      if(!state.journal){
+        tx.set(this.sourceRef,{
+          ...this.source,revision:1,sealed:false,
+          migrationSourceSha256:this.prepared.sourceSha256
+        });
+      }
+      for(const pair of chunk){
+        tx.set(doc(this.db,...pair.masterPath.split('/')),pair.master);
+        tx.set(doc(this.db,...pair.claimPath.split('/')),pair.claim);
+      }
+      tx.set(receiptRef,{
+        chunkIndex:index,
+        sourceSha256:this.prepared.sourceSha256,
+        pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
+        pairDigest:sha256(chunk.map(pair=>({
+          id:pair.id,master:pair.master,claim:pair.claim
+        })))
       });
-    }
-    for(const pair of chunk){
-      batch.set(doc(this.db,...pair.masterPath.split('/')),pair.master);
-      batch.set(doc(this.db,...pair.claimPath.split('/')),pair.claim);
-    }
-    batch.set(doc(this.db,RECEIPTS,String(state.committed).padStart(4,'0')),{
-      chunkIndex:state.committed,
-      sourceSha256:this.prepared.sourceSha256,
-      pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
-      pairDigest:sha256(chunk.map(pair=>({
-        id:pair.id,master:pair.master,claim:pair.claim
-      })))
-    });
-    batch.set(this.journalRef,this.journalBody(state.committed+1));
-    await batch.commit();
-    return {done:false,committed:state.committed+1,writes:chunk.length*2+1};
+      tx.set(this.journalRef,this.journalBody(index+1));
+    },{maxAttempts:5});
+    return {done:false,committed:index+1,writes:chunk.length*2+1};
   }
   async importAll(){
     let step=await this.importNext();
