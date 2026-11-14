@@ -238,7 +238,10 @@ class VariableBlockSession{
          !Number.isSafeInteger(fence.deletedThrough)||
          !Number.isSafeInteger(fence.total)||
          fence.deletedThrough<0||fence.deletedThrough>fence.total||
-         fence.total>this.chunks.length)
+         fence.total>this.chunks.length||
+         // A forged short fence must not reset the journal while later
+         // receipted chunks and keyed masters still exist.
+         fence.total!==journal.committedChunks)
         throw Error('ROLLBACK_FENCE_MISMATCH');
       await this.verifyRollbackRemainder(fence);
       deletedThrough=fence.deletedThrough;
@@ -482,6 +485,18 @@ async function main(){
     await assert.rejects(()=>stranger.rollback(),/ROLLBACK_FENCE_MISMATCH/);
     assert.equal((await getDoc(foreign)).exists(),true);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    // Forged rollback total equal to the already-deleted cursor used to
+    // return success and reset committedChunks=0 with later chunks intact.
+    const interruptedJournal=(await getDoc(parked.journalRef)).data();
+    const actualTotal=interruptedJournal.rollbackFence.total;
+    const partialTotal=interruptedJournal.rollbackFence.deletedThrough;
+    assert.ok(partialTotal<actualTotal);
+    await updateDoc(parked.journalRef,{'rollbackFence.total':partialTotal});
+    await assert.rejects(()=>new VariableBlockSession(db,largeSource).rollback(),
+      /ROLLBACK_FENCE_MISMATCH/);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    await updateDoc(parked.journalRef,{'rollbackFence.total':actualTotal});
+    console.log('PASS DENY [E+SDK]: forged short rollback fence cannot abandon later receipted chunks');
     const resumed=new VariableBlockSession(db,largeSource);
     const rest=await resumed.rollback();
     assert.ok(rest.rollbackBatches>=1);
