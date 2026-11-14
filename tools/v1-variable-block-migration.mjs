@@ -155,8 +155,8 @@ export function assessChunkReadback({chunk,masters,claims,sourceSha256}){
   const claimMap=claims&&typeof claims==='object'?claims:{};
   const indexes=new Map();
   for(const pair of chunk){
-    const master=masterMap[pair.id];
-    const claim=claimMap[pair.id];
+    const master=masterMap[pair.masterPath];
+    const claim=claimMap[pair.claimPath];
     if(!master&&claim)return {ok:false,reason:'ORPHAN_CLAIM',id:pair.id};
     if(master&&!claim)return {ok:false,reason:'ORPHAN_MASTER',id:pair.id};
     if(!master&&!claim)return {ok:false,reason:'MISSING_PAIR',id:pair.id};
@@ -170,12 +170,13 @@ export function assessChunkReadback({chunk,masters,claims,sourceSha256}){
     if(indexes.has(key))return {ok:false,reason:'DUPLICATE_SOURCE_INDEX',id:pair.id};
     indexes.set(key,pair.id);
   }
-  const expected=new Set(chunk.map(p=>p.id));
+  const masterPaths=new Set(chunk.map(pair=>pair.masterPath));
+  const claimPaths=new Set(chunk.map(pair=>pair.claimPath));
   for(const id of Object.keys(masterMap)){
-    if(!expected.has(id))return {ok:false,reason:'ORPHAN_MASTER',id};
+    if(!masterPaths.has(id))return {ok:false,reason:'ORPHAN_MASTER',id};
   }
   for(const id of Object.keys(claimMap)){
-    if(!expected.has(id))return {ok:false,reason:'ORPHAN_CLAIM',id};
+    if(!claimPaths.has(id))return {ok:false,reason:'ORPHAN_CLAIM',id};
   }
   return {ok:true,readBack:chunk.length};
 }
