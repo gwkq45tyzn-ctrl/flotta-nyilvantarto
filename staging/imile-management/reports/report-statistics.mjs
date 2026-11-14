@@ -1,8 +1,11 @@
 /** Pure OFD snapshot planning and weighted courier/vendor analytics.
  * Never contacts Firebase, never implicitly approves a report.
  */
-const day=x=>typeof x==='string'&&/^20\d{2}-\d\d-\d\d$/.test(x)&&
- new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x;
+const day=x=>{
+ if(typeof x!=='string'||!/^20\d{2}-\d\d-\d\d$/.test(x))return false;
+ const d=new Date(x+'T12:00:00Z');
+ return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===x;
+};
 const name=x=>typeof x==='string'&&x.trim().length>0&&x.length<=160&&!/[\u0000-\u001f]/.test(x);
 const number=x=>Number.isSafeInteger(x)&&x>=0&&x<=10000000;
 const compare=(a,b)=>a.localeCompare(b,'hu',{numeric:true});
@@ -35,14 +38,34 @@ export function buildPerformanceStatistics(dailyDocs){
  if(!Array.isArray(dailyDocs))throw Error('Hiányoznak a statisztikai források.');
  const days=new Map(),couriers=new Map(),vendors=new Map(),issues=[];
  for(const d of dailyDocs){
-  if(!d||!day(d.date)||!name(d.station)||!Array.isArray(d.rows)||d.rows.length>300||
-    d.key!==docKey(d.date,d.station)||!['provisional','final'].includes(d.status)){
+  if(!d||!day(d.date)||!name(d.station)||!Array.isArray(d.rows)||
+     !d.rows.length||d.rows.length>300||
+     d.key!==docKey(d.date,d.station)||!['provisional','final'].includes(d.status)){
    issues.push('invalid_daily_report');continue;
   }
-  if(days.has(d.key)){issues.push('duplicate_daily_report');continue;}days.set(d.key,d);
+  if(days.has(d.key)){issues.push('duplicate_daily_report');continue;}
+  // Stored Firestore reports may be poisoned independently of the checked
+  // Excel importer. Reconcile ALL daily rows to persisted totals and reject
+  // duplicate courier IDs instead of silently inflating weighted statistics.
+  const seenDA=new Set();
+  let summedOFD=0,summedDelivered=0,invalid=null;
   for(const r of d.rows){
    if(!name(r.daCode)||!name(r.daName)||!name(r.vendor)||!number(r.ofd)||
-    !number(r.delivered)||r.delivered>r.ofd){issues.push('invalid_courier_record');continue;}
+      !number(r.delivered)||r.delivered>r.ofd){
+    invalid='invalid_courier_record';break;
+   }
+   if(seenDA.has(r.daCode)){invalid='duplicate_courier_record';break;}
+   seenDA.add(r.daCode);
+   summedOFD+=r.ofd;summedDelivered+=r.delivered;
+  }
+  if(invalid){issues.push(invalid);continue;}
+  if(!number(d.totalOFD)||!number(d.totalDelivered)||
+     d.totalOFD!==summedOFD||d.totalDelivered!==summedDelivered||
+     d.courierCount!==seenDA.size){
+   issues.push('invalid_daily_totals');continue;
+  }
+  days.set(d.key,d);
+  for(const r of d.rows){
    const ck=r.daCode,vk=JSON.stringify([d.date,d.station,r.vendor]);
    if(!couriers.has(ck))couriers.set(ck,{daCode:ck,latestName:r.daName,ofd:0,delivered:0,days:new Set(),vendors:new Set(),finalDays:0});
    const courier=couriers.get(ck);
