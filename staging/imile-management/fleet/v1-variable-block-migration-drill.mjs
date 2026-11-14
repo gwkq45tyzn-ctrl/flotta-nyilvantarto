@@ -609,6 +609,37 @@ async function main(){
     await readback(client,smallSource,smallPrepared);
     console.log('PASS [E+SDK]: 12/14/14/5 interrupted resume and signed-in readback of 26 masters and 26 claims');
 
+    // Privileged SDK change AFTER rollback's complete initial scan, BEFORE
+    // its destructive transaction: this used to delete the altered master
+    // because the transaction read only journal and source archive.
+    const raceMasterPair=session.prepared.pairs[0];
+    const raceMasterRef=doc(db,...raceMasterPair.masterPath.split('/'));
+    const initialChunkCount=(await getDoc(session.journalRef)).data().committedChunks;
+    await assert.rejects(()=>new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async()=>{
+        await updateDoc(raceMasterRef,{history:[{kind:'UNOWNED_AFTER_PREFLIGHT'}]});
+      }
+    }),/ROLLBACK_TARGET_CHANGED/);
+    assert.equal((await getDoc(raceMasterRef)).data().history[0].kind,
+      'UNOWNED_AFTER_PREFLIGHT');
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,
+      initialChunkCount,'Failed rollback must preserve checkpoint');
+    await setDoc(raceMasterRef,raceMasterPair.master);
+    // The SAME safety contract must include receipt content; a forged
+    // receipt after preflight is never a valid reason to delete the chunk.
+    const raceReceipt=doc(db,RECEIPTS,'0000');
+    const intactReceipt=(await getDoc(raceReceipt)).data();
+    await assert.rejects(()=>new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async()=>{
+        await updateDoc(raceReceipt,{pairDigest:'0'.repeat(64)});
+      }
+    }),/ROLLBACK_TARGET_CHANGED/);
+    assert.equal((await getDoc(raceReceipt)).data().pairDigest,'0'.repeat(64));
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,
+      initialChunkCount);
+    await setDoc(raceReceipt,intactReceipt);
+    console.log('PASS DENY [E+SDK]: changed owned master/receipt after rollback preflight cannot be deleted by transaction');
+
     const tampered=new VariableBlockSession(db,smallSource);
     const first=tampered.prepared.pairs[0];
     await updateDoc(doc(tampered.db,...first.masterPath.split('/')),{history:[]});
