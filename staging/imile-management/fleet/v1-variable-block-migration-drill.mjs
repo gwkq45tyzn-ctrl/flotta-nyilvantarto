@@ -156,6 +156,39 @@ class VariableBlockSession{
     if(sourceData.sealed!==false||sourceData.revision!==1||
        sourceData.migrationSourceSha256!==this.prepared.sourceSha256)
       throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+    // A privileged writer can change source arrays without changing the
+    // stored SHA field. The interrupted rollback must not silently finish
+    // against a different rich source snapshot.
+    for(const block of BLOCKS){
+      if(sha256(sourceData[block])!==sha256(this.source[block]))
+        throw Error('SOURCE_BLOCK_DRIFT');
+    }
+    // Resume is safe only if the *entire* keyed/receipt workspace matches
+    // exactly the not-yet-deleted chunk suffix. A new foreign master, claim
+    // or receipt added during the rollback pause must block journal reset.
+    const remaining={
+      flottaDrivers:new Set(),flottaVehicles:new Set(),
+      flottaDriverClaims:new Set(),flottaVehicleClaims:new Set()
+    };
+    const remainingReceipts=new Set();
+    for(let i=fence.deletedThrough;i<fence.total;i++){
+      remainingReceipts.add(String(i).padStart(4,'0'));
+      for(const pair of this.chunks[i]){
+        remaining[pair.masterPath.split('/')[0]].add(pair.id);
+        remaining[pair.claimPath.split('/')[0]].add(pair.id);
+      }
+    }
+    const liveKeyed=await this.loadKeyed();
+    for(const [name,expected] of Object.entries(remaining)){
+      const actual=liveKeyed[name];
+      if(actual.size!==expected.size ||
+         [...actual.keys()].some(id=>!expected.has(id)))
+        throw Error(name.includes('Claims')?'ORPHAN_CLAIM':'ORPHAN_MASTER');
+    }
+    const liveReceipts=await getDocs(collection(this.db,RECEIPTS));
+    if(liveReceipts.size!==remainingReceipts.size ||
+       liveReceipts.docs.some(row=>!remainingReceipts.has(row.id)))
+      throw Error('FORGED_OR_STALE_CHECKPOINT');
     for(let i=0;i<fence.deletedThrough;i++){
       for(const ref of this.chunkDeleteRefs(i)){
         if((await getDoc(ref)).exists())throw Error('ROLLBACK_CURSOR_AHEAD_OF_DELETES');
