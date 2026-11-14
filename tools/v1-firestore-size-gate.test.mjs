@@ -56,6 +56,43 @@ test('invalid or missing keyed path is refused, never counted as harmless data',
   assert.equal(o.advisoryOk,false);
   assert.match(o.reason,/INVALID_KEYED_DOCUMENT_PATH/);
 });
+test('identity claim paths are measured and still not import authority',()=>{
+  const raw=generateLargeFixture(1,1);
+  const claim={sourceIndex:0,revision:1,note:'árvíztűrő',
+    history:[{text:'második',nested:{keep:true}}]};
+  const o=checkSizeGate(raw,{
+    'flottaDriverClaims/DA0001':claim,
+    'flottaVehicleClaims/PLATE0001':{sourceIndex:0,revision:1}
+  });
+  assert.equal(o.advisoryOk,true,JSON.stringify(o));
+  assert.ok(o.keyedStorageEstimates['flottaDriverClaims/DA0001']>0);
+  assert.ok(o.keyedStorageEstimates['flottaVehicleClaims/PLATE0001']>0);
+  assert.equal(o.firestoreEncodedSizeVerified,false);
+  assert.equal(o.authorizedForImport,false);
+});
+test('multibyte nested history uses UTF-8 bytes, not character length',()=>{
+  const ascii=estimateFirestoreDocumentStorageBytes(
+    {history:[{text:'e'}]},'flottaDrivers/DA0001');
+  const multi=estimateFirestoreDocumentStorageBytes(
+    {history:[{text:'é'}]},'flottaDrivers/DA0001');
+  assert.equal(multi-ascii,1);
+  const archive=checkSizeGate({
+    drivers:[{id:'d',daCode:'DA0001',history:[{text:'árvíztűrő'}]}],
+    vehicles:[],fuelCards:[],contacts:[]
+  },{});
+  assert.equal(archive.advisoryOk,true,JSON.stringify(archive));
+  assert.equal(archive.firestoreEncodedSizeVerified,false);
+  assert.ok(archive.sourceStorageEstimateBytes>archive.sourceJsonBytes);
+});
+test('oversized multibyte field is denied before any write and is not encoded proof',()=>{
+  const raw=generateLargeFixture(0,0);
+  raw.historyNote='é'.repeat(700000);
+  const o=checkSizeGate(raw,{});
+  assert.equal(o.advisoryOk,false);
+  assert.match(o.reason,/FIRESTORE_FIELD_VALUE_LIMIT_EXCEEDED|BUDGET_EXCEEDED/);
+  assert.equal(o.firestoreEncodedSizeVerified,false);
+  assert.equal(o.authorizedForImport,false);
+});
 test('even when all size calculations succeed, cannot promote estimated bytes to authority',()=>{
   const raw=generateLargeFixture(1,1);
   const o=checkSizeGate(raw,{});
