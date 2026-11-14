@@ -155,20 +155,24 @@ export async function readXlsxFirstSheet(data){
    throw Error('Túl nagy Excel-munkalap.');
   files.set(name,{compressed,uncompressed,method,local,crc});
  }
- async function file(name){
-  const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
+ // Structural ZIP checks must happen for ALL entries before any XML
+ // parsing. This also refuses a forged local header in an unused part and
+ // prevents a malformed input from ever reaching the browser DOM parser.
+ for(const [name,ent] of files){
   const q=ent.local;
   if(q+30>offset||i32(d,q)!==0x04034b50)
    throw Error('Érvénytelen ZIP-fejléc.');
   const localNameLen=i16(d,q+26),localExtra=i16(d,q+28);
   const start=q+30+localNameLen+localExtra;
-  // A central directory is untrusted too: bind its entry to the actual
-  // local ZIP name, method and compressed data boundary before decoding.
   const localName=td.decode(bytes.subarray(q+30,q+30+localNameLen));
   if(localName!==name||i16(d,q+8)!==ent.method||
      (i16(d,q+6)&0x0041)||start+ent.compressed>offset)
    throw Error('XLSX ZIP-összetevő eltérés.');
-  const compressed=bytes.slice(start,start+ent.compressed);let raw;
+  ent.start=start;
+ }
+ async function file(name){
+  const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
+  const compressed=bytes.slice(ent.start,ent.start+ent.compressed);let raw;
   if(ent.method===0)raw=compressed;
   else if(ent.method===8)raw=await inflateRawXlsxBounded(compressed,ent.uncompressed);
   else throw Error('Nem támogatott ZIP-tömörítés.');
