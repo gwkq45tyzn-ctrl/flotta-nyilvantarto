@@ -57,6 +57,11 @@ class VariableBlockSession{
     const receiptSnap=await getDocs(collection(this.db,RECEIPTS));
     if(!journalSnap.exists()){
       if(!receiptSnap.empty)throw Error('FORGED_OR_STALE_CHECKPOINT');
+      if((await getDoc(this.sourceRef)).exists())throw Error('FOREIGN_WORKSPACE');
+      const keyed=await this.loadKeyed();
+      for(const name of KEYED){
+        if(keyed[name].size)throw Error('FOREIGN_WORKSPACE');
+      }
       return {committed:0,journal:null,closed:false};
     }
     const journal=journalSnap.data();
@@ -364,6 +369,23 @@ async function main(){
     const client=env.authenticatedContext(uid,{email}).firestore();
     await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
+    const foreignSource=doc(db,'flottaSharedState','current');
+    const foreignMaster=doc(db,'flottaDrivers','FOREIGN-KEEP');
+    const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN-KEEP');
+    await setDoc(foreignSource,{sealed:true,revision:9,migrationSourceSha256:'ab'.repeat(32),
+      drivers:[],vehicles:[],fuelCards:[],contacts:[]});
+    await setDoc(foreignMaster,{owner:'other-import',sourceIndex:0});
+    await setDoc(foreignClaim,{sourceIndex:0,revision:1});
+    const cold=new VariableBlockSession(db,smallSource);
+    await assert.rejects(()=>cold.importNext(),/FOREIGN_WORKSPACE/);
+    await assert.rejects(()=>cold.rollback(),/FOREIGN_WORKSPACE/);
+    assert.equal((await getDoc(foreignSource)).data().revision,9);
+    assert.equal((await getDoc(foreignMaster)).data().owner,'other-import');
+    assert.equal((await getDoc(foreignClaim)).exists(),true);
+    await deleteDoc(foreignSource);
+    await deleteDoc(foreignMaster);
+    await deleteDoc(foreignClaim);
+    console.log('PASS DENY [E+SDK]: journal-less cold start refuses a foreign source and keyed rows');
     let session=new VariableBlockSession(db,smallSource);
     let step=await session.importNext();
     assert.equal(step.committed,1);
