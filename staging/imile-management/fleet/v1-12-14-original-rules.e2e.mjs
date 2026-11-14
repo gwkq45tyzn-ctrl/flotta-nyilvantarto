@@ -137,9 +137,38 @@ async function main(){
     assert.deepEqual(current.fuelCards,s.fuelCards);
     assert.deepEqual(current.contacts,s.contacts);
     assert.equal(current.migrationSourceSha256,originalSha);
-    assert.equal((await getDoc(doc(client,'flottaDrivers','DA0001'))).data().kapacitas,80);
-    assert.equal((await getDoc(doc(client,'flottaVehicles','ABC001'))).data().history.length,1);
-    console.log('PASS [E+SDK]: signed-in original full Rules reads all 26 rich keyed masters and original four-array archive');
+    // Verify ALL 26 keyed records and 26 privileged immutable identity
+    // claims, not just the first driver/car. Full rich nested history must
+    // survive Firestore serialization and signed-in readback exactly.
+    const checkedKeyed={drivers:{},vehicles:{}};
+    for(const [kind,collection,claimCollection] of [
+      ['drivers','flottaDrivers','flottaDriverClaims'],
+      ['vehicles','flottaVehicles','flottaVehicleClaims']
+    ]){
+      for(const entry of plan[kind]){
+        const master=await getDoc(doc(client,collection,entry.id));
+        const claim=await getDoc(doc(client,claimCollection,entry.id));
+        assert.equal(master.exists(),true,collection+'/'+entry.id+' missing');
+        assert.equal(claim.exists(),true,claimCollection+'/'+entry.id+' missing');
+        assert.deepEqual(master.data(),entry.data,'Full rich master mismatch '+entry.id);
+        assert.deepEqual(claim.data(),{
+          sourceIndex:entry.data.sourceIndex,revision:entry.data.revision
+        },'Immutable claim mismatch '+entry.id);
+        checkedKeyed[kind][entry.id]=master.data();
+      }
+    }
+    assert.equal(Object.keys(checkedKeyed.drivers).length,12);
+    assert.equal(Object.keys(checkedKeyed.vehicles).length,14);
+    // The verified backup can be reconstructed into a distinct in-memory
+    // Fleet snapshot with ALL four arrays, not only a success boolean.
+    const restored=structuredClone(backup.snapshot);
+    assert.notEqual(restored,backup.snapshot);
+    assert.deepEqual(restored,s);
+    assert.equal(sha256(restored),originalSha);
+    assert.deepEqual(restored.vehicles[0].history[0].details,s.vehicles[0].history[0].details);
+    assert.deepEqual(restored.fuelCards,s.fuelCards);
+    assert.deepEqual(restored.contacts,s.contacts);
+    console.log('PASS [E+SDK]: signed-in ORIGINAL Rules readback of all 26 full-rich keyed masters and 26 immutable claims, plus all 4 source arrays');
 
     await booking(client);
     assert.equal((await getDoc(doc(client,'bookings',date+'__ABC001'))).data().capacity,80);
