@@ -339,6 +339,26 @@ class VariableBlockSession{
         refs.push(...part);
         next++;
       }
+      // Restrict the destructive transaction to exactly the receipt-owned
+      // version of each master/claim. If a privileged process rewrites a
+      // target AFTER the out-of-transaction preflight, deleting that new
+      // content would silently discard someone else's data.
+      const expectedTargets=new Map();
+      for(let i=deletedThrough;i<next;i++){
+        const chunk=this.chunks[i];
+        for(const pair of chunk){
+          expectedTargets.set(pair.masterPath,pair.master);
+          expectedTargets.set(pair.claimPath,pair.claim);
+        }
+        expectedTargets.set(RECEIPTS+'/'+String(i).padStart(4,'0'),{
+          chunkIndex:i,
+          sourceSha256:this.prepared.sourceSha256,
+          pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
+          pairDigest:sha256(chunk.map(pair=>({
+            id:pair.id,master:pair.master,claim:pair.claim
+          })))
+        });
+      }
       const finished=next===total;
       const expectedDeletedThrough=deletedThrough;
       // A non-transactional writeBatch could reset a journal after an
@@ -372,6 +392,17 @@ class VariableBlockSession{
         for(const block of BLOCKS){
           if(sha256(archive[block])!==sha256(this.source[block]))
             throw Error('SOURCE_BLOCK_DRIFT');
+        }
+        // Firestore revalidates all these transaction reads at commit; a
+        // concurrent owner of a target row must cause retry then DENY, not
+        // deletion of unverified content. The journal CAS alone cannot see
+        // privileged modifications to keyed rows/receipts.
+        const currentTargets=await Promise.all(refs.map(ref=>tx.get(ref)));
+        for(let i=0;i<refs.length;i++){
+          const snapshot=currentTargets[i],expected=expectedTargets.get(refs[i].path);
+          if(!expected||!snapshot.exists()||
+             sha256(snapshot.data())!==sha256(expected))
+            throw Error('ROLLBACK_TARGET_CHANGED');
         }
         for(const ref of refs)tx.delete(ref);
         if(finished)tx.set(this.journalRef,this.journalBody(0));
