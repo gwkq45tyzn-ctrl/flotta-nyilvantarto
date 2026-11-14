@@ -18,8 +18,43 @@ const host='127.0.0.1',port=8128,projectId='demo-imile-qa';
 const origin='http://'+host+':'+port;
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
 const password='QaOnly'+randomBytes(16).toString('hex')+'#';
-const root=new URL('../../../',import.meta.url);
-const rulesRaw=await readFile(new URL('depokapacitas/firestore-v1-restricted.rules',root),'utf8');
+const originalRoot=new URL('../../../',import.meta.url);
+const artifactMode=process.env.IMILE_CORE_ARTIFACT==='1';
+// In artifact mode every browser-served HTML/JS/CSS file comes from the
+// ACTUAL byte-hashed, no-release output of build-v1-core.mjs, not repository
+// sources. Rules/test fixtures remain separate and NEVER packaged.
+const root=artifactMode
+  ?new URL('../../../candidate-imile-v1-core/',import.meta.url)
+  :originalRoot;
+let artifactGate=null;
+if(artifactMode){
+  artifactGate=JSON.parse(await readFile(new URL('V1_QA_ONLY_NO_RELEASE.json',root),'utf8'));
+  assert.equal(artifactGate.status,'BLOCKED');
+  assert.equal(artifactGate.ownerReleaseApproved,false);
+  assert.equal(artifactGate.migrationAuthorized,false);
+  const [original,bundled]=await Promise.all([
+    readFile(new URL('index.html',originalRoot)),
+    readFile(new URL('index.html',root))
+  ]);
+  assert.deepEqual(bundled,original,
+    'The authenticated browser must test byte-identical original Fleet HTML');
+  const digest=createHash('sha256').update(bundled).digest('hex');
+  assert.equal(artifactGate.originalFleetSha256,digest);
+  assert.equal(artifactGate.fileSha256?.['index.html'],digest);
+  for(const required of ['index.html','features/firestore-bridge.js',
+    'depokapacitas/index.html','depokapacitas/app.js',
+    'staging/imile-management/index.html']){
+    assert.ok(artifactGate.files.includes(required),
+      'Critical original Fleet+Depot source missing from emitted QA artifact: '+required);
+  }
+  for(const excluded of ['staging/imile-management/reports/index.html',
+    'staging/imile-management/qa/index.html',
+    'staging/imile-management/fleet/operations.html']){
+    assert.ok(!artifactGate.files.includes(excluded),
+      'Deferred route must not be included in core QA artifact: '+excluded);
+  }
+}
+const rulesRaw=await readFile(new URL('depokapacitas/firestore-v1-restricted.rules',originalRoot),'utf8');
 assert.ok(rulesRaw.includes('REPLACE_WITH_REAL_SHARED_UID'),
   'Real UID must never be wired into synthetic QA');
 
@@ -63,7 +98,7 @@ const sourceSha=createHash('sha256').update(JSON.stringify(fleetData)).digest('h
 fleetData.migrationSourceSha256=sourceSha;
 
 let env,server,browser;
-const errors=[],blockedCloud=[];
+const errors=[],blockedCloud=[],servedLocalAssets=new Set();
 try{
   const signup=await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key',{
     method:'POST',headers:{'Content-Type':'application/json'},
@@ -101,6 +136,10 @@ try{
       if(pathname!=='/index.html'&&pathname!=='/depokapacitas/index.html'&&!allowed.test(pathname)){
         res.writeHead(404);res.end('QA file not allowed');return;
       }
+      if(artifactMode&&!artifactGate.files.includes(pathname.slice(1))){
+        res.writeHead(404);res.end('Excluded from NO-GO QA artifact');return;
+      }
+      servedLocalAssets.add(pathname);
       let source;
       if(pathname==='/features/firestore-bridge.js')source=localBridge;
       else if(pathname==='/depokapacitas/app.js')source=localDepotApp;
@@ -435,6 +474,20 @@ try{
   await flottaPage.waitForFunction(()=>
     document.body.classList.contains('flotta-locked'),
     null,{timeout:15000});
+
+  if(artifactMode){
+    for(const required of ['/index.html','/features/firestore-bridge.js',
+      '/depokapacitas/index.html','/depokapacitas/app.js',
+      '/depokapacitas/style.css'])
+      assert.ok(servedLocalAssets.has(required),
+        'Actual browser never requested required emitted artifact: '+required);
+    assert.ok(![...servedLocalAssets].some(p=>
+      p.startsWith('/staging/imile-management/reports/')||
+      p.startsWith('/staging/imile-management/qa/')||
+      p.includes('/fleet/operations')),
+    'Deferred report or prototype route was served from the QA artifact');
+    console.log('PASS [B+E]: BYTE-HASHED V1 QA artifact served BOTH original Flotta + Depot UIs, with emulator Auth, post-seal live keyed writes, 80→70 booking, offline/revoked denial; NOT production');
+  }
 }finally{
   if(browser)await browser.close();
   if(server)await new Promise(resolve=>server.close(resolve));
