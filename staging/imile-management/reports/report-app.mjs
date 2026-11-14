@@ -6,8 +6,8 @@ import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile,isSharedFirebaseUser} from '../session-policy.mjs';
 import {inhub,ofd} from './report-core.mjs';
 import {readXlsxFirstSheet,writeReportXlsx} from './xlsx-lite.mjs';
-import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash} from './report-statistics.mjs';
-import {planInventorySnapshot,inventoryHash,inventoryHistory} from './inventory-statistics.mjs';
+import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,exactStoredPerformanceNoOp} from './report-statistics.mjs';
+import {planInventorySnapshot,inventoryHash,inventoryHistory,exactStoredInventoryNoOp} from './inventory-statistics.mjs';
 
 const $=id=>document.getElementById(id);
 const field=(id,value)=>{$(id).textContent=String(value)};
@@ -96,7 +96,9 @@ async function saveInventory(){
   const writes=await runTransaction(db,async tx=>{
    const ref=doc(db,'inventoryDays',inventory.key);
    const current=await tx.get(ref),prev=current.exists()?current.data():null;
-   if(prev&&prev.contentHash===contentHash)return 0;
+   // Old persisted contentHash alone is not evidence of unchanged data.
+   // An Admin SDK / legacy writer may leave the hash while changing buckets.
+   if(exactStoredInventoryNoOp(prev,inventory,contentHash))return 0;
    if(prev&&!replaceAllowed)throw Error('Erre a napra már van raktárpillanatkép. Javításhoz külön cserejóváhagyás kell.');
    const auditRef=doc(collection(db,'inventoryAudits'));
    const version=(prev?.version||0)+1;
@@ -180,7 +182,8 @@ $('save').onclick=async()=>{
    let changed=0;
    for(let i=0;i<prepared.length;i++){
     const p=prepared[i],previous=old[i].exists()?old[i].data():null;
-    if(previous&&previous.contentHash===p.contentHash&&previous.status===status)continue;
+    // Never let a forged old contentHash hide changed courier rows/counters.
+    if(exactStoredPerformanceNoOp(previous,p,p.contentHash,status))continue;
     if(previous&&!replaceAllowed)
      throw Error('Ehhez a naphoz/depóhoz már van riport. Javításhoz külön cserejóváhagyás szükséges: '+p.key);
     if(previous?.status==='final'&&status!=='final')
