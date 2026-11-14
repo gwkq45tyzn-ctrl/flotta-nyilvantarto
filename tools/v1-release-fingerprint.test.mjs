@@ -75,6 +75,9 @@ test('manifest covers original Fleet/Depot/Rules, migration and private source r
     'migration-four-block-planner','migration-readiness-preflight',
     'private-source-cli','reports-business-contract',
     'in-hub-ofd-report-workbench','in-hub-ofd-report-calculation',
+    'report-desktop-html','report-xlsx-read-write',
+    'report-ofd-statistics','report-inventory-statistics',
+    'shared-session-policy','depot-firebase-public-config',
     'reports-two-browser-acceptance','ofd-save-two-browser-acceptance'
   ])assert.equal(roles.has(role),true,role);
   assert.equal(SOURCE_FILES.length,new Set(SOURCE_FILES.map(x=>x.path)).size);
