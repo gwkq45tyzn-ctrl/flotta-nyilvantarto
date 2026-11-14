@@ -111,3 +111,63 @@ test('must have complete four-block source with original identity preserved',()=
     original:source,expectedOriginalSha256:'0'.repeat(64),changes:[]
   }),/INCOMPLETE_FOUR_BLOCK_SOURCE/);
 });
+
+
+test('a business-valid source with forged privileged index is not migration-ready',()=>{
+  const original=legacyWithMissingFields(),patch=patches(original);
+  original.drivers[0].sourceIndex=0;
+  const report=auditFleetSourceForImport(original);
+  assert.equal(report.sourcePreflightReady,false);
+  assert.equal(report.ready,false);
+  assert.ok(report.issues.some(i=>i.reason==='RAW_MIGRATION_PREFLIGHT_DENIED'));
+  assert.throws(()=>buildExplicitFleetRemediationCandidate({
+    original,expectedOriginalSha256:sha256(original),changes:patch
+  }),/CANDIDATE_NOT_IMPORT_READY/);
+});
+
+test('duplicated original rich record IDs cannot be hidden by otherwise valid DA codes',()=>{
+  const original=legacyWithMissingFields(),patch=patches(original);
+  original.drivers[1].id=original.drivers[0].id;
+  const report=auditFleetSourceForImport(original);
+  assert.equal(report.sourcePreflightReady,false);
+  assert.equal(report.ready,false);
+  assert.throws(()=>buildExplicitFleetRemediationCandidate({
+    original,expectedOriginalSha256:sha256(original),changes:patch
+  }),/CANDIDATE_NOT_IMPORT_READY/);
+});
+
+test('invalid legacy history shape cannot be silently migrated',()=>{
+  const original=legacyWithMissingFields(),patch=patches(original);
+  original.vehicles[2].history={unexpected:true};
+  const report=auditFleetSourceForImport(original);
+  assert.equal(report.sourcePreflightReady,false);
+  assert.equal(report.ready,false);
+  assert.throws(()=>buildExplicitFleetRemediationCandidate({
+    original,expectedOriginalSha256:sha256(original),changes:patch
+  }),/CANDIDATE_NOT_IMPORT_READY/);
+});
+
+test('clean source with 21 drivers is NOT release-ready under the 20-driver Rules proof window',()=>{
+  const original=syntheticFourBlockSource({
+    drivers:21,vehicles:14,fuelCards:14,contacts:5
+  });
+  const audit=auditFleetSourceForImport(original);
+  assert.equal(audit.sourcePreflightReady,true);
+  assert.equal(audit.businessReady,true);
+  assert.equal(audit.projectionReady,true);
+  assert.equal(audit.bookingWindowReady,false);
+  assert.equal(audit.ready,false);
+  assert.ok(audit.issues.some(i=>i.reason==='BOOKING_RULES_20_DRIVER_WINDOW_EXCEEDED'));
+  assert.equal(audit.authorizedForImport,false);
+});
+
+test('canonical preflight budget failure cannot be mislabeled as ready',()=>{
+  const original=legacyWithMissingFields(),patch=patches(original);
+  original.contacts[0].history[0].text='x'.repeat(850000);
+  const report=auditFleetSourceForImport(original);
+  assert.equal(report.sourcePreflightReady,false);
+  assert.equal(report.ready,false);
+  assert.throws(()=>buildExplicitFleetRemediationCandidate({
+    original,expectedOriginalSha256:sha256(original),changes:patch
+  }),/CANDIDATE_NOT_IMPORT_READY/);
+});

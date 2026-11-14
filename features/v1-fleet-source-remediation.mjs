@@ -6,7 +6,8 @@
  * or authenticates an owner. A separate trusted signed importer and the
  * #83 S1-S12 gate are still necessary before any production operation.
  */
-import {sha256} from '../tools/v1-migration-dryrun.mjs';
+import {sha256,preflight} from '../tools/v1-migration-dryrun.mjs';
+import {projectBlockPairs} from '../tools/v1-variable-block-migration.mjs';
 import {planSharedMigration} from './shared-master-adapter.mjs';
 
 const BLOCKS=['drivers','vehicles','fuelCards','contacts'];
@@ -33,15 +34,55 @@ export function auditFleetSourceForImport(source){
     if(missingCapacity(d))missingCapacityIndices.push(index);
     if(!validStatus(d))unknownStatusIndices.push(index);
   }
-  let issues=[];
+  const issues=[];
+  // Reuse the EXACT immutable-rich-source preflight employed by the
+  // privileged migration planner. The earlier business-only planner could
+  // mark duplicate internal IDs, forged sourceIndex or malformed history
+  // as ready even though projectBlockPairs would later fail closed.
+  const raw=preflight(source);
+  if(!raw.ok)issues.push({kind:'source',reason:'RAW_MIGRATION_PREFLIGHT_DENIED',
+    count:raw.errors.length});
+  let businessReady=false,projectionReady=false;
   try{
-    issues=planSharedMigration(source).issues;
-  }catch(e){issues=[{reason:'SOURCE_NOT_PROJECTABLE',message:String(e.message||e)}];}
+    const plan=planSharedMigration(source);
+    issues.push(...plan.issues);
+    businessReady=plan.ready&&
+      plan.writes.drivers.length===source.drivers.length&&
+      plan.writes.vehicles.length===source.vehicles.length&&
+      plan.writes.drivers.every(Boolean)&&
+      plan.writes.vehicles.every(Boolean);
+    if(!businessReady&&plan.issues.length===0)
+      issues.push({kind:'source',reason:'BUSINESS_PROJECTION_PARITY_MISMATCH'});
+  }catch(_){
+    issues.push({kind:'source',reason:'BUSINESS_PROJECTION_UNAVAILABLE'});
+  }
+  if(raw.ok&&businessReady){
+    try{
+      const projected=projectBlockPairs(source);
+      projectionReady=projected.pairs.length===
+        source.drivers.length+source.vehicles.length&&
+        projected.authorizedForImport===false&&
+        projected.firestoreEncodedSizeVerified===false;
+      if(!projectionReady)
+        issues.push({kind:'source',reason:'KEYED_PROJECTION_PARITY_MISMATCH'});
+    }catch(_){
+      issues.push({kind:'source',reason:'KEYED_PROJECTION_OR_SIZE_PREFLIGHT_DENIED'});
+    }
+  }
+  // Current original Rules can prove normalized unique DAs for <=20 rows.
+  // A genuine 21+ driver source must NOT be called release-ready merely
+  // because its migration planner can project all records.
+  const bookingWindowReady=source.drivers.length<=20;
+  if(!bookingWindowReady)
+    issues.push({kind:'source',reason:'BOOKING_RULES_20_DRIVER_WINDOW_EXCEEDED'});
   return {
     originalSha256,
     counts:Object.fromEntries(BLOCKS.map(k=>[k,source[k].length])),
     missingCapacityIndices,unknownStatusIndices,
-    issues,ready:issues.length===0,
+    sourcePreflightReady:raw.ok,businessReady,projectionReady,
+    bookingWindowReady,
+    issues,ready:issues.length===0&&raw.ok&&businessReady&&
+      projectionReady&&bookingWindowReady,
     authorizedForImport:false,ownerApprovalAuthenticated:false,
     sourceOfTruthVerified:false,productionIamVerified:false
   };
