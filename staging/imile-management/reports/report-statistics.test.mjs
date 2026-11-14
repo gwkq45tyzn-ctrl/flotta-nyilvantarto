@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {ofd} from './report-core.mjs';
-import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,docKey,exactStoredPerformanceNoOp} from './report-statistics.mjs';
+import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,docKey,exactStoredPerformanceNoOp,createStatsReadGeneration} from './report-statistics.mjs';
 const header=['OFD Date','DA','DA Code','Vendor','OFD','Delivered','Station'];
 const record=(code,ofdN,del,station='DS(AKE)',vendor='V',day='2026-10-30')=>
  [day,'Driver '+code,code,vendor,ofdN,del,station];
@@ -125,6 +125,24 @@ test('stored OFD same hash but counters/row count or key drift refuses no-op',()
    JSON.stringify(patch));
  assert.equal(exactStoredPerformanceNoOp({...old,rows:[null]},p,hash,'final'),false);
  assert.equal(exactStoredPerformanceNoOp(undefined,p,hash,'final'),false);
+});
+test('late server stats from a previous refresh never remain current',()=>{
+ const gate=createStatsReadGeneration();
+ const first=gate.begin();
+ assert.equal(first(),true);
+ const second=gate.begin();
+ assert.equal(first(),false,'late first request must be fenced');
+ assert.equal(second(),true);
+});
+test('auth sign-out and even same-UID re-login invalidate all old stats reads',()=>{
+ const gate=createStatsReadGeneration();
+ const beforeSignOut=gate.begin();
+ gate.invalidate();
+ assert.equal(beforeSignOut(),false);
+ const afterLogin=gate.begin();
+ assert.equal(afterLogin(),true);
+ gate.invalidate();
+ assert.equal(afterLogin(),false);
 });
 const example=planPerformanceSnapshots(report([record('D1',10,8)]))[0];
 const hash=await snapshotHash(example);assert.match(hash,/^[a-f0-9]{64}$/);assert.equal(hash,await snapshotHash(example));n++;
