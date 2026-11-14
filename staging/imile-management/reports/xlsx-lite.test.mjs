@@ -106,7 +106,9 @@ const zipSheet1='xl/worksheets/sheet1.xml',zipSheet2='xl/worksheets/sheet2.xml';
   /XLSX ZIP-összetevő eltérés/);
 }
 {
- const changed=Uint8Array.from(validZip),dir=zipCentralEntry(changed,zipSheet1);
+ // Corrupt workbook.xml CRC, which must be checked BEFORE its XML DOM parse
+ // (Node test runner intentionally has no browser DOMParser).
+ const changed=Uint8Array.from(validZip),dir=zipCentralEntry(changed,'xl/workbook.xml');
  new DataView(changed.buffer).setUint32(dir+16,0,true);
  await assert.rejects(()=>readXlsxFirstSheet(changed.buffer),
   /hibás CRC/);

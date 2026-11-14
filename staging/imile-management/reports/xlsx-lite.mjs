@@ -155,20 +155,24 @@ export async function readXlsxFirstSheet(data){
    throw Error('Túl nagy Excel-munkalap.');
   files.set(name,{compressed,uncompressed,method,local,crc});
  }
- async function file(name){
-  const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
+ // Structural ZIP checks must happen for ALL entries before any XML
+ // parsing. This also refuses a forged local header in an unused part and
+ // prevents a malformed input from ever reaching the browser DOM parser.
+ for(const [name,ent] of files){
   const q=ent.local;
   if(q+30>offset||i32(d,q)!==0x04034b50)
    throw Error('Érvénytelen ZIP-fejléc.');
   const localNameLen=i16(d,q+26),localExtra=i16(d,q+28);
   const start=q+30+localNameLen+localExtra;
-  // A central directory is untrusted too: bind its entry to the actual
-  // local ZIP name, method and compressed data boundary before decoding.
   const localName=td.decode(bytes.subarray(q+30,q+30+localNameLen));
   if(localName!==name||i16(d,q+8)!==ent.method||
      (i16(d,q+6)&0x0041)||start+ent.compressed>offset)
    throw Error('XLSX ZIP-összetevő eltérés.');
-  const compressed=bytes.slice(start,start+ent.compressed);let raw;
+  ent.start=start;
+ }
+ async function file(name){
+  const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
+  const compressed=bytes.slice(ent.start,ent.start+ent.compressed);let raw;
   if(ent.method===0)raw=compressed;
   else if(ent.method===8)raw=await inflateRawXlsxBounded(compressed,ent.uncompressed);
   else throw Error('Nem támogatott ZIP-tömörítés.');
@@ -181,12 +185,33 @@ export async function readXlsxFirstSheet(data){
   const xml=readXml(await file('xl/sharedStrings.xml'));
   for(const si of xml.getElementsByTagName('si'))strings.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
  }
- let sheetPath='xl/worksheets/sheet1.xml';
- if(!files.has(sheetPath)){
-  // Historical exports may have different worksheet names, so read first relationship.
-  const candidates=[...files.keys()].filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k));
-  if(!candidates.length)throw Error('Nincs munkalap az exportban.');sheetPath=candidates.sort()[0];
- }
+ // ZIP filenames are storage details, NOT the logical worksheet order.
+ // Bind the selected first Sheet to its workbook r:id and the workbook's
+ // relationship target, rejecting ambiguous, external or traversal targets.
+ // Otherwise an XLSX with a reordered sheet list could silently feed pivot
+ // output instead of the raw In-Hub/OFD export (or vice versa).
+ const workbook=readXml(await file('xl/workbook.xml'));
+ const workbookRels=readXml(await file('xl/_rels/workbook.xml.rels'));
+ const firstSheet=workbook.getElementsByTagName('sheet')[0];
+ const relId=firstSheet?.getAttribute('r:id')||
+  firstSheet?.getAttributeNS(
+   'http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+ if(!relId||!/^[A-Za-z0-9_-]{1,80}$/.test(relId))
+  throw Error('Hiányzó első Excel-munkalap kapcsolat.');
+ const matching=[...workbookRels.getElementsByTagName('Relationship')]
+  .filter(r=>r.getAttribute('Id')===relId);
+ if(matching.length!==1||
+    matching[0].getAttribute('Type')!==
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'||
+    matching[0].getAttribute('TargetMode')==='External')
+  throw Error('Nem hiteles első Excel-munkalap kapcsolat.');
+ const target=matching[0].getAttribute('Target')||'';
+ const sheetPath=target.startsWith('/xl/')?target.slice(1):
+  target.startsWith('worksheets/')?'xl/'+target:null;
+ if(!sheetPath||!/^xl\/worksheets\/sheet[1-9]\d*\.xml$/.test(sheetPath)||
+    !files.has(sheetPath))
+  throw Error('Érvénytelen vagy hiányzó első munkalap.');
+
  const xml=readXml(await file(sheetPath)),sheetData=xml.getElementsByTagName('sheetData')[0];
  if(!sheetData)throw Error('Nincs feldolgozható Excel-adat.');
  const result=[];
