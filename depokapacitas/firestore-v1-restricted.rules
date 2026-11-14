@@ -473,17 +473,18 @@ service cloud.firestore {
       allow read: if member();
       allow write: if false;
     }
-    // P0 #184: a privileged Admin SDK seed bypasses Rules and can store two
-    // driver rows that case-fold to one DA while sourceIndex stays 0.
-    // Rules have no loop and each allow is capped at 1000 evaluated
-    // expressions, so this proof covers at most 16 driver rows and does not
-    // read rows past the real array length. A longer driver list fails
-    // closed. A unique list still allows a booking. Plate separator-folding
-    // does not fit in the remaining budget; the selected plate is still
-    // checked, but a second folded plate is not. This is not an Admin SDK
-    // IAM boundary and not a signer anti-rollback.
+    // P0 #184/#271: a privileged Admin SDK seed bypasses Rules. It can store
+    // two driver rows that case-fold to one DA, or point a keyed DA at an
+    // index whose original row is a different driver. Rules have no loop and
+    // each allow is capped at 1000 evaluated expressions. Duplicate scanning
+    // covers 20 driver rows, which is above the current 12-courier fleet, and
+    // does not read rows past the real array length. A longer list fails
+    // closed. A unique list still allows a booking. The selected archive row
+    // must own the booked DA. A forged vehicle index is rejected because the
+    // booked plate must match that archive row. A second separator-folded
+    // plate still does not fit in the remaining expression budget.
     function driversNotDup(rows, id, index) {
-      return rows is list && rows.size() >= 1 && rows.size() <= 16
+      return rows is list && rows.size() >= 1 && rows.size() <= 20
         && (0 == index || !(rows[0].daCode is string && rows[0].daCode.upper() == id))
         && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.upper() == id))
         && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.upper() == id))
@@ -499,7 +500,11 @@ service cloud.firestore {
         && (rows.size() <= 12 || 12 == index || !(rows[12].daCode is string && rows[12].daCode.upper() == id))
         && (rows.size() <= 13 || 13 == index || !(rows[13].daCode is string && rows[13].daCode.upper() == id))
         && (rows.size() <= 14 || 14 == index || !(rows[14].daCode is string && rows[14].daCode.upper() == id))
-        && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.upper() == id));
+        && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.upper() == id))
+        && (rows.size() <= 16 || 16 == index || !(rows[16].daCode is string && rows[16].daCode.upper() == id))
+        && (rows.size() <= 17 || 17 == index || !(rows[17].daCode is string && rows[17].daCode.upper() == id))
+        && (rows.size() <= 18 || 18 == index || !(rows[18].daCode is string && rows[18].daCode.upper() == id))
+        && (rows.size() <= 19 || 19 == index || !(rows[19].daCode is string && rows[19].daCode.upper() == id));
     }
     function claimSourceIsUnique(bookingId, driverId) {
       let booking = getAfter(/databases/$(database)/documents/bookings/$(bookingId)).data;
