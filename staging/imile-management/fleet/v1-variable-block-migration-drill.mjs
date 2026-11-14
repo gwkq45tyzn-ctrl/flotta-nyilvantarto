@@ -56,7 +56,15 @@ class VariableBlockSession{
     const journalSnap=await getDoc(this.journalRef);
     const receiptSnap=await getDocs(collection(this.db,RECEIPTS));
     if(!journalSnap.exists()){
+      // Without an ownership journal, even one existing source/keyed record
+      // may belong to an unrelated or partially crashed import. Starting at
+      // chunk zero could silently OVERWRITE it. Never infer an empty workspace
+      // from the absence of receipt documents alone.
       if(!receiptSnap.empty)throw Error('FORGED_OR_STALE_CHECKPOINT');
+      const priorSource=await getDoc(this.sourceRef);
+      const existingKeyed=await this.loadKeyed();
+      if(priorSource.exists()||Object.values(existingKeyed).some(rows=>rows.size!==0))
+        throw Error('UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL');
       return {committed:0,journal:null,closed:false};
     }
     const journal=journalSnap.data();
@@ -283,7 +291,35 @@ async function main(){
     const client=env.authenticatedContext(uid,{email}).firestore();
     await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
+    // RED TEAM 1: absent journal must NOT overwrite an unrelated keyed row.
+    // Original implementation returned committed=0 and silently overwrote it.
+    const foreign=doc(db,'flottaDrivers','DA0001');
+    const foreignContents={daCode:'DA0001',sourceIndex:999,
+      history:[{kind:'UNRELATED_SOURCE_OWNER'}]};
+    await setDoc(foreign,foreignContents);
     let session=new VariableBlockSession(db,smallSource);
+    await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    assert.deepEqual((await getDoc(foreign)).data(),foreignContents);
+    assert.equal((await getDoc(session.journalRef)).exists(),false);
+    await deleteDoc(foreign);
+    // RED TEAM 2: previous source archive with no journal must not be
+    // rewritten from scratch even if its keys and receipts are empty.
+    const previousSource={...smallSource,revision:999,sealed:false,
+      migrationSourceSha256:'0'.repeat(64)};
+    await setDoc(session.sourceRef,previousSource);
+    await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    assert.deepEqual((await getDoc(session.sourceRef)).data(),previousSource);
+    await deleteDoc(session.sourceRef);
+    // RED TEAM 3: a detached, foreign claim must also block chunk zero.
+    const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN');
+    await setDoc(foreignClaim,{sourceIndex:0,revision:1});
+    await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    assert.equal((await getDoc(foreignClaim)).exists(),true);
+    await deleteDoc(foreignClaim);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).empty,true);
+    console.log('PASS DENY [E+SDK]: absent ownership journal refuses preexisting archive/master/claim without overwriting');
+
+    let step=await session.importNext();
     let step=await session.importNext();
     assert.equal(step.committed,1);
     session=new VariableBlockSession(db,smallSource);
