@@ -41,8 +41,13 @@ export function assessCanonicalBookingMaster({
   try{plan=planSharedMigration(fleet);}
   catch(_){return blocked('invalid_full_fleet_snapshot');}
   if(!plan.ready||plan.writes.drivers.some(w=>!w)||
-      plan.writes.vehicles.some(w=>!w))
+      plan.writes.vehicles.some(w=>!w)){
+    if(plan.issues?.some(i=>i.reason==='duplicate normalized plate'))
+      return blocked('duplicate_normalized_plate');
+    if(plan.issues?.some(i=>i.reason==='duplicate normalized DA code'))
+      return blocked('duplicate_normalized_driver');
     return blocked('invalid_canonical_master_projection');
+  }
 
   const driver=plan.writes.drivers.find(x=>x.id===driverId);
   const vehicle=plan.writes.vehicles.find(x=>x.id===vehicleId);

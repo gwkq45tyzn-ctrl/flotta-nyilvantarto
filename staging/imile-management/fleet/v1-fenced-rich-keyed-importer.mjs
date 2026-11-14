@@ -40,6 +40,50 @@ const pathsFor=entry=>({
   master:(entry.kind==='drivers'?'flottaDrivers/':'flottaVehicles/')+entry.id,
   claim:(entry.kind==='drivers'?'flottaDriverClaims/':'flottaVehicleClaims/')+entry.id
 });
+// Same plate fold as the migration preflight, owned by the importer so a
+// write set is refused even when that preflight result is not the caller.
+const normDA=s=>typeof s==='string'&&/^[A-Za-z0-9_-]{4,40}$/.test(s.trim())
+  ?s.trim().toUpperCase():'';
+const normPlate=s=>typeof s==='string'&&/^[A-Za-z0-9 -]{4,40}$/.test(s)
+  ?s.replace(/[ -]/g,'').toUpperCase():'';
+const bareId=value=>{
+  const key=String(value||'');
+  const slash=key.lastIndexOf('/');
+  return slash<0?key:key.slice(slash+1);
+};
+export function rejectFoldedSourceKeys(snapshot){
+  const plates=new Map();
+  const vehicles=Array.isArray(snapshot?.vehicles)?snapshot.vehicles:[];
+  for(let i=0;i<vehicles.length;i++){
+    const id=normPlate(vehicles[i]?.rendszam);
+    if(!id)continue;
+    if(plates.has(id))
+      return {ok:false,reason:'IMPORTER_FOLDED_PLATE_KEY',plate:id};
+    plates.set(id,i);
+  }
+  return {ok:true};
+}
+export function rejectNonCanonicalKeyedEntries(entries){
+  if(!Array.isArray(entries))return {ok:false,reason:'IMPORTER_NONCANONICAL_KEY'};
+  const seen=new Set();
+  for(const entry of entries){
+    const data=entry?.masterData||entry?.data;
+    if(entry?.kind==='vehicles'){
+      const id=normPlate(data?.rendszam);
+      if(!id||bareId(entry.id)!==id)
+        return {ok:false,reason:'IMPORTER_NONCANONICAL_KEY'};
+      if(seen.has('v:'+id))return {ok:false,reason:'IMPORTER_FOLDED_PLATE_KEY'};
+      seen.add('v:'+id);
+    }else if(entry?.kind==='drivers'){
+      const id=normDA(data?.daCode);
+      if(!id||bareId(entry.id)!==id)
+        return {ok:false,reason:'IMPORTER_NONCANONICAL_KEY'};
+      if(seen.has('d:'+id))return {ok:false,reason:'IMPORTER_FOLDED_DA_KEY'};
+      seen.add('d:'+id);
+    }else return {ok:false,reason:'IMPORTER_NONCANONICAL_KEY'};
+  }
+  return {ok:true};
+}
 export class LocalFencedRichKeyedImporter {
   #db;#lockRef;#pin;#revision;#owner;#epoch=null;
   #entries=null;#failed=false;#released=false;
@@ -80,6 +124,8 @@ export class LocalFencedRichKeyedImporter {
     let pre,plan;
     try{
       if(sha256(raw)!==this.#pin)return bad('RAW_SOURCE_SHA_DRIFT');
+      const folded=rejectFoldedSourceKeys(raw);
+      if(!folded.ok)return bad(folded.reason);
       pre=verifyPinnedImportSource({
         backup,trustedPinnedSha:this.#pin,expectedRevision:this.#revision
       });
@@ -101,6 +147,8 @@ export class LocalFencedRichKeyedImporter {
     })).sort((a,b)=>a.id.localeCompare(b.id));
     if(new Set(entries.map(e=>e.id)).size!==entries.length)
       return bad('DUPLICATE_PLAN_ID');
+    const canonical=rejectNonCanonicalKeyedEntries(entries);
+    if(!canonical.ok)return bad(canonical.reason);
     const ids=entries.map(e=>e.id);
     try{
       const result=await runTransaction(this.#db,async tx=>{

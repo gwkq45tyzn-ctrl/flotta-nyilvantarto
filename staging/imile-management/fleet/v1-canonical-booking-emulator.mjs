@@ -236,6 +236,23 @@ try{
   await env.withSecurityRulesDisabled(ctx=>
     setDoc(doc(ctx.firestore(),'flottaSharedState','current'),fleet()));
 
+  // Client gate used by Depot app.js. Two archive plates that fold to ABC123
+  // must not book, even though the single keyed claim still points at index 0.
+  // This does not close the Rules gap for a direct SDK write.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    const folded=fleet();
+    folded.vehicles.push({
+      id:'fleet-plate-alias',rendszam:'abc 123',status:'aktiv',history:[]
+    });
+    await setDoc(doc(db,'flottaSharedState','current'),folded);
+  });
+  await shouldReject('separator-folded plate duplicate blocks canonical client booking',
+    ()=>book('2099-01-12'),/BOOKING_BLOCKED: duplicate_normalized_plate/);
+  await absence('2099-01-12');
+  await env.withSecurityRulesDisabled(ctx=>
+    setDoc(doc(ctx.firestore(),'flottaSharedState','current'),fleet()));
+
   await env.withSecurityRulesDisabled(ctx=>
     updateDoc(doc(ctx.firestore(),'flottaMigrationApproval','current'),{status:'revoked'}));
   await shouldReject('revoked server migration policy hard-stops booking',
