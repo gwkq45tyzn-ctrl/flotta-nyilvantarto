@@ -10,7 +10,19 @@ test('Vidék település neve',()=>assert.equal(cityOrDistrict('Szigetszentmikl�
 test('Dunaharaszti nem numerikus kerület',()=>assert.equal(cityOrDistrict('Dunaharaszti','2330'),'Dunaharaszti'));
 test('Hibás Budapest irányítószám nem megtippelt',()=>assert.equal(cityOrDistrict('Budapest','9999'),null));
 test('In-Hub Pivot helyes összegek',()=>{const r=inhub([h,row('001','2026-10-30 10:00'),row('002','2026-10-30','Dunaharaszti','2330'),row('003','2026-10-29')]);assert.equal(r.total,3);assert.deepEqual(r.columnTotals,[1,2]);assert.equal(r.rows.length,2)});
-test('Duplikált waybill tiltva',()=>assert.equal(inhub([h,row('001','2026-10-30'),row('001','2026-10-30')]).status,'blocked'));
+test('Duplikált waybill tiltva',()=>{
+  const r=inhub([h,row('001','2026-10-30'),row('001','2026-10-30')]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.total,null);
+  assert.equal(r.issues.some(x=>x.reason==='duplicate_waybill'),true);
+});
+test('Excel dátumszéria naptári nap marad, nem UTC előző nap',()=>{
+  const serial=25569+Math.round((Date.parse('2026-11-14T00:00:00Z')-Date.UTC(1970,0,1))/86400000);
+  const r=inhub([h,row('WB100',serial+0.75,'Budapest','1097')]);
+  assert.equal(r.status,'ready');
+  assert.deepEqual(r.dates,['2026-11-14']);
+  assert.equal(r.total,1);
+});
 test('Hibás nap tiltva',()=>assert.equal(inhub([h,row('001','2026-02-30')]).status,'blocked'));
 test('Üres input nem hiteles nulla',()=>assert.equal(inhub([h]).total,null));
 test('Ismeretlen mezőt nem találgat',()=>assert.throws(()=>inhub([['Tracking ID']])));
