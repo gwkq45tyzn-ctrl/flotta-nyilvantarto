@@ -149,6 +149,18 @@ async function main(){
     assert.equal((await getDoc(doc(client,'bookings','2099-03-05__ABC123'))).data().driverId,'DA-0002');
     console.log('PASS ALLOW [E+SDK]: hyphenated DA remains bookable when it is the only normalized match');
 
+    // Another privileged-source P0: a forged keyed master may point to an
+    // existing index that belongs to a DIFFERENT DA in the original array.
+    // The selected ID appears nowhere in the source, so scanning only for
+    // duplicate DAs would wrongly authorize the booking.
+    const absent=fleet(2,1);
+    await seed(absent.drivers,absent.vehicles,{
+      driverSlots:[{id:'DA9999',daCode:'DA9999',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged forged keyed DA9999 is absent from original sourceIndex zero',
+      ()=>book('2099-03-13','DA9999','ABC001',0,0,80));
+
     const far=fleet(12,1);
     far.drivers[11]=driver('da0001',500);
     await seed(far.drivers,far.vehicles,{
@@ -157,6 +169,18 @@ async function main(){
     });
     await mustDeny('privileged poison at driver index 11 still denies index-zero booking',
       ()=>book('2099-03-06','DA0001','ABC001',0,0,80));
+
+    // Whitespace-normalized identity bypass: the privileged writer can seed
+    // a padded DA at a distant row. Uppercase-only equality ignores it even
+    // though normal source mapping trims both edges.
+    const padded=fleet(12,1);
+    padded.drivers[11]=driver('  da0001  ',500);
+    await seed(padded.drivers,padded.vehicles,{
+      driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged padded whitespace duplicate DA denies selected index-zero booking',
+      ()=>book('2099-03-14','DA0001','ABC001',0,0,80));
 
     const edge=fleet(16,1);
     edge.drivers[15]=driver('da0001',500);

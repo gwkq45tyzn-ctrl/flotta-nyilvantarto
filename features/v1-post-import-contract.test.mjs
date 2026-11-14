@@ -25,8 +25,17 @@ test('post-import: rules recompute eligibility from original rendszam', () => {
   assert.match(rules, /\.rendszam\.replace\('\[\[:space:\]-\]',''\)\.upper\(\)/);
 });
 
-test('post-import: capacity from Fleet kapacitas', () => {
-  assert.match(rules, /data\.capacity == driver\.kapacitas/);
+test('post-import: canonical keyed Fleet kapacitas is the only booking capacity', () => {
+  assert.match(rules, /function bookingCreateAllowed/);
+  assert.ok(rules.includes("driver.keys().hasAny(['kapacitas'])"));
+  assert.ok(rules.includes('data.capacity == driver.kapacitas'));
+  assert.ok(rules.includes('nonNegative(data.capacity, 10000)'));
+});
+
+test('post-import: selected source index binds the real DA and rejects padded identity aliases', () => {
+  assert.ok(rules.includes('fleet.drivers[booking.driverIndex].daCode.upper() == driverId'));
+  assert.ok(rules.includes("daCode.replace('[[:space:]]','').upper() == id"));
+  assert.match(rules, /function driversNotDup/);
 });
 
 test('post-import: mirror writes closed after import', () => {
