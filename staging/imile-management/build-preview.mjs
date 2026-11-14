@@ -89,7 +89,7 @@ try {
   if(coreOnly){
     const start=safeMenu.indexOf('        <article class="card module reports">');
     const end=start<0?-1:safeMenu.indexOf('</article>',start);
-    if(start<0||end<0||safeMenu.indexOf('class="card module reports"',start+1)>=0)
+    if(start<0||end<0||safeMenu.indexOf('class="card module reports"',end+'</article>'.length)>=0)
       throw Error('Core-only report link exclusion requires explicit review');
     safeMenu=safeMenu.slice(0,start)+safeMenu.slice(end+'</article>'.length);
     safeMenu=safeMenu.replace(
