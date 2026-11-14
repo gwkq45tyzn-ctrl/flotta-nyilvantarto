@@ -156,6 +156,39 @@ class VariableBlockSession{
     if(sourceData.sealed!==false||sourceData.revision!==1||
        sourceData.migrationSourceSha256!==this.prepared.sourceSha256)
       throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+    // A privileged writer can change source arrays without changing the
+    // stored SHA field. The interrupted rollback must not silently finish
+    // against a different rich source snapshot.
+    for(const block of BLOCKS){
+      if(sha256(sourceData[block])!==sha256(this.source[block]))
+        throw Error('SOURCE_BLOCK_DRIFT');
+    }
+    // Resume is safe only if the *entire* keyed/receipt workspace matches
+    // exactly the not-yet-deleted chunk suffix. A new foreign master, claim
+    // or receipt added during the rollback pause must block journal reset.
+    const remaining={
+      flottaDrivers:new Set(),flottaVehicles:new Set(),
+      flottaDriverClaims:new Set(),flottaVehicleClaims:new Set()
+    };
+    const remainingReceipts=new Set();
+    for(let i=fence.deletedThrough;i<fence.total;i++){
+      remainingReceipts.add(String(i).padStart(4,'0'));
+      for(const pair of this.chunks[i]){
+        remaining[pair.masterPath.split('/')[0]].add(pair.id);
+        remaining[pair.claimPath.split('/')[0]].add(pair.id);
+      }
+    }
+    const liveKeyed=await this.loadKeyed();
+    for(const [name,expected] of Object.entries(remaining)){
+      const actual=liveKeyed[name];
+      if(actual.size!==expected.size ||
+         [...actual.keys()].some(id=>!expected.has(id)))
+        throw Error(name.includes('Claims')?'ORPHAN_CLAIM':'ORPHAN_MASTER');
+    }
+    const liveReceipts=await getDocs(collection(this.db,RECEIPTS));
+    if(liveReceipts.size!==remainingReceipts.size ||
+       liveReceipts.docs.some(row=>!remainingReceipts.has(row.id)))
+      throw Error('FORGED_OR_STALE_CHECKPOINT');
     for(let i=0;i<fence.deletedThrough;i++){
       for(const ref of this.chunkDeleteRefs(i)){
         if((await getDoc(ref)).exists())throw Error('ROLLBACK_CURSOR_AHEAD_OF_DELETES');
@@ -479,6 +512,11 @@ async function main(){
     await setDoc(foreign,{owner:'other-import',sourceIndex:0});
     const parked=new VariableBlockSession(db,largeSource);
     await assert.rejects(()=>parked.importNext(),/ROLLBACK_FENCE_HELD/);
+    // Old resume validated only the expected suffix, ignored foreign rows,
+    // then reset the journal to 0 while the injected master remained.
+    await assert.rejects(()=>parked.rollback(),/ORPHAN_MASTER/);
+    assert.equal((await getDoc(foreign)).data().owner,'other-import');
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
     const stranger=new VariableBlockSession(db,syntheticFourBlockSource({
       drivers:3,vehicles:2,fuelCards:1,contacts:1
     }));
@@ -497,13 +535,39 @@ async function main(){
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
     await updateDoc(parked.journalRef,{'rollbackFence.total':actualTotal});
     console.log('PASS DENY [E+SDK]: forged short rollback fence cannot abandon later receipted chunks');
+    // An unrelated claim arriving during a rollback pause must fail closed
+    // without consuming the remaining owned chunks.
+    await deleteDoc(foreign);
+    const foreignResumeClaim=doc(db,'flottaDriverClaims','FOREIGN-CLAIM');
+    await setDoc(foreignResumeClaim,{sourceIndex:0,revision:1});
+    await assert.rejects(()=>parked.rollback(),/ORPHAN_CLAIM/);
+    assert.equal((await getDoc(foreignResumeClaim)).exists(),true);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    await deleteDoc(foreignResumeClaim);
+    // A foreign receipt arriving between deletion batches is just as unsafe
+    // as a foreign keyed document. It must not be silently ignored on resume.
+    const foreignReceipt=doc(db,RECEIPTS,'FOREIGN-RECEIPT');
+    await setDoc(foreignReceipt,{sourceSha256:largePrepared.sourceSha256,
+      chunkIndex:999,pairIds:[],pairDigest:'0'.repeat(64)});
+    await assert.rejects(()=>parked.rollback(),/FORGED_OR_STALE_CHECKPOINT/);
+    assert.equal((await getDoc(foreignReceipt)).exists(),true);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    await deleteDoc(foreignReceipt);
+    // The hash stored in the source is not itself an authority: compare the
+    // actual complete four rich arrays before resuming destructive work.
+    const sourceSnapBefore=await getDoc(parked.sourceRef);
+    const originalArchive=sourceSnapBefore.data();
+    await updateDoc(parked.sourceRef,{contacts:[{id:'UNTRUSTED'}]});
+    await assert.rejects(()=>parked.rollback(),/SOURCE_BLOCK_DRIFT/);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    await updateDoc(parked.sourceRef,{contacts:originalArchive.contacts});
+    console.log('PASS DENY [E+SDK]: resumed rollback rejects foreign master/claim and rich source drift without deleting remaining chunk');
     const resumed=new VariableBlockSession(db,largeSource);
     const rest=await resumed.rollback();
     assert.ok(rest.rollbackBatches>=1);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),false);
-    assert.equal((await getDoc(foreign)).exists(),true);
-    await deleteDoc(foreign);
-    console.log('PASS [E+SDK]: rollback crash resumes from the fence; importNext and a foreign source are denied; FOREIGN-KEEP remains');
+    assert.equal((await getDoc(foreign)).exists(),false);
+    console.log('PASS [E+SDK]: rollback crash resumes only after foreign records and source drift are cleared; all owned chunks deleted');
     large=new VariableBlockSession(db,largeSource);
     await large.importAll();
     await large.close();
