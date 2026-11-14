@@ -162,6 +162,28 @@ try{
   await env.withSecurityRulesDisabled(ctx=>
     updateDoc(doc(ctx.firestore(),'drivers','DA0001'),{name:'Synthetic Internal Driver'}));
 
+  // This vehicle was in service and the driver inactive at import time.
+  // Both are eligible now. The historical status must never veto the live one.
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const archive=fleet();
+    archive.vehicles[0].status='szerviz';
+    archive.drivers[0].status='inaktiv';
+    await setDoc(doc(ctx.firestore(),'flottaSharedState/current'),archive);
+  });
+  assert.equal((await book('2099-02-10')).committed,true);
+  assert.equal((await getDoc(doc(shared,'bookings','2099-02-10__ABC123'))).data().capacity,50);
+  console.log('PASS [E]: current active keyed pair can book despite inactive/service archived statuses');
+  passed++;
+  await env.withSecurityRulesDisabled(async ctx=>{
+    const db=ctx.firestore();
+    await setDoc(doc(db,'flottaSharedState/current'),fleet());
+    await updateDoc(doc(db,'flottaVehicles/ABC123'),{status:'szerviz'});
+  });
+  await shouldReject('keyed service status blocks an archived active car',
+    ()=>book('2099-02-11'),/ineligible_fleet_master/);
+  assert.equal((await getDoc(doc(shared,'driverClaims','2099-02-11__DA0001'))).exists(),false);
+  await env.withSecurityRulesDisabled(ctx=>updateDoc(doc(ctx.firestore(),'flottaVehicles/ABC123'),{status:'aktiv'}));
+
   // A real SDK transaction must also succeed with *no* Depot capacity or
   // driver mirror; original Fleet's kapacitas is the fallback source.
   await env.withSecurityRulesDisabled(async ctx=>{

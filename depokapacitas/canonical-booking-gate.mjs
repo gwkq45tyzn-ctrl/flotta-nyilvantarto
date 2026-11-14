@@ -11,18 +11,10 @@
 import {planSharedMigration} from '../features/shared-master-adapter.mjs';
 
 const SHA=/^[a-f0-9]{64}$/;
-const strictEquals=(received,expected)=>{
-  if(!received||!expected||typeof received!=='object'||Array.isArray(received))
-    return false;
-  const keys=Object.keys(expected);
-  return Object.keys(received).length===keys.length &&
-    keys.every(k=>Object.prototype.hasOwnProperty.call(received,k)&&
-      Object.is(received[k],expected[k]));
-};
 const blocked=(code)=>({ready:false,code});
 
 export function assessCanonicalBookingMaster({
-  fleet,approval,uid,driverId,vehicleId,depotDriver,depotVehicle,
+  fleet,approval,uid,driverId,vehicleId,keyedDriver,keyedVehicle,
   expectedFleetRevision
 }={}){
   if(!uid||!SHA.test(approval?.sourceSha256||'')||
@@ -52,10 +44,16 @@ export function assessCanonicalBookingMaster({
   const driver=plan.writes.drivers.find(x=>x.id===driverId);
   const vehicle=plan.writes.vehicles.find(x=>x.id===vehicleId);
   if(!driver||!vehicle)return blocked('booking_master_not_in_original_fleet');
-  // S7: Flotta is the single canonical source. Mirrors are not required.
-  // Eligibility is determined solely by the Flotta projection.
-  if(driver.data.active!==true||vehicle.data.status!=='Elérhető')
+  // The sealed archive proves identity. The transaction reads current status
+  // from the two rich master documents even if the archive says "in service".
+  if(fleet.sealed===true){
+    if(!keyedDriver||!keyedVehicle)return blocked('missing_keyed_master');
+    const active=status=>status==='aktiv'||status==='aktív';
+    if(!active(keyedDriver.status)||!active(keyedVehicle.status))
+      return blocked('ineligible_fleet_master');
+  }else if(driver.data.active!==true||vehicle.data.status!=='Elérhető'){
     return blocked('ineligible_fleet_master');
+  }
 
   return {
     ready:true,code:'server_read_parity_ready',

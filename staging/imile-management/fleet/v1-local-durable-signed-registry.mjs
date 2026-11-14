@@ -78,7 +78,10 @@ export class LocalSignedRegistryHighwater {
   #validate(signed){
     if(!exact(signed,['algorithm','payload','signatureBase64'])||
        signed.algorithm!=='Ed25519')return denied('INVALID_SIGNED_REGISTRY_ENVELOPE');
-    const p=signed.payload;
+    // Firestore may retry the transaction after the caller regains control.
+    // Verify and use one private copy of the signed bytes on every attempt.
+    let p;
+    try{p=structuredClone(signed.payload);}catch{return denied('INVALID_SIGNED_REGISTRY_ENVELOPE');}
     if(!exact(p,KEYS)||p.schema!=='imile-v1-offline-owner-signer-registry-v1'||
        p.purpose!=='synthetic-root-signed-fleet-manifest-registry'||
        p.registryAudience!==this.#audience||p.sourceProjectId!==this.#project||
@@ -118,6 +121,9 @@ export class LocalSignedRegistryHighwater {
       const p=proof.payload,docRef=doc(this.#db,PATH);
       const result=await runTransaction(this.#db,async tx=>{
         const observed=await tx.get(docRef);
+        const now=Date.now();
+        if(now<p.notBeforeMs||now>=p.expiresAtMs)
+          throw Error('SIGNED_REGISTRY_EXPIRED_OR_NOT_YET_VALID');
         const prev=observed.exists()?observed.data():null;
         if(prev!==null){
           if(!exact(prev,['sequence','registryDigest','rootFingerprint',
