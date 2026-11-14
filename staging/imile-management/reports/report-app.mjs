@@ -6,7 +6,7 @@ import {firebaseConfig} from '../../../depokapacitas/firebase-config.js';
 import {allowedProfile,isSharedFirebaseUser} from '../session-policy.mjs';
 import {inhub,ofd} from './report-core.mjs';
 import {readXlsxFirstSheet,writeReportXlsx} from './xlsx-lite.mjs';
-import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,exactStoredPerformanceNoOp} from './report-statistics.mjs';
+import {planPerformanceSnapshots,buildPerformanceStatistics,snapshotHash,exactStoredPerformanceNoOp,createStatsReadGeneration} from './report-statistics.mjs';
 import {planInventorySnapshot,inventoryHash,inventoryHistory,exactStoredInventoryNoOp} from './inventory-statistics.mjs';
 
 const $=id=>document.getElementById(id);
@@ -20,6 +20,7 @@ const entry=(values)=>{
 };
 let authorized=false,canSave=false,revision=0,excelBuffer=null,excelName=null;
 let currentReport=null,currentSourceMatrix=null,sourceName=null,db=null,user=null,stats=null;
+const statsReadGeneration=createStatsReadGeneration();
 $('inventoryDay').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function clearReport(){
  revision++;excelBuffer=null;excelName=null;currentReport=null;currentSourceMatrix=null;sourceName=null;
@@ -120,12 +121,18 @@ async function saveInventory(){
  finally{if(rev===revision&&authorized&&currentReport?.kind==='inhub')$('save').disabled=false;}
 }
 async function loadStats(){
- if(!authorized||!db)return;
+ const validGeneration=statsReadGeneration.begin();
+ const requestedUid=user?.uid;
+ // Both the request generation and authenticated user identity are pinned.
+ // A completed old query must never repaint a newer signed-in session.
+ const stillCurrent=()=>validGeneration()&&authorized&&
+  !!requestedUid&&user?.uid===requestedUid;
+ if(!db||!stillCurrent())return;
  field('statStatus','Szerveri statisztikák betöltése…');
  $('courierStats').replaceChildren();$('vendorStats').replaceChildren();stats=null;
  try{
   const all=await getDocsFromServer(query(collection(db,'performanceDays'),orderBy('date','desc'),limit(250)));
-  if(!authorized)return;
+  if(!stillCurrent())return;
   const snapshot=buildPerformanceStatistics(all.docs.map(d=>d.data()));stats=snapshot;
   const warning=snapshot.partial?' · FIGYELEM: hibás vagy duplikált forrás!':'';
   field('statStatus',snapshot.reportDays+' nap/depó riport · '+snapshot.totalOFD+
@@ -136,10 +143,11 @@ async function loadStats(){
   for(const r of snapshot.vendors.slice(0,100))$('vendorStats').append(
    entry([r.date,r.station,r.vendor,r.couriers,r.ofd,r.delivered,pct(r.rate),r.spr.toFixed(1)]));
   if(!snapshot.couriers.length)$('courierStats').append(entry(['Még nincs mentett napi OFD-riport.']));
- }catch(error){field('statStatus','Az OFD-statisztikák nem ellenőrizhetők: '+error.message);}
+ }catch(error){if(stillCurrent())field('statStatus','Az OFD-statisztikák nem ellenőrizhetők: '+error.message);}
+ if(!stillCurrent())return;
  try{
   const all=await getDocsFromServer(query(collection(db,'inventoryDays'),orderBy('date','desc'),limit(180)));
-  if(!authorized)return;
+  if(!stillCurrent())return;
   const history=inventoryHistory(all.docs.map(d=>d.data()));
   $('inventoryStats').replaceChildren();
   for(const row of history.rows.slice(0,100))
@@ -147,7 +155,7 @@ async function loadStats(){
   field('inventoryStatStatus',history.rows.length+' raktárpillanatkép'+
    (history.errors.length?' · FIGYELEM: hibás forrásrekord!':'')+
    ' · legfeljebb 180 szerveri napi állapot.');
- }catch(error){field('inventoryStatStatus','Raktári statisztika nem ellenőrizhető: '+error.message);}
+ }catch(error){if(stillCurrent())field('inventoryStatStatus','Raktári statisztika nem ellenőrizhető: '+error.message);}
 }
 $('refreshStats').onclick=loadStats;
 $('inventoryDay').onchange=()=>{
@@ -218,8 +226,15 @@ if(firebaseConfig.projectId!=='imile-management-staging')field('access','Nem sta
 else{
  const app=initializeApp(firebaseConfig),auth=getAuth(app);db=getFirestore(app);
  onAuthStateChanged(auth,async current=>{
+  // A sign-out followed by sign-in of the same UID must also invalidate
+  // any old in-flight Firestore read before the controls become visible.
+  statsReadGeneration.invalidate();
   const authRev=++revision;authorized=false;canSave=false;user=null;clearReport();
   $('controls').hidden=true;$('file').value='';$('save').disabled=true;stats=null;
+  $('courierStats').replaceChildren();$('vendorStats').replaceChildren();
+  $('inventoryStats').replaceChildren();
+  field('statStatus','Nincs ellenőrzött szerveri statisztika.');
+  field('inventoryStatStatus','Nincs ellenőrzött raktárstatisztika.');
   if(!current){window.location.replace('../index.html');return;}
   if(!isSharedFirebaseUser(current)){field('access','Csak a közös iMile-fiók jogosult.');return;}
   try{
