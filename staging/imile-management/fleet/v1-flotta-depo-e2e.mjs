@@ -489,11 +489,17 @@ try{
       '/depokapacitas/style.css'])
       assert.ok(servedLocalAssets.has(required),
         'Actual browser never requested required emitted artifact: '+required);
+    // Pure Fleet warning schema is REQUIRED by Depot's central-alerts.mjs.
+    // Reject every prototype UI/module route, but keep that one safe helper.
+    const prototypePrefix='/staging/imile-management/fleet/';
     assert.ok(![...servedLocalAssets].some(p=>
       p.startsWith('/staging/imile-management/reports/')||
       p.startsWith('/staging/imile-management/qa/')||
-      p.includes('/fleet/operations')),
-    'Deferred report or prototype route was served from the QA artifact');
+      (p.startsWith(prototypePrefix)&&
+       p!==prototypePrefix+'operations-data.mjs')),
+    'Deferred report or prototype UI route was served from the QA artifact');
+    assert.ok(servedLocalAssets.has(prototypePrefix+'operations-data.mjs'),
+      'Required pure Fleet alert schema not served to the actual Depot browser');
     console.log('PASS [B+E]: BYTE-HASHED V1 QA artifact served BOTH original Flotta + Depot UIs, with emulator Auth, post-seal live keyed writes, 80→70 booking, offline/revoked denial; NOT production');
   }
 }finally{
