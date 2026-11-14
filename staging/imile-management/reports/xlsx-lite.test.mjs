@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {deflateRawSync} from 'node:zlib';
 import {inhub,ofd} from './report-core.mjs';
-import {writeReportXlsx} from './xlsx-lite.mjs';
+import {writeReportXlsx,inflateRawXlsxBounded} from './xlsx-lite.mjs';
 const h=['Waybill Number','LM Receive Date','Consignee city','Consignee zipcode'];
 const inv=[h,['001','2026-10-30','Budapest','1117'],['002','2026-10-31','Dunaharaszti','2330']];
 const raw=['OFD Date','DA','DA Code','Vendor','OFD','Delivered','Station'];
@@ -40,3 +41,30 @@ const original=parseEntries(writeReportXlsx(inv,invReport)).get('xl/worksheets/s
 assert.match(original,/Dunaharaszti/);assert.match(original,/11/);
 assert.throws(()=>writeReportXlsx(inv,{status:'blocked',kind:'inhub'}));
 console.log('PASS: standalone XLSX ZIP, workbook, colors, merged vendor cells, city labels and source preservation');
+
+
+// The reader must reject a malicious ZIP entry BEFORE accumulating its
+// expanded 32MiB payload. The compressed input is small (<64KiB).
+const sample=new TextEncoder().encode('Budapest – In-Hub 📦');
+const packed=deflateRawSync(sample);
+const unpacked=await inflateRawXlsxBounded(new Uint8Array(packed),sample.byteLength);
+assert.deepEqual(unpacked,sample);
+await assert.rejects(
+ ()=>inflateRawXlsxBounded(new Uint8Array(packed),3),
+ /XLSX_DEFLATE_SIZE_DENIED/
+);
+await assert.rejects(
+ ()=>inflateRawXlsxBounded(new Uint8Array(packed),sample.byteLength+1),
+ /XLSX_DEFLATE_SIZE_MISMATCH/
+);
+const bomb=deflateRawSync(Buffer.alloc(32*1024*1024,65));
+assert.ok(bomb.byteLength<100000);
+await assert.rejects(
+ ()=>inflateRawXlsxBounded(new Uint8Array(bomb),25*1024*1024),
+ /XLSX_DEFLATE_SIZE_DENIED/
+);
+await assert.rejects(
+ ()=>inflateRawXlsxBounded(new Uint8Array(bomb),32*1024*1024),
+ /XLSX_DEFLATE_SIZE_DENIED/
+);
+console.log('PASS: bounded streaming XLSX inflate refuses zip bomb, forged size and size mismatch');

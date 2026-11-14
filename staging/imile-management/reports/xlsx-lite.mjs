@@ -92,6 +92,43 @@ export function writeReportXlsx(sourceRows,report){
  const wbRel=`${xmlHeader}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
  return pack([['[Content_Types].xml',contentTypes],['_rels/.rels',rootRel],['xl/workbook.xml',wbXml],['xl/_rels/workbook.xml.rels',wbRel],['xl/styles.xml',stylesXml()],['xl/worksheets/sheet1.xml',sheetXml(raw,{widths:sourceRows[0].map((x,i)=>i===0?22:20),freeze:1})],['xl/worksheets/sheet2.xml',sheetXml(out,{widths,merges,freeze:report.kind==='inhub'?4:2,autoFilter:report.kind==='ofd'?`A2:J${report.rows.length+2}`:null})]]);
 }
+// A ZIP header's uncompressed size is untrusted. Stream DEFLATE output
+// rather than buffering the ENTIRE expanded payload before checking it.
+// An 8 MB compressed XLSX can otherwise exhaust browser memory.
+const MAX_XLSX_ENTRY_BYTES=25*1024*1024;
+export async function inflateRawXlsxBounded(compressed,expectedBytes){
+ if(!(compressed instanceof Uint8Array)||
+    !Number.isSafeInteger(expectedBytes)||expectedBytes<0||
+    expectedBytes>MAX_XLSX_ENTRY_BYTES)
+  throw Error('XLSX_DEFLATE_SIZE_DENIED');
+ let reader;
+ try{
+  reader=new Blob([compressed]).stream()
+   .pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+ }catch{throw Error('XLSX_DEFLATE_UNSUPPORTED');}
+ const parts=[];let total=0;
+ try{
+  while(true){
+   const {value,done}=await reader.read();
+   if(done)break;
+   total+=value.byteLength;
+   // The declared expected size cannot be trusted as an allocation hint.
+   // Stop as soon as a malicious stream expands beyond that claim.
+   if(total>expectedBytes||total>MAX_XLSX_ENTRY_BYTES)
+    throw Error('XLSX_DEFLATE_SIZE_DENIED');
+   parts.push(value);
+  }
+ }catch(error){
+  try{await reader.cancel();}catch{}
+  if(error?.message==='XLSX_DEFLATE_SIZE_DENIED')throw error;
+  throw Error('XLSX_DEFLATE_CORRUPT');
+ }finally{reader.releaseLock();}
+ if(total!==expectedBytes)throw Error('XLSX_DEFLATE_SIZE_MISMATCH');
+ const raw=new Uint8Array(total);let offset=0;
+ for(const part of parts){raw.set(part,offset);offset+=part.byteLength;}
+ return raw;
+}
+
 export async function readXlsxFirstSheet(data){
  if(!(data instanceof ArrayBuffer)||data.byteLength>8*1024*1024)throw Error('Legfeljebb 8 MB méretű .xlsx fájl támogatott.');
  const d=new DataView(data),bytes=new Uint8Array(data);let end=-1;
@@ -112,7 +149,7 @@ export async function readXlsxFirstSheet(data){
   const start=q+30+i16(d,q+26)+i16(d,q+28);
   const compressed=bytes.slice(start,start+ent.compressed);let raw;
   if(ent.method===0)raw=compressed;
-  else if(ent.method===8){raw=new Uint8Array(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());}
+  else if(ent.method===8)raw=await inflateRawXlsxBounded(compressed,ent.uncompressed);
   else throw Error('Nem támogatott ZIP-tömörítés.');
   if(raw.length!==ent.uncompressed)throw Error('Sérült XLSX-tartalom.');return td.decode(raw);
  }
