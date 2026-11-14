@@ -52,7 +52,8 @@ test('NARROWED first-release preview excludes all OFD/In-Hub/Excel assets and li
    'features/fleet-depo-canonical-transition.mjs'
  ]) assert.equal(existsSync(join(output,dependency)),true,
    'Required Depot module missing: '+dependency);
- assert.equal(existsSync(join(output,'staging/imile-management/fleet/index.html')),true);
+ assert.equal(existsSync(join(output,'staging/imile-management/fleet/index.html')),false,
+   'Fleet prototype landing page must not be packaged as the original Fleet');
  assert.equal(existsSync(join(output,'depokapacitas/index.html')),true);
  assert.equal(existsSync(join(output,'staging/imile-management/cutover.html')),true);
  assert.equal(existsSync(join(output,'index.html')),true);
