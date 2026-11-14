@@ -149,6 +149,12 @@ try{
   // not an authorization substitute: actual Firestore Rules must deny PWA.
   const depot=join(target,'depokapacitas/index.html');
   let depotHtml=readFileSync(depot,'utf8');
+  // Do not link a non-packaged install manual or leak setup instructions.
+  const installHelp='Részletes lépések: <a href="./TELEPITES.md">Telepítési útmutató</a>.';
+  if(!depotHtml.includes(installHelp))
+    throw Error('Depot setup link changed: re-review for core scope');
+  depotHtml=depotHtml.replace(installHelp,
+    'Az éles beállítás kizárólag külön rendszergazdai jóváhagyással történhet.');
   for(const view of ['results','attendance']){
     const re=new RegExp('<button class="nav-item" data-view="'+view+'">[^<]*(?:<span>[^<]+<\\/span>)?<\\/button>');
     depotHtml=depotHtml.replace(re,'<!-- '+view+' deferred to V1.1 -->');
