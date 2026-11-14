@@ -70,9 +70,12 @@ test('manifest covers original Fleet/Depot/Rules, migration and private source r
   const roles=new Set(SOURCE_FILES.map(x=>x.role));
   for(const role of [
     'original-fleet-html','original-fleet-firestore-bridge',
-    'depot-desktop-html','restricted-firestore-rules',
+    'depot-desktop-html','depot-operations-app',
+    'restricted-firestore-rules',
     'migration-four-block-planner','migration-readiness-preflight',
-    'private-source-cli','reports-business-contract'
+    'private-source-cli','reports-business-contract',
+    'in-hub-ofd-report-workbench','in-hub-ofd-report-calculation',
+    'reports-two-browser-acceptance','ofd-save-two-browser-acceptance'
   ])assert.equal(roles.has(role),true,role);
   assert.equal(SOURCE_FILES.length,new Set(SOURCE_FILES.map(x=>x.path)).size);
 });
