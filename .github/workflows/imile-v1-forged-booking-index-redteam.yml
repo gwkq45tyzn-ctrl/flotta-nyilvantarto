@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'staging/imile-management/fleet/v1-forged-booking-index-probes.mjs'
+      - 'staging/imile-management/fleet/v1-poisoned-duplicate-window.mjs'
       - 'depokapacitas/firestore-v1-restricted.rules'
       - '.github/workflows/imile-v1-forged-booking-index-redteam.yml'
 permissions:
@@ -23,12 +24,14 @@ jobs:
       - name: Install lockfile-pinned original Firebase SDK test dependencies
         run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
       - name: Validate actual hostile SDK source syntax
-        run: node --check staging/imile-management/fleet/v1-forged-booking-index-probes.mjs
-      - name: REAL restricted Rules — positive legal atomic booking then poisoned index / claim forgery negative attacks (expected RED until fixed)
+        run: |
+          node --check staging/imile-management/fleet/v1-forged-booking-index-probes.mjs
+          node --check staging/imile-management/fleet/v1-poisoned-duplicate-window.mjs
+      - name: REAL restricted Rules — valid booking ALLOW and privileged poisoned normalized-duplicate DENY
         run: |
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.staging-emulator.json \
-            "node staging/imile-management/fleet/v1-forged-booking-index-probes.mjs"
+            "node staging/imile-management/fleet/v1-forged-booking-index-probes.mjs && node staging/imile-management/fleet/v1-poisoned-duplicate-window.mjs"
       - name: No production effects
         run: echo "Local demo Firestore emulator only; no hosting deploy, real data or IAM changes"
