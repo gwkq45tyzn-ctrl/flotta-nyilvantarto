@@ -27,23 +27,21 @@ test('two-browser post-import: live keyed authority plus frozen original Fleet i
   // Demand the current normalized-keyed driver capacity AND the original
   // frozen vehicle identity as well as immutable import source indices.
   assert.ok(rules.includes(
-    'let keyed = getAfter(/databases/$(database)/documents/flottaDrivers/$(driverId)).data'
+    'let driver = getAfter(/databases/$(database)/documents/flottaDrivers/$(data.driverId)).data'
   ),'capacity must be read from the live keyed Fleet driver');
   assert.ok(rules.includes(
-    'getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam'
+    "fleet.vehicles[data.vehicleIndex].rendszam.replace('[[:space:]-]', '').upper() == data.vehicleId"
   ),'original frozen plate identity must be verified');
-  assert.ok(rules.includes(
-    'getAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex'
-  ),'driver source index must be server-verified');
-  assert.ok(rules.includes(
-    'getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex'
-  ),'vehicle source index must be server-verified');
+  assert.ok(rules.includes('driver.sourceIndex == data.driverIndex'),
+    'driver source index must be server-verified');
+  assert.ok(rules.includes('vehicle.sourceIndex == data.vehicleIndex'),
+    'vehicle source index must be server-verified');
 });
 
 test('two-browser post-import: booked capacity from current canonical KEYED Fleet, not stale legacy array', () => {
-  assert.match(rules, /function declaredDriverCapacity\(driverId, driverIndex\)/);
-  assert.match(rules, /let keyed = getAfter\(\/databases\/\$\(database\)\/documents\/flottaDrivers\/\$\(driverId\)\)\.data/);
-  assert.match(rules, /return keyed\.keys\(\)\.hasAny\(\['kapacitas'\]\) \? keyed\.kapacitas : null/);
+  assert.match(rules, /driver\.keys\(\)\.hasAny\(\['kapacitas'\]\)/);
+  assert.match(rules, /data\.capacity == driver\.kapacitas/);
+  assert.match(rules, /getAfter\(\/databases\/\$\(database\)\/documents\/flottaDrivers\/\$\(data\.driverId\)\)\.data/);
   assert.doesNotMatch(rules, /capacity != null \? capacity\.data\.capacity/);
 });
 
