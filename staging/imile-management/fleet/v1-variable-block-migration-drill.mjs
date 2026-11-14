@@ -57,6 +57,11 @@ class VariableBlockSession{
     const receiptSnap=await getDocs(collection(this.db,RECEIPTS));
     if(!journalSnap.exists()){
       if(!receiptSnap.empty)throw Error('FORGED_OR_STALE_CHECKPOINT');
+      if((await getDoc(this.sourceRef)).exists())throw Error('FOREIGN_WORKSPACE');
+      const keyed=await this.loadKeyed();
+      for(const name of KEYED){
+        if(keyed[name].size)throw Error('FOREIGN_WORKSPACE');
+      }
       return {committed:0,journal:null,closed:false};
     }
     const journal=journalSnap.data();
@@ -135,7 +140,55 @@ class VariableBlockSession{
       ...extra
     };
   }
+  chunkDeleteRefs(index){
+    const refs=[];
+    for(const pair of this.chunks[index]){
+      refs.push(doc(this.db,...pair.masterPath.split('/')));
+      refs.push(doc(this.db,...pair.claimPath.split('/')));
+    }
+    refs.push(doc(this.db,RECEIPTS,String(index).padStart(4,'0')));
+    return refs;
+  }
+  async verifyRollbackRemainder(fence){
+    const sourceSnap=await getDoc(this.sourceRef);
+    if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
+    const sourceData=sourceSnap.data();
+    if(sourceData.sealed!==false||sourceData.revision!==1||
+       sourceData.migrationSourceSha256!==this.prepared.sourceSha256)
+      throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+    for(let i=0;i<fence.deletedThrough;i++){
+      for(const ref of this.chunkDeleteRefs(i)){
+        if((await getDoc(ref)).exists())throw Error('ROLLBACK_CURSOR_AHEAD_OF_DELETES');
+      }
+    }
+    for(let i=fence.deletedThrough;i<fence.total;i++){
+      const chunk=this.chunks[i];
+      const receipt=await getDoc(doc(this.db,RECEIPTS,String(i).padStart(4,'0')));
+      const pairIds=chunk.map(pair=>pair.kind+'/'+pair.id);
+      const pairDigest=sha256(chunk.map(pair=>({
+        id:pair.id,master:pair.master,claim:pair.claim
+      })));
+      if(!receipt.exists()||JSON.stringify(receipt.data().pairIds)!==JSON.stringify(pairIds)||
+         receipt.data().pairDigest!==pairDigest||
+         receipt.data().sourceSha256!==this.prepared.sourceSha256)
+        throw Error('ROLLBACK_REMAINDER_MISMATCH');
+      const masters={},claims={};
+      for(const pair of chunk){
+        const master=await getDoc(doc(this.db,...pair.masterPath.split('/')));
+        const claim=await getDoc(doc(this.db,...pair.claimPath.split('/')));
+        if(master.exists())masters[pair.id]=master.data();
+        if(claim.exists())claims[pair.id]=claim.data();
+      }
+      const assessed=assessChunkReadback({
+        chunk,masters,claims,sourceSha256:this.prepared.sourceSha256
+      });
+      if(!assessed.ok)throw Error(assessed.reason);
+    }
+  }
   async importNext(){
+    const fenceSnap=await getDoc(this.journalRef);
+    if(fenceSnap.exists()&&fenceSnap.data().rollbackFence)
+      throw Error('ROLLBACK_FENCE_HELD');
     const state=await this.verifyCommitted();
     if(state.closed)throw Error('CLOSED_REPLAY_DENIED');
     if(state.committed>=this.chunks.length)
@@ -169,28 +222,61 @@ class VariableBlockSession{
     while(!step.done)step=await this.importNext();
     return step;
   }
-  async rollback(){
+  async rollback(options={}){
+    const maxWrites=options.maxWrites??MAX_BATCH_WRITES;
+    const crashAfter=options.crashAfterBatches??0;
+    if(!Number.isSafeInteger(maxWrites)||maxWrites<1||
+       !Number.isSafeInteger(crashAfter)||crashAfter<0)
+      throw Error('INVALID_ROLLBACK_BATCH');
     const journalSnap=await getDoc(this.journalRef);
-    if(journalSnap.exists()&&journalSnap.data().closed===true)
-      throw Error('POST_CLOSE_ROLLBACK_DENIED');
-    const refs=[];
-    for(const name of [...KEYED,RECEIPTS]){
-      const snap=await getDocs(collection(this.db,name));
-      for(const row of snap.docs)refs.push(row.ref);
+    const journal=journalSnap.exists()?journalSnap.data():null;
+    if(journal?.closed===true)throw Error('POST_CLOSE_ROLLBACK_DENIED');
+    let deletedThrough=0,total=0;
+    if(journal?.rollbackFence){
+      const fence=journal.rollbackFence;
+      if(fence.sourceSha256!==this.prepared.sourceSha256||
+         !Number.isSafeInteger(fence.deletedThrough)||
+         !Number.isSafeInteger(fence.total)||
+         fence.deletedThrough<0||fence.deletedThrough>fence.total||
+         fence.total>this.chunks.length)
+        throw Error('ROLLBACK_FENCE_MISMATCH');
+      await this.verifyRollbackRemainder(fence);
+      deletedThrough=fence.deletedThrough;
+      total=fence.total;
+    }else{
+      const state=await this.verifyCommitted();
+      if(!state.journal)return {rollbackBatches:0};
+      total=state.committed;
     }
     let rollbackBatches=0;
-    for(let i=0;i<refs.length;i+=MAX_BATCH_WRITES){
-      const slice=refs.slice(i,i+MAX_BATCH_WRITES);
+    while(deletedThrough<total){
+      const refs=[];
+      let next=deletedThrough;
+      while(next<total){
+        const part=this.chunkDeleteRefs(next);
+        if(part.length>maxWrites)throw Error('ROLLBACK_CHUNK_EXCEEDS_BATCH');
+        if(refs.length&&refs.length+part.length>maxWrites)break;
+        refs.push(...part);
+        next++;
+      }
+      const finished=next===total;
       const batch=writeBatch(this.db);
-      for(const ref of slice)batch.delete(ref);
+      for(const ref of refs)batch.delete(ref);
+      if(finished)batch.set(this.journalRef,this.journalBody(0));
+      else batch.update(this.journalRef,{rollbackFence:{
+        sourceSha256:this.prepared.sourceSha256,
+        deletedThrough:next,
+        total
+      }});
       await batch.commit();
       rollbackBatches++;
+      deletedThrough=next;
+      if(!finished&&crashAfter&&rollbackBatches>=crashAfter)
+        throw Error('ROLLBACK_INTERRUPTED');
     }
-    if(journalSnap.exists()){
-      await setDoc(this.journalRef,this.journalBody(0));
-    }
-    for(const name of KEYED){
-      assert.equal((await getDocs(collection(this.db,name))).size,0,name);
+    for(let i=0;i<total;i++){
+      for(const ref of this.chunkDeleteRefs(i))
+        assert.equal((await getDoc(ref)).exists(),false,ref.path);
     }
     const sourceSnap=await getDoc(this.sourceRef);
     if(sourceSnap.exists())assert.equal(sourceSnap.data().sealed,false);
@@ -283,6 +369,23 @@ async function main(){
     const client=env.authenticatedContext(uid,{email}).firestore();
     await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
+    const foreignSource=doc(db,'flottaSharedState','current');
+    const foreignMaster=doc(db,'flottaDrivers','FOREIGN-KEEP');
+    const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN-KEEP');
+    await setDoc(foreignSource,{sealed:true,revision:9,migrationSourceSha256:'ab'.repeat(32),
+      drivers:[],vehicles:[],fuelCards:[],contacts:[]});
+    await setDoc(foreignMaster,{owner:'other-import',sourceIndex:0});
+    await setDoc(foreignClaim,{sourceIndex:0,revision:1});
+    const cold=new VariableBlockSession(db,smallSource);
+    await assert.rejects(()=>cold.importNext(),/FOREIGN_WORKSPACE/);
+    await assert.rejects(()=>cold.rollback(),/FOREIGN_WORKSPACE/);
+    assert.equal((await getDoc(foreignSource)).data().revision,9);
+    assert.equal((await getDoc(foreignMaster)).data().owner,'other-import');
+    assert.equal((await getDoc(foreignClaim)).exists(),true);
+    await deleteDoc(foreignSource);
+    await deleteDoc(foreignMaster);
+    await deleteDoc(foreignClaim);
+    console.log('PASS DENY [E+SDK]: journal-less cold start refuses a foreign source and keyed rows');
     let session=new VariableBlockSession(db,smallSource);
     let step=await session.importNext();
     assert.equal(step.committed,1);
@@ -362,6 +465,30 @@ async function main(){
     const largeRollback=await large.rollback();
     assert.ok(largeRollback.rollbackBatches>=2,
       'rollback batches='+largeRollback.rollbackBatches);
+    large=new VariableBlockSession(db,largeSource);
+    await large.importAll();
+    const early=large.prepared.pairs[0];
+    const late=large.prepared.pairs.at(-1);
+    await assert.rejects(()=>large.rollback({crashAfterBatches:1}),/ROLLBACK_INTERRUPTED/);
+    assert.equal((await getDoc(doc(db,...early.masterPath.split('/')))).exists(),false);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    const foreign=doc(db,'flottaDrivers','FOREIGN-KEEP');
+    await setDoc(foreign,{owner:'other-import',sourceIndex:0});
+    const parked=new VariableBlockSession(db,largeSource);
+    await assert.rejects(()=>parked.importNext(),/ROLLBACK_FENCE_HELD/);
+    const stranger=new VariableBlockSession(db,syntheticFourBlockSource({
+      drivers:3,vehicles:2,fuelCards:1,contacts:1
+    }));
+    await assert.rejects(()=>stranger.rollback(),/ROLLBACK_FENCE_MISMATCH/);
+    assert.equal((await getDoc(foreign)).exists(),true);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    const resumed=new VariableBlockSession(db,largeSource);
+    const rest=await resumed.rollback();
+    assert.ok(rest.rollbackBatches>=1);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),false);
+    assert.equal((await getDoc(foreign)).exists(),true);
+    await deleteDoc(foreign);
+    console.log('PASS [E+SDK]: rollback crash resumes from the fence; importNext and a foreign source are denied; FOREIGN-KEEP remains');
     large=new VariableBlockSession(db,largeSource);
     await large.importAll();
     await large.close();
