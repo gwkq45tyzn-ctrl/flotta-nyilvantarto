@@ -134,24 +134,47 @@ export async function readXlsxFirstSheet(data){
  const d=new DataView(data),bytes=new Uint8Array(data);let end=-1;
  for(let p=data.byteLength-22;p>=Math.max(0,data.byteLength-65557);p--)if(i32(d,p)===0x06054b50){end=p;break;}
  if(end<0)throw Error('Érvénytelen XLSX/ZIP fájl.');
- const n=i16(d,end+10),offset=i32(d,end+16);if(n>500||offset>=data.byteLength)throw Error('Nem támogatott Excel-archívum.');
+ const n=i16(d,end+10),offset=i32(d,end+16),centralBytes=i32(d,end+12);
+ // We only accept a complete single-disk ZIP with an in-bounds directory.
+ if(n<1||n>500||i16(d,end+4)!==0||i16(d,end+6)!==0||
+    i16(d,end+8)!==n||offset>=end||
+    centralBytes>end-offset)throw Error('Nem támogatott Excel-archívum.');
  const files=new Map();let p=offset;
  for(let i=0;i<n;i++){
-  if(i32(d,p)!==0x02014b50)throw Error('Hibás ZIP-tartalom.');
-  const compressed=i32(d,p+20),uncompressed=i32(d,p+24),method=i16(d,p+10),nameLen=i16(d,p+28),extra=i16(d,p+30),comment=i16(d,p+32),local=i32(d,p+42);
-  const name=td.decode(bytes.subarray(p+46,p+46+nameLen));p+=46+nameLen+extra+comment;
-  if(uncompressed>25*1024*1024||compressed>8*1024*1024)throw Error('Túl nagy Excel-munkalap.');
-  files.set(name,{compressed,uncompressed,method,local});
+  if(p+46>end||i32(d,p)!==0x02014b50)throw Error('Hibás ZIP-tartalom.');
+  const compressed=i32(d,p+20),uncompressed=i32(d,p+24),
+   method=i16(d,p+10),flags=i16(d,p+8),crc=i32(d,p+16),
+   nameLen=i16(d,p+28),extra=i16(d,p+30),
+   comment=i16(d,p+32),local=i32(d,p+42);
+  const stop=p+46+nameLen+extra+comment;
+  if(!nameLen||stop>end)throw Error('Hibás ZIP-könyvtár.');
+  const name=td.decode(bytes.subarray(p+46,p+46+nameLen));p=stop;
+  if(flags&0x0041)throw Error('Titkosított ZIP-munkalap nem támogatott.');
+  if(files.has(name))throw Error('Duplikált XLSX ZIP-összetevő.');
+  if(uncompressed>25*1024*1024||compressed>8*1024*1024)
+   throw Error('Túl nagy Excel-munkalap.');
+  files.set(name,{compressed,uncompressed,method,local,crc});
  }
  async function file(name){
   const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
-  const q=ent.local;if(i32(d,q)!==0x04034b50)throw Error('Érvénytelen ZIP-fejléc.');
-  const start=q+30+i16(d,q+26)+i16(d,q+28);
+  const q=ent.local;
+  if(q+30>offset||i32(d,q)!==0x04034b50)
+   throw Error('Érvénytelen ZIP-fejléc.');
+  const localNameLen=i16(d,q+26),localExtra=i16(d,q+28);
+  const start=q+30+localNameLen+localExtra;
+  // A central directory is untrusted too: bind its entry to the actual
+  // local ZIP name, method and compressed data boundary before decoding.
+  const localName=td.decode(bytes.subarray(q+30,q+30+localNameLen));
+  if(localName!==name||i16(d,q+8)!==ent.method||
+     (i16(d,q+6)&0x0041)||start+ent.compressed>offset)
+   throw Error('XLSX ZIP-összetevő eltérés.');
   const compressed=bytes.slice(start,start+ent.compressed);let raw;
   if(ent.method===0)raw=compressed;
   else if(ent.method===8)raw=await inflateRawXlsxBounded(compressed,ent.uncompressed);
   else throw Error('Nem támogatott ZIP-tömörítés.');
-  if(raw.length!==ent.uncompressed)throw Error('Sérült XLSX-tartalom.');return td.decode(raw);
+  if(raw.length!==ent.uncompressed||crc32(raw)!==ent.crc)
+   throw Error('Sérült XLSX-tartalom vagy hibás CRC.');
+  return td.decode(raw);
  }
  const readXml=x=>{if(/<!DOCTYPE/i.test(x))throw Error('Nem támogatott XML-tartalom.');const xml=new DOMParser().parseFromString(x,'application/xml');if(xml.querySelector('parsererror'))throw Error('Hibás XML-munkalap.');return xml;};
  const strings=[];if(files.has('xl/sharedStrings.xml')){
