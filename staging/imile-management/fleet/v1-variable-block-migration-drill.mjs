@@ -178,13 +178,23 @@ class VariableBlockSession{
     return step;
   }
   async rollback(){
-    const journalSnap=await getDoc(this.journalRef);
-    if(journalSnap.exists()&&journalSnap.data().closed===true)
-      throw Error('POST_CLOSE_ROLLBACK_DENIED');
+    // Never delete all records returned from a collection query. Another
+    // import, stale client or privileged writer may own some of them.
+    // Validate the complete persisted receipt chain, source SHA and absence
+    // of orphans BEFORE any destructive write. In a journal-less workspace,
+    // verifyCommitted also rejects a pre-existing source/master/claim.
+    const state=await this.verifyCommitted();
+    if(state.closed)throw Error('POST_CLOSE_ROLLBACK_DENIED');
+    if(!state.journal)return {rollbackBatches:0};
+    // Derive deletion targets exclusively from the RECEIPTED chunk manifest.
+    // Do not extend scope if an unrelated keyed document appears later.
     const refs=[];
-    for(const name of [...KEYED,RECEIPTS]){
-      const snap=await getDocs(collection(this.db,name));
-      for(const row of snap.docs)refs.push(row.ref);
+    for(let i=0;i<state.committed;i++){
+      for(const pair of this.chunks[i]){
+        refs.push(doc(this.db,...pair.masterPath.split('/')));
+        refs.push(doc(this.db,...pair.claimPath.split('/')));
+      }
+      refs.push(doc(this.db,RECEIPTS,String(i).padStart(4,'0')));
     }
     let rollbackBatches=0;
     for(let i=0;i<refs.length;i+=MAX_BATCH_WRITES){
@@ -194,14 +204,15 @@ class VariableBlockSession{
       await batch.commit();
       rollbackBatches++;
     }
-    if(journalSnap.exists()){
-      await setDoc(this.journalRef,this.journalBody(0));
-    }
-    for(const name of KEYED){
+    await setDoc(this.journalRef,this.journalBody(0));
+    for(const name of [...KEYED,RECEIPTS]){
       assert.equal((await getDocs(collection(this.db,name))).size,0,name);
     }
     const sourceSnap=await getDoc(this.sourceRef);
     if(sourceSnap.exists())assert.equal(sourceSnap.data().sealed,false);
+    // Deliberate limitation: a crash DURING multi-batch deletion blocks
+    // subsequent verifyCommitted(). No safe restart is claimed without a
+    // transactionally fenced persisted rollback cursor.
     return {rollbackBatches};
   }
   async close(){
@@ -299,6 +310,7 @@ async function main(){
     await setDoc(foreign,foreignContents);
     let session=new VariableBlockSession(db,smallSource);
     await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    await assert.rejects(()=>session.rollback(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
     assert.deepEqual((await getDoc(foreign)).data(),foreignContents);
     assert.equal((await getDoc(session.journalRef)).exists(),false);
     await deleteDoc(foreign);
@@ -308,12 +320,14 @@ async function main(){
       migrationSourceSha256:'0'.repeat(64)};
     await setDoc(session.sourceRef,previousSource);
     await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    await assert.rejects(()=>session.rollback(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
     assert.deepEqual((await getDoc(session.sourceRef)).data(),previousSource);
     await deleteDoc(session.sourceRef);
     // RED TEAM 3: a detached, foreign claim must also block chunk zero.
     const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN');
     await setDoc(foreignClaim,{sourceIndex:0,revision:1});
     await assert.rejects(()=>session.importNext(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
+    await assert.rejects(()=>session.rollback(),/UNOWNED_SOURCE_OR_KEYED_WITHOUT_JOURNAL/);
     assert.equal((await getDoc(foreignClaim)).exists(),true);
     await deleteDoc(foreignClaim);
     assert.equal((await getDocs(collection(db,RECEIPTS))).empty,true);
@@ -340,6 +354,7 @@ async function main(){
     const first=tampered.prepared.pairs[0];
     await updateDoc(doc(tampered.db,...first.masterPath.split('/')),{history:[]});
     await assert.rejects(()=>tampered.verifyCommitted(),/RICH_MASTER_MISMATCH/);
+    await assert.rejects(()=>tampered.rollback(),/RICH_MASTER_MISMATCH/);
     await setDoc(doc(tampered.db,...first.masterPath.split('/')),first.master);
     console.log('PASS DENY [E+SDK]: tampered nested history blocks resume');
 
@@ -348,11 +363,17 @@ async function main(){
       masterSha256:'ab'.repeat(32)
     });
     await assert.rejects(()=>tampered.verifyCommitted(),/ORPHAN_CLAIM/);
+    await assert.rejects(()=>tampered.rollback(),/ORPHAN_CLAIM/);
+    assert.equal((await getDoc(doc(tampered.db,'flottaDriverClaims','ROGUECLAIM'))).exists(),true,
+      'Rollback must NOT erase foreign claim');
+    assert.equal((await getDoc(doc(tampered.db,...first.masterPath.split('/')))).exists(),true,
+      'Rollback must NOT erase verified master when foreign claim exists');
     await deleteDoc(doc(tampered.db,'flottaDriverClaims','ROGUECLAIM'));
     console.log('PASS DENY [E+SDK]: orphan claim blocks resume');
 
     await updateDoc(tampered.journalRef,{committedChunks:9});
     await assert.rejects(()=>tampered.verifyCommitted(),/FORGED_OR_STALE_CHECKPOINT/);
+    await assert.rejects(()=>tampered.rollback(),/FORGED_OR_STALE_CHECKPOINT/);
     await updateDoc(tampered.journalRef,{committedChunks:step.committed});
     console.log('PASS DENY [E+SDK]: forged checkpoint chunk count blocks resume');
 
@@ -363,7 +384,8 @@ async function main(){
     await assert.rejects(()=>tampered.verifyCommitted(),/CLAIM_MISMATCH|DUPLICATE_SOURCE_INDEX/);
     await setDoc(doc(tampered.db,...duplicate[1].claimPath.split('/')),duplicate[1].claim);
     console.log('PASS DENY [E+SDK]: rewritten claim sourceIndex blocks resume');
-
+    console.log('PASS DENY [E+SDK]: rollback does not delete foreign source/master/claim, tampered history or forged checkpoint');
+    
     const rolled=await tampered.rollback();
     assert.ok(rolled.rollbackBatches>=1);
     const retry=new VariableBlockSession(db,smallSource);
