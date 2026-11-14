@@ -181,12 +181,33 @@ export async function readXlsxFirstSheet(data){
   const xml=readXml(await file('xl/sharedStrings.xml'));
   for(const si of xml.getElementsByTagName('si'))strings.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
  }
- let sheetPath='xl/worksheets/sheet1.xml';
- if(!files.has(sheetPath)){
-  // Historical exports may have different worksheet names, so read first relationship.
-  const candidates=[...files.keys()].filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k));
-  if(!candidates.length)throw Error('Nincs munkalap az exportban.');sheetPath=candidates.sort()[0];
- }
+ // ZIP filenames are storage details, NOT the logical worksheet order.
+ // Bind the selected first Sheet to its workbook r:id and the workbook's
+ // relationship target, rejecting ambiguous, external or traversal targets.
+ // Otherwise an XLSX with a reordered sheet list could silently feed pivot
+ // output instead of the raw In-Hub/OFD export (or vice versa).
+ const workbook=readXml(await file('xl/workbook.xml'));
+ const workbookRels=readXml(await file('xl/_rels/workbook.xml.rels'));
+ const firstSheet=workbook.getElementsByTagName('sheet')[0];
+ const relId=firstSheet?.getAttribute('r:id')||
+  firstSheet?.getAttributeNS(
+   'http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+ if(!relId||!/^[A-Za-z0-9_-]{1,80}$/.test(relId))
+  throw Error('Hiányzó első Excel-munkalap kapcsolat.');
+ const matching=[...workbookRels.getElementsByTagName('Relationship')]
+  .filter(r=>r.getAttribute('Id')===relId);
+ if(matching.length!==1||
+    matching[0].getAttribute('Type')!==
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'||
+    matching[0].getAttribute('TargetMode')==='External')
+  throw Error('Nem hiteles első Excel-munkalap kapcsolat.');
+ const target=matching[0].getAttribute('Target')||'';
+ const sheetPath=target.startsWith('/xl/')?target.slice(1):
+  target.startsWith('worksheets/')?'xl/'+target:null;
+ if(!sheetPath||!/^xl\/worksheets\/sheet[1-9]\d*\.xml$/.test(sheetPath)||
+    !files.has(sheetPath))
+  throw Error('Érvénytelen vagy hiányzó első munkalap.');
+
  const xml=readXml(await file(sheetPath)),sheetData=xml.getElementsByTagName('sheetData')[0];
  if(!sheetData)throw Error('Nincs feldolgozható Excel-adat.');
  const result=[];
