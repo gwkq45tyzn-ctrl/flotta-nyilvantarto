@@ -41,6 +41,14 @@ if(artifactMode){
   const digest=createHash('sha256').update(bundled).digest('hex');
   assert.equal(artifactGate.originalFleetSha256,digest);
   assert.equal(artifactGate.fileSha256?.['index.html'],digest);
+  assert.deepEqual(Object.keys(artifactGate.fileSha256).sort(),artifactGate.files,
+    'Every artifact file must have one emitted-byte hash');
+  for(const path of artifactGate.files){
+    const bytes=await readFile(new URL(path,root));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'),
+      artifactGate.fileSha256[path],
+      'Pre-browser package tampering/missing emitted byte hash: '+path);
+  }
   for(const required of ['index.html','features/firestore-bridge.js',
     'depokapacitas/index.html','depokapacitas/app.js',
     'staging/imile-management/index.html']){
