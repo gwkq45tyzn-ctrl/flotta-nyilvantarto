@@ -149,6 +149,18 @@ async function main(){
     assert.equal((await getDoc(doc(client,'bookings','2099-03-05__ABC123'))).data().driverId,'DA-0002');
     console.log('PASS ALLOW [E+SDK]: hyphenated DA remains bookable when it is the only normalized match');
 
+    // Another privileged-source P0: a forged keyed master may point to an
+    // existing index that belongs to a DIFFERENT DA in the original array.
+    // The selected ID appears nowhere in the source, so scanning only for
+    // duplicate DAs would wrongly authorize the booking.
+    const absent=fleet(2,1);
+    await seed(absent.drivers,absent.vehicles,{
+      driverSlots:[{id:'DA9999',daCode:'DA9999',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged forged keyed DA9999 is absent from original sourceIndex zero',
+      ()=>book('2099-03-13','DA9999','ABC001',0,0,80));
+
     const far=fleet(12,1);
     far.drivers[11]=driver('da0001',500);
     await seed(far.drivers,far.vehicles,{
