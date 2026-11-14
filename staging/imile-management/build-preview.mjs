@@ -9,7 +9,12 @@ import {dirname,resolve,join} from 'node:path';
 
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'../..');
-const target=join(root,'preview-imile-staging');
+// CORE-only is a staging BUILD PROOF, never a production deployment.
+const args=process.argv.slice(2);
+if(args.some(x=>x!=='--fleet-depot-only')||args.length>1)
+  throw Error('Only --fleet-depot-only is supported');
+const coreOnly=args.includes('--fleet-depot-only');
+const target=join(root,coreOnly?'preview-imile-fleet-depot':'preview-imile-staging');
 const allowed=[
   'staging/imile-management/index.html',
   'staging/imile-management/app.mjs',
@@ -59,11 +64,14 @@ const allowed=[
   'depokapacitas/parcel-preview.mjs',
   'depokapacitas/parcel-preview-app.mjs'
 ];
-for(const p of allowed)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);
+const packageFiles=coreOnly
+  ?allowed.filter(p=>!p.startsWith('staging/imile-management/reports/'))
+  :allowed;
+for(const p of packageFiles)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);
 if(existsSync(target))throw Error('Preview directory exists. Remove it manually before rebuilding: '+target);
 mkdirSync(target,{recursive:true});
 try {
-  for(const p of allowed) {
+  for(const p of packageFiles) {
     const output=join(target,p);
     mkdirSync(dirname(output),{recursive:true});
     cpSync(join(root,p),output);
@@ -75,9 +83,23 @@ try {
   const menu=readFileSync(menuFile,'utf8');
   if(!menu.includes('href="../../index.html" id="fleetLink"'))
     throw Error('Unified Fleet link changed; preview safety rewrite must be reviewed');
-  writeFileSync(menuFile,menu
+  let safeMenu=menu
     .replace('href="../../index.html" id="fleetLink"','href="./cutover.html" id="fleetLink"')
-    .replace('Eredeti Flotta megnyitása','Flotta adatellenőrzés (izolált előnézet)'));
+    .replace('Eredeti Flotta megnyitása','Flotta adatellenőrzés (izolált előnézet)');
+  if(coreOnly){
+    const start=safeMenu.indexOf('        <article class="card module reports">');
+    const end=start<0?-1:safeMenu.indexOf('</article>',start);
+    if(start<0||end<0||safeMenu.indexOf('class="card module reports"',end+'</article>'.length)>=0)
+      throw Error('Core-only report link exclusion requires explicit review');
+    safeMenu=safeMenu.slice(0,start)+safeMenu.slice(end+'</article>'.length);
+    safeMenu=safeMenu.replace(
+      'az eredeti Flotta, a fejlett DepóKapacitás és az In-Hub/OFD riportkészítő',
+      'az eredeti Flotta és a fejlett DepóKapacitás');
+    if(/id="reportsLink"|href="\.\/reports\//.test(safeMenu)||
+      packageFiles.some(p=>p.startsWith('staging/imile-management/reports/')))
+      throw Error('Core-only build cannot contain report UI or source');
+  }
+  writeFileSync(menuFile,safeMenu);
   writeFileSync(join(target,'index.html'),
     '<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>iMile staging</title><meta http-equiv="refresh" content="0;url=./staging/imile-management/index.html"><a href="./staging/imile-management/index.html">Közös bejelentkezés</a></html>\n');
   writeFileSync(join(target,'firebase.json'),JSON.stringify({
@@ -88,7 +110,9 @@ try {
     }
   },null,2)+'\n');
   console.log('Safe preview generated: '+target);
-  console.log('Safe isolated preview: shared hub, advanced Depot, In-Hub/OFD reports and pure original Fleet projection; no legacy Fleet application: '+allowed.length+' files');
+  console.log(coreOnly
+    ?'CORE-ONLY scoped staging preview: Fleet cutover check + Depot, no OFD/In-Hub/Excel routes/assets; original Fleet still NOT packaged: '+packageFiles.length+' files'
+    :'Safe isolated preview: shared hub, advanced Depot, In-Hub/OFD reports and pure original Fleet projection; no legacy Fleet application: '+packageFiles.length+' files');
   console.log('No legacy production Fleet application, no customer data, no Apps Script credentials.');
 } catch(error) {
   rmSync(target,{recursive:true,force:true});
