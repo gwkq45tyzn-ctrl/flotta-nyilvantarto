@@ -31,7 +31,7 @@ $('kind').addEventListener('change',clearReport);
 function preview(report){
  $('preview').hidden=false;
  field('summary',report.kind==='inhub'
-  ?'Összes csomag: '+report.total+' · Területek: '+report.rows.length+' · Dátumok: '+report.dates.length
+  ?'Összes csomag: '+report.total+' · Területek: '+report.rows.length+' · Dátumok: '+report.dates.join(', ')
   :'OFD: '+report.totalOfd+' · DLD: '+report.totalDelivered+' · Futárok: '+report.uniqueCouriers+
    ' · Vállalkozói csoportok: '+report.vendors.length+' · Kézbesítés: '+pct(report.rate));
  $('stats').replaceChildren();
