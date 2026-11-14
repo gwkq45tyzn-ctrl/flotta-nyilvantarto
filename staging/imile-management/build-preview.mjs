@@ -5,7 +5,7 @@
  */
 import {cpSync,existsSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {dirname,resolve,join} from 'node:path';
+import {dirname,resolve,join,sep} from 'node:path';
 
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'../..');
@@ -59,13 +59,23 @@ const allowed=[
   'depokapacitas/flotta-master-readonly.mjs',
   'depokapacitas/master-reconciliation.mjs',
   'features/shared-master-adapter.mjs',
+  // Keep every directly imported Depot module in the allowlist.
+  'depokapacitas/keyed-live-master.mjs',
+  'depokapacitas/keyed-booking-capacity.mjs',
+  'depokapacitas/canonical-booking-transaction.mjs',
+  'depokapacitas/canonical-booking-gate.mjs',
+  'depokapacitas/canonical-source-health.mjs',
+  'features/fleet-depo-canonical-transition.mjs',
   'depokapacitas/parcel-preview.html',
   'depokapacitas/parcel-preview.css',
   'depokapacitas/parcel-preview.mjs',
   'depokapacitas/parcel-preview-app.mjs'
 ];
 const packageFiles=coreOnly
-  ?allowed.filter(p=>!p.startsWith('staging/imile-management/reports/'))
+  ?allowed.filter(p=>!p.startsWith('staging/imile-management/reports/')
+    &&!p.startsWith('staging/imile-management/qa/')
+    &&(!p.startsWith('staging/imile-management/fleet/')
+      ||p==='staging/imile-management/fleet/operations-data.mjs'))
   :allowed;
 for(const p of packageFiles)if(!existsSync(join(root,p)))throw Error('Missing staging file: '+p);
 if(existsSync(target))throw Error('Preview directory exists. Remove it manually before rebuilding: '+target);
@@ -92,6 +102,13 @@ try {
     if(start<0||end<0||safeMenu.indexOf('class="card module reports"',end+'</article>'.length)>=0)
       throw Error('Core-only report link exclusion requires explicit review');
     safeMenu=safeMenu.slice(0,start)+safeMenu.slice(end+'</article>'.length);
+    // Hidden links still expose routes; replace both with inert elements.
+    const qaAnchor='<a href="./qa/index.html" id="qaLink" hidden>Staging tesztadatok előkészítése</a>';
+    const fleetAnchor='<a href="./fleet/operations.html" id="fleetMasterLink" hidden aria-hidden="true" tabindex="-1">Belső prototípus · nem a V1 Flotta</a>';
+    if(!safeMenu.includes(qaAnchor)||!safeMenu.includes(fleetAnchor))
+      throw Error('Core-only QA/prototype anchors changed: explicit review required');
+    safeMenu=safeMenu.replace(qaAnchor,'<span id="qaLink" hidden aria-hidden="true"></span>')
+      .replace(fleetAnchor,'<span id="fleetMasterLink" hidden aria-hidden="true"></span>');
     safeMenu=safeMenu.replace(
       'az eredeti Flotta, a fejlett DepóKapacitás és az In-Hub/OFD riportkészítő',
       'az eredeti Flotta és a fejlett DepóKapacitás');
@@ -100,6 +117,37 @@ try {
       throw Error('Core-only build cannot contain report UI or source');
   }
   writeFileSync(menuFile,safeMenu);
+  if(coreOnly){
+    // Remove live navigation to an intentionally unbundled Fleet prototype.
+    const depotFile=join(target,'depokapacitas/app.js');
+    const depotSrc=readFileSync(depotFile,'utf8');
+    const oldDetail='../staging/imile-management/fleet/operations.html';
+    if(!depotSrc.includes(oldDetail))throw Error('Depot Fleet detail link changed: re-review');
+    writeFileSync(depotFile,depotSrc.replaceAll(oldDetail,
+      '../staging/imile-management/cutover.html')
+      .replace('Flotta részletei és a figyelmeztetések forrásrekordjai',
+        'Flotta átállási ellenőrzése (staging)'));
+    const alertFile=join(target,'staging/imile-management/central-alerts.mjs');
+    const alerts=readFileSync(alertFile,'utf8');
+    if(!alerts.includes(oldDetail))throw Error('Alert prototype target changed: re-review');
+    writeFileSync(alertFile,alerts.replaceAll(oldDetail,
+      '../staging/imile-management/cutover.html'));
+  }
+  // Fail closed when a copied ESM file imports a missing relative module.
+  for(const p of packageFiles.filter(p=>/\.(?:mjs|js)$/.test(p))){
+    const source=readFileSync(join(target,p),'utf8');
+    const references=[
+      ...source.matchAll(/\b(?:import|export)\s+(?:[^'"\n]+?\s+from\s*)?['"](\.[^'"]+)['"]/g),
+      ...source.matchAll(/\b(?:import|export)\s*\{[\s\S]*?\}\s*from\s*['"](\.[^'"]+)['"]/g),
+      ...source.matchAll(/\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g)
+    ].map(hit=>hit[1]);
+    for(const ref of references){
+      const destination=resolve(dirname(join(target,p)),ref.split(/[?#]/)[0]);
+      if((destination!==target&&!destination.startsWith(target+sep))||
+        !existsSync(destination))
+        throw Error('Unbundled local module '+ref+' imported by '+p);
+    }
+  }
   writeFileSync(join(target,'index.html'),
     '<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>iMile staging</title><meta http-equiv="refresh" content="0;url=./staging/imile-management/index.html"><a href="./staging/imile-management/index.html">Közös bejelentkezés</a></html>\n');
   writeFileSync(join(target,'firebase.json'),JSON.stringify({
