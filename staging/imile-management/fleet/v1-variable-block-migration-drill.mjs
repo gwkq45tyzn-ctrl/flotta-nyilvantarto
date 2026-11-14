@@ -538,12 +538,12 @@ async function main(){
     // An unrelated claim arriving during a rollback pause must fail closed
     // without consuming the remaining owned chunks.
     await deleteDoc(foreign);
-    const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN-CLAIM');
-    await setDoc(foreignClaim,{sourceIndex:0,revision:1});
+    const foreignResumeClaim=doc(db,'flottaDriverClaims','FOREIGN-CLAIM');
+    await setDoc(foreignResumeClaim,{sourceIndex:0,revision:1});
     await assert.rejects(()=>parked.rollback(),/ORPHAN_CLAIM/);
-    assert.equal((await getDoc(foreignClaim)).exists(),true);
+    assert.equal((await getDoc(foreignResumeClaim)).exists(),true);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
-    await deleteDoc(foreignClaim);
+    await deleteDoc(foreignResumeClaim);
     // The hash stored in the source is not itself an authority: compare the
     // actual complete four rich arrays before resuming destructive work.
     const sourceSnapBefore=await getDoc(parked.sourceRef);
