@@ -50,13 +50,13 @@ test('v18 HTML posts only when a backend URL was configured', () => {
 });
 
 test('bridge gates legacy sync at boot and after auth', () => {
-  const gate = slice('../features/firestore-bridge.js', 541, 556);
+  const gate = slice('../features/firestore-bridge.js', 547, 561);
   assert.match(gate, /function gateOldSync\s*\(/);
   assert.match(gate, /window\.pushRemote\s*=\s*function/);
   assert.match(gate, /window\.pullRemote\s*=\s*function/);
-  assert.match(slice('../features/firestore-bridge.js', 735, 735), /gateOldSync\(\)/);
-  assert.match(slice('../features/firestore-bridge.js', 779, 779), /gateOldSync\(\)/);
-  assert.match(slice('../features/firestore-bridge.js', 828, 835), /gateOldSync\(\)/);
+  assert.match(slice('../features/firestore-bridge.js', 741, 741), /gateOldSync\(\)/);
+  assert.match(slice('../features/firestore-bridge.js', 785, 785), /gateOldSync\(\)/);
+  assert.match(slice('../features/firestore-bridge.js', 834, 841), /gateOldSync\(\)/);
 });
 
 test('attendance script is a different writer and does not touch Fleet masters', () => {
@@ -95,7 +95,7 @@ test('published inventory matches these pins and stays redacted', () => {
   assert.match(doc, /BLOCKED_OWNER_ACCESS/);
   assert.match(doc, /index\.html:1212-1254/);
   assert.match(doc, /index\.html:1220-1254/);
-  assert.match(doc, /firestore-bridge\.js:828-835/);
+  assert.match(doc, /firestore-bridge\.js:834-841/);
   assert.match(doc, /Code\.gs:65-80/);
   assert.doesNotMatch(doc, /https:\/\/script\.google\.com\/macros\/s\/[^\s)]+/);
   assert.doesNotMatch(doc, /172WO6bYfJriFxIYl7MDT6dELQxzOgVrXuWUCNpJHaDI/);
