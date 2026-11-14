@@ -39,11 +39,30 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.doesNotMatch(hub,/class="card module reports"/);
     assert.doesNotMatch(hub,/href="\.\/reports\/index\.html"/);
     assert.doesNotMatch(hub,/href="\.\/fleet\/operations\.html"/);
+    assert.equal(hub.includes('href="./qa/index.html"'),false,
+      'Packaged hub must not leak the omitted QA route');
+    assert.equal(hub.includes('<span id="qaLink"'),true,
+      'Hub must retain inert anchor ID for the JS menu handler');
     assert.match(hub,/href="\.\.\/\.\.\/index\.html" id="fleetLink"/);
     const depHtml=readFileSync(join(dest,'depokapacitas/index.html'),'utf8');
     assert.doesNotMatch(depHtml,/data-view="attendance"/);
     assert.doesNotMatch(depHtml,/data-view="results"/);
+    assert.equal(depHtml.includes('href="./TELEPITES.md"'),false,
+      'Offline artifact must not expose an unbundled installation guide');
     assert.ok(gate.files.every(p=>existsSync(join(dest,p))), 'Every manifest file must actually exist');
+    assert.deepEqual(Object.keys(gate.fileSha256),gate.files,
+      'Integrity manifest must hash every emitted artifact file');
+    for(const file of gate.files)
+      assert.equal(gate.fileSha256[file],sha(readFileSync(join(dest,file))),
+        'Emitted-byte digest mismatch: '+file);
+    const candidateDepotJs=readFileSync(join(dest,'depokapacitas/app.js'),'utf8');
+    assert.equal(candidateDepotJs.includes('fleet/operations.html'),false,
+      'Packaged Depot must never point at the omitted Fleet prototype');
+    assert.equal(candidateDepotJs.includes('href="../index.html"'),true,
+      'Depot detail page must open the unchanged original Fleet');
+    const originalDepotJs=readFileSync(join(root,'depokapacitas/app.js'),'utf8');
+    assert.equal(originalDepotJs.includes('fleet/operations.html'),true,
+      'Only the packaged copy may be rewritten');
     assert.match(readFileSync(join(dest,'staging/imile-management/app.mjs'),'utf8'),/fleetMasterLink/);
     console.log('PASS original Fleet SHA, no reports/PWA/prototype, blocked source-only artifact');
   } finally {rmSync(dest,{recursive:true,force:true});}

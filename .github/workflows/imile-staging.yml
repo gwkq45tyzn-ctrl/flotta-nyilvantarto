@@ -145,6 +145,8 @@ jobs:
         run: node --test staging/imile-management/build-v1-core.test.mjs
       - name: V1 eredeti Flotta + Depó QA-forráscsomag összeállítása – NO-GO
         run: node staging/imile-management/build-v1-core.mjs
+      - name: Eredeti Flotta + Depó – izolált Chromium böngészős füstteszt (NO-GO)
+        run: node staging/imile-management/core-artifact-browser-smoke.mjs
       - name: Szűkített V1 QA-csomag archiválása – NEM deployolható
         uses: actions/upload-artifact@v4
         with:

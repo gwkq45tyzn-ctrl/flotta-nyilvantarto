@@ -107,6 +107,11 @@ try{
   const reports=/<article class="card module reports">[\s\S]*?<\/article>/;
   if(!reports.test(html))throw Error('Report module scope anchor changed');
   html=html.replace(reports,'<!-- OFD + In-Hub excluded from V1; V1.1 only -->');
+  // Replace the hidden QA link with an inert ID: app.mjs expects the
+  // element, but an omitted route must never remain browser-navigable.
+  const qaLink='<a href="./qa/index.html" id="qaLink" hidden>Staging tesztadatok előkészítése</a>';
+  if(!html.includes(qaLink))throw Error('QA link changed: re-review');
+  html=html.replace(qaLink,'<span id="qaLink" hidden aria-hidden="true"></span>');
   // Full hub keeps a permanently hidden legacy QA anchor for historical
   // tests; the reduced offline core bundle must omit the URL entirely.
   const legacyQaAnchor=/<a\b[^>]*href="\.\/fleet\/operations\.html"[^>]*id="fleetMasterLink"[^>]*>[^<]*<\/a>/;
@@ -135,15 +140,52 @@ try{
   alerts=alerts.replace(prototypeTarget,"actionUrl:'../index.html'");
   writeFileSync(alertsFile,alerts);
 
+  // The packaged Depot must NEVER link to the omitted Fleet prototype.
+  // Keep the original Fleet page verbatim; rewrite only the copied Depot module.
+  const depotModule=join(target,'depokapacitas/app.js');
+  let depotSource=readFileSync(depotModule,'utf8');
+  const obsoletePrototype='../staging/imile-management/fleet/operations.html';
+  if(!depotSource.includes(obsoletePrototype))
+    throw Error('Depot prototype detail target changed: re-review');
+  depotSource=depotSource.replaceAll(obsoletePrototype,'../index.html');
+  writeFileSync(depotModule,depotSource);
+
   // Hide deferred *views* in the core Depot navigation only. The V1 runner is
   // not an authorization substitute: actual Firestore Rules must deny PWA.
   const depot=join(target,'depokapacitas/index.html');
   let depotHtml=readFileSync(depot,'utf8');
+  // Do not link a non-packaged install manual or leak setup instructions.
+  const installHelp='Részletes lépések: <a href="./TELEPITES.md">Telepítési útmutató</a>.';
+  if(!depotHtml.includes(installHelp))
+    throw Error('Depot setup link changed: re-review for core scope');
+  depotHtml=depotHtml.replace(installHelp,
+    'Az éles beállítás kizárólag külön rendszergazdai jóváhagyással történhet.');
   for(const view of ['results','attendance']){
     const re=new RegExp('<button class="nav-item" data-view="'+view+'">[^<]*(?:<span>[^<]+<\\/span>)?<\\/button>');
     depotHtml=depotHtml.replace(re,'<!-- '+view+' deferred to V1.1 -->');
   }
   writeFileSync(depot,depotHtml);
+
+  // Validate the actual POST-rewrite package, not just the source dependency
+  // queue. Follow local static ESM references, HTML script/stylesheet assets
+  // AND local page links, so missing runtime routes fail the build.
+  for(const file of included.keys()){
+    const source=readFileSync(join(target,file),'utf8');
+    const refs=references(file,source);
+    if(file.endsWith('.html')){
+      for(const hit of source.matchAll(/<a\b[^>]*?\bhref=['"]([^'"]+)['"][^>]*>/gi))
+        refs.push(hit[1]);
+    }
+    for(const ref of refs){
+      const dependency=safePath(file,ref);
+      if(dependency&&!existsSync(join(target,dependency)))
+        throw Error('Missing post-rewrite browser dependency: '+file+' -> '+dependency);
+    }
+  }
+  // Hash the exact emitted bytes, not just pre-transform source files.
+  const fileSha256=Object.fromEntries([...included.keys()].sort().map(file=>[
+    file,createHash('sha256').update(readFileSync(join(target,file))).digest('hex')
+  ]));
 
   // This intentionally is NOT an approved release manifest and cannot be
   // mistaken for a signed deployment permission.
@@ -152,7 +194,7 @@ try{
     originalFleetSha256:included.get('index.html'),
     componentScope:['original-fleet','core-depot','shared-auth-frontend'],
     excluded:['OFD','In-Hub','reporting','Attendance PWA','courier','photo','Fleet prototype'],
-    files:[...included.keys()].sort(),
+    files:[...included.keys()].sort(),fileSha256,
     liveAuthVerified:false,liveRulesVerified:false,liveBackupVerified:false,
     liveTwoPcVerified:false,migrationAuthorized:false,ownerReleaseApproved:false
   },null,2)+'\n');
