@@ -95,6 +95,33 @@ export function canonicalSnapshot(snapshot){
   rows:snapshot.rows.map(x=>[x.daCode,x.daName,x.vendor,x.ofd,x.delivered]),
   ofd:snapshot.totalOFD,delivered:snapshot.totalDelivered});
 }
+/**
+ * A stored hash is UNTRUSTED evidence: old Admin SDK/legacy writers may
+ * modify a persisted daily report while leaving its contentHash unchanged.
+ * Return true for an idempotent save ONLY when the entire business payload
+ * and its stored aggregate counters agree with the newly planned snapshot.
+ *
+ * This is a local equality check, not an owner signing-root attestation.
+ */
+export function exactStoredPerformanceNoOp(previous,candidate,expectedHash,status){
+ if(!previous||!candidate||typeof expectedHash!=='string'||
+    !/^[a-f0-9]{64}$/.test(expectedHash)||
+    previous.contentHash!==expectedHash||
+    previous.status!==status||
+    previous.key!==candidate.key||
+    previous.date!==candidate.date||
+    previous.station!==candidate.station||
+    previous.totalOFD!==candidate.totalOFD||
+    previous.totalDelivered!==candidate.totalDelivered||
+    previous.courierCount!==candidate.courierCount||
+    !Array.isArray(previous.rows)||
+    previous.rows.length!==candidate.rows?.length)
+  return false;
+ try{
+  return canonicalSnapshot(previous)===canonicalSnapshot(candidate);
+ }catch{return false;}
+}
+
 export async function snapshotHash(snapshot){
  const bytes=new TextEncoder().encode(canonicalSnapshot(snapshot));
  const digest=await crypto.subtle.digest('SHA-256',bytes);
