@@ -86,7 +86,9 @@ export function checkSizeGate(source,keyedDocs={}){
     sourceJson=advisoryJsonSize(source);
     sourceEstimate=estimateFirestoreDocumentStorageBytes(source,'flottaSharedState/current');
     for(const [path,doc] of Object.entries(keyedDocs)){
-      if(!/^flotta(Drivers|Vehicles)\/[^/]+$/.test(path))
+      // Masters AND immutable identity claims are projected documents.
+      // A gate that rejects claim paths forces callers to skip them.
+      if(!/^flotta(?:Drivers|Vehicles|DriverClaims|VehicleClaims)\/[^/]+$/.test(path))
         throw Error('INVALID_KEYED_DOCUMENT_PATH');
       const n=advisoryJsonSize(doc);
       keyedSizes[path]=n;

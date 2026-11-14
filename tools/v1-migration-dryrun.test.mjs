@@ -38,7 +38,10 @@ test('preflight rejects duplicate normalized DA', () => {
 test('dry-run plan preserves rich history and sets revision', () => {
   const pre = preflight(goodSnapshot);
   const plan = buildPlan(goodSnapshot, pre);
-  assert.equal(plan.sealed, true);
+  assert.equal(plan.sealed, false);
+  assert.equal(plan.sourceTrust, 'preflight-only');
+  assert.equal(plan.closingTrust, 'not-closed');
+  assert.notEqual(plan.sourceTrust, plan.closingTrust);
   assert.equal(plan.drivers[0].data.history.length, 1);
   assert.equal(plan.drivers[0].data.kapacitas, 80);
   assert.equal(plan.drivers[0].data.revision, 1);
