@@ -528,15 +528,37 @@ async function main(){
     assert.equal((await session.verifyCommitted()).committed,2);
     assert.equal((await getDocs(collection(db,RECEIPTS))).size,2);
     console.log('PASS DENY [E+SDK]: simultaneous importNext sessions observing same checkpoint yield exactly one atomic chunk commit');
-    // Deterministic rollback/import race: importer has verified committed=2
+    // Reverse race: rollback has verified total=2, but a legal importer
+    // advances the checkpoint to 3 BEFORE the destructive rollback batch.
+    // The rollback transaction must reject, preserving all three chunks.
+    let releaseStaleRollback,notifyRollbackChecked;
+    const staleRollbackGate=new Promise(resolve=>{releaseStaleRollback=resolve;});
+    const rollbackChecked=new Promise(resolve=>{notifyRollbackChecked=resolve;});
+    const staleRollback=new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async state=>{
+        assert.equal(state.total,2);
+        assert.equal(state.deletedThrough,0);
+        notifyRollbackChecked();
+        await staleRollbackGate;
+      }
+    });
+    await rollbackChecked;
+    const importerAhead=await new VariableBlockSession(db,smallSource).importNext();
+    assert.equal(importerAhead.committed,3);
+    releaseStaleRollback();
+    await assert.rejects(staleRollback,/ROLLBACK_FENCE_STALE/);
+    assert.equal((await new VariableBlockSession(db,smallSource).verifyCommitted()).committed,3);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).size,3);
+    console.log('PASS DENY [E+SDK]: importer advances between rollback verification and delete; stale rollback cannot reset journal or erase chunks');
+    // Deterministic importer/rollback race: importer has verified committed=3
     // but has not entered its atomic commit. Rollback resets the checkpoint
-    // and deletes owned data. The stale importer must NOT recreate chunk 2.
+    // and deletes owned data. The stale importer must NOT recreate chunk 3.
     let releaseStaleImporter,notifyImportChecked;
     const staleImportGate=new Promise(resolve=>{releaseStaleImporter=resolve;});
     const importerChecked=new Promise(resolve=>{notifyImportChecked=resolve;});
     const staleImport=new VariableBlockSession(db,smallSource).importNext({
       afterVerify:async state=>{
-        assert.equal(state.committed,2);
+        assert.equal(state.committed,3);
         notifyImportChecked();
         await staleImportGate;
       }
