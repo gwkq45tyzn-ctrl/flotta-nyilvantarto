@@ -467,10 +467,31 @@ async function main(){
     assert.equal(step.committed,1);
     session=new VariableBlockSession(db,smallSource);
     assert.equal((await session.verifyCommitted()).committed,1);
-    step=await session.importNext();
-    assert.equal(step.committed,2);
+    // Two independently constructed sessions both finish complete readback at
+    // committedChunks=1 BEFORE either is allowed to start its transaction.
+    // The old writeBatch path accepted both stale writers; the loser must
+    // now be rejected by transactionally fenced journal CAS.
+    let bothReady=0,releaseImportRace;
+    const importRaceBarrier=new Promise(resolve=>{releaseImportRace=resolve;});
+    const pauseAfterVerify=async state=>{
+      assert.equal(state.committed,1);
+      if(++bothReady===2)releaseImportRace();
+      await importRaceBarrier;
+    };
+    const concurrent=await Promise.allSettled([
+      new VariableBlockSession(db,smallSource).importNext({afterVerify:pauseAfterVerify}),
+      new VariableBlockSession(db,smallSource).importNext({afterVerify:pauseAfterVerify})
+    ]);
+    assert.equal(concurrent.filter(x=>x.status==='fulfilled').length,1,
+      'exactly one competing import chunk may commit');
+    assert.equal(concurrent.filter(x=>x.status==='rejected').length,1,
+      'the stale second importer must not advance the journal');
+    assert.match(String(concurrent.find(x=>x.status==='rejected').reason),
+      /STALE_IMPORT_CHECKPOINT|aborted|ABORTED/);
     session=new VariableBlockSession(db,smallSource);
     assert.equal((await session.verifyCommitted()).committed,2);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).size,2);
+    console.log('PASS DENY [E+SDK]: simultaneous importNext sessions observing same checkpoint yield exactly one atomic chunk commit');
     step=await session.importNext();
     assert.equal(step.committed,3);
     session=new VariableBlockSession(db,smallSource);
