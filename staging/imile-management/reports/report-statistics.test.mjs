@@ -46,6 +46,45 @@ test('invalid daily data is not silently a 0',()=>{
  const a=buildPerformanceStatistics([{...s,status:'provisional',rows:[{daCode:'D1',daName:'Driver D1',vendor:'V',ofd:4,delivered:7}]}]);
  assert.equal(a.partial,true);
 });
+test('malformed Firestore calendar day is partial, not an uncaught Date RangeError',()=>{
+ const s=planPerformanceSnapshots(report([record('D1',4,3)]))[0];
+ const a=buildPerformanceStatistics([{...s,date:'2026-99-99',status:'provisional'}]);
+ assert.equal(a.partial,true);
+ assert.deepEqual(a.issues,['invalid_daily_report']);
+ assert.equal(a.totalOFD,0);
+ assert.equal(a.couriers.length,0);
+});
+test('poisoned stored daily row cannot double-count the same courier',()=>{
+ const s=planPerformanceSnapshots(report([record('D1',4,3)]))[0];
+ const a=buildPerformanceStatistics([{...s,
+  rows:[...s.rows,{...s.rows[0]}],
+  totalOFD:8,totalDelivered:6,courierCount:2,
+  status:'provisional'}]);
+ assert.equal(a.partial,true);
+ assert.deepEqual(a.issues,['duplicate_courier_record']);
+ assert.equal(a.totalOFD,0);
+ assert.equal(a.couriers.length,0);
+});
+test('inconsistent stored OFD or Delivered total refuses the entire daily document',()=>{
+ const s=planPerformanceSnapshots(report([record('D1',4,3)]))[0];
+ const a=buildPerformanceStatistics([{...s,totalOFD:5,status:'final'}]);
+ assert.equal(a.partial,true);
+ assert.deepEqual(a.issues,['invalid_daily_totals']);
+ assert.equal(a.reportDays,0);
+ assert.equal(a.totalDelivered,0);
+ const b=buildPerformanceStatistics([{...s,totalDelivered:4,status:'final'}]);
+ assert.deepEqual(b.issues,['invalid_daily_totals']);
+});
+test('empty poisoned daily document is not mistaken for verified zero',()=>{
+ const s=planPerformanceSnapshots(report([record('D1',4,3)]))[0];
+ const a=buildPerformanceStatistics([{...s,
+  rows:[],totalOFD:0,totalDelivered:0,courierCount:0,
+  status:'provisional'}]);
+ assert.equal(a.partial,true);
+ assert.deepEqual(a.issues,['invalid_daily_report']);
+ assert.equal(a.reportDays,0);
+});
+
 test('dataset with different vendor history preserves both vendors',()=>{
  const s=planPerformanceSnapshots(report([record('D1',4,3,'DS(AKE)','A'),
  record('D1',6,6,'DS(AKE)','B','2026-10-31')]));
