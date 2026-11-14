@@ -30,6 +30,39 @@ t('unknown imported snapshot excluded from trend',()=>{
  const s=planInventorySnapshot(inhub(m),m,'2026-10-31');
  assert.equal(inventoryHistory([s,{key:'INVALID'}]).rows.length,1);
 });
+t('poisoned stored Inventory total cannot be displayed as verified',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31');
+ const result=inventoryHistory([{...s,total:3}]);
+ assert.equal(result.rows.length,0);
+ assert.deepEqual(result.errors,['invalid_inventory_report']);
+});
+t('duplicate area or receive date from privileged source is not accepted',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31');
+ const extraArea={...s.areas[0],counts:[...s.areas[0].counts]};
+ const byArea=inventoryHistory([{...s,areas:[...s.areas,extraArea]}]);
+ assert.equal(byArea.rows.length,0);
+ assert.deepEqual(byArea.errors,['invalid_inventory_report']);
+ const byDate=inventoryHistory([{...s,dates:[...s.dates,s.dates[0]]}]);
+ assert.equal(byDate.rows.length,0);
+ assert.deepEqual(byDate.errors,['invalid_inventory_report']);
+});
+t('malformed, negative or future dated persisted bucket fails closed',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31');
+ const bad=structuredClone(s);bad.areas[0].counts[0]=-1;
+ const a=inventoryHistory([bad]);
+ assert.equal(a.rows.length,0);
+ assert.deepEqual(a.errors,['invalid_inventory_report']);
+ const future=inventoryHistory([{...s,date:'2026-10-28',
+  key:'2026-10-28__DS(AKE)'}]);
+ assert.equal(future.rows.length,0);
+ assert.deepEqual(future.errors,['invalid_inventory_report']);
+});
+t('missing or empty stored Inventory areas cannot be disguised as a zero',()=>{
+ const s=planInventorySnapshot(inhub(m),m,'2026-10-31');
+ const result=inventoryHistory([{...s,areas:[],total:0}]);
+ assert.equal(result.rows.length,0);
+ assert.deepEqual(result.errors,['invalid_inventory_report']);
+});
 const snap=planInventorySnapshot(inhub(m),m,'2026-10-31');
 assert.match(await inventoryHash(snap),/^[a-f0-9]{64}$/);passed++;
 console.log('PASS: '+passed+' In-Hub station snapshots, receive dates and history dedup cases');
