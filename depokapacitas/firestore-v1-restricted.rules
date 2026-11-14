@@ -477,16 +477,15 @@ service cloud.firestore {
     // store two driver rows that case-fold or whitespace-fold to one DA, or
     // point a keyed DA at an index whose original row is a different driver.
     // Rules have no loop and each allow is capped at 1000 evaluated
-    // expressions. This scan covers 18 driver rows, above the current
-    // 12-courier fleet, and does not read past the real array. A longer list
-    // fails closed. A unique list still allows a booking. The selected row
-    // must own the booked DA. One flottaVehicles or flottaVehicleClaims
-    // document per normalized plate cannot reveal a second separator-folded
-    // plate inside the same archive array: the privileged writer creates that
-    // single document too. Reading every raw plate does not fit beside this
-    // scan without denying a clean 12/14 booking.
+    // expressions. This scan covers 20 driver rows and does not read past
+    // the real array. A unique list of that size still allows a booking. A
+    // longer list fails closed. Twenty-five rows do not fit in the same
+    // budget without also denying a clean booking. The selected row must own
+    // the booked DA. The claim date is the booking date, and that booking
+    // still passes validDay. One vehicle claim cannot reveal a second
+    // separator-folded plate in the archive array.
     function driversNotDup(rows, id, index) {
-      return rows is list && rows.size() >= 1 && rows.size() <= 18
+      return rows is list && rows.size() >= 1 && rows.size() <= 20
         && (0 == index || !(rows[0].daCode is string && rows[0].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.replace('[[:space:]]', '').upper() == id))
@@ -504,12 +503,17 @@ service cloud.firestore {
         && (rows.size() <= 14 || 14 == index || !(rows[14].daCode is string && rows[14].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 16 || 16 == index || !(rows[16].daCode is string && rows[16].daCode.replace('[[:space:]]', '').upper() == id))
-        && (rows.size() <= 17 || 17 == index || !(rows[17].daCode is string && rows[17].daCode.replace('[[:space:]]', '').upper() == id));
+        && (rows.size() <= 17 || 17 == index || !(rows[17].daCode is string && rows[17].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 18 || 18 == index || !(rows[18].daCode is string && rows[18].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 19 || 19 == index || !(rows[19].daCode is string && rows[19].daCode.replace('[[:space:]]', '').upper() == id));
     }
-    function claimSourceIsUnique(bookingId, driverId) {
+    function claimSourceIsUnique(bookingId, driverId, claimDate) {
       let booking = getAfter(/databases/$(database)/documents/bookings/$(bookingId)).data;
       let fleet = getAfter(/databases/$(database)/documents/flottaSharedState/current).data;
       return booking.driverId == driverId
+        && booking.date == claimDate
+        && booking.vehicleId is string
+        && bookingId == claimDate + '__' + booking.vehicleId
         && booking.driverIndex is int
         // A privileged writer can forge a keyed master pointing to a slot
         // that belongs to a DIFFERENT original Fleet DA, even without any
@@ -576,16 +580,12 @@ service cloud.firestore {
       allow read: if member();
       allow create: if editorOnce()
         && exactFields(request.resource.data,['date','driverId','bookingId'])
-        && validDay(request.resource.data.date)
         && bookingDriverOccupancy(request.resource.data)
         && validDriverCode(request.resource.data.driverId)
         && textField(request.resource.data.bookingId,120)
         && key == request.resource.data.date + '__' + request.resource.data.driverId
         && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
-        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == request.resource.data.date
-        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
-        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId
-        && claimSourceIsUnique(request.resource.data.bookingId, request.resource.data.driverId);
+        && claimSourceIsUnique(request.resource.data.bookingId, request.resource.data.driverId, request.resource.data.date);
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));

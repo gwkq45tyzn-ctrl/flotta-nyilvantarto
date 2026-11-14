@@ -7,8 +7,9 @@
  * Positive: unique 12/14 archive ALLOW, including a non-zero index and a
  * hyphenated DA. Negative: case-folded driver duplicates already inside the
  * sealed archive DENY at index zero, including a non-adjacent row and the
- * last slot of the 18-row window, and a padded alias such as "  da0001  ".
- * A 19-row unique archive DENY because the window cannot prove it.
+ * last slot of the 20-row window, and a padded alias such as "  da0001  ".
+ * A 21-row unique archive DENY because the window cannot prove it.
+ * A unique 20-driver fleet still books. Twenty-five does not fit.
  * Plate separator-folding is outside this budget: one claim document cannot
  * see the second array row.
  * Run only under firebase emulators:exec --only firestore.
@@ -181,13 +182,13 @@ async function main(){
     await mustDeny('privileged padded whitespace duplicate DA denies index-zero booking',
       ()=>book('2099-03-15','DA0001','ABC001',0,0,80));
 
-    const edge=fleet(18,1);
-    edge.drivers[17]=driver('da0001',500);
+    const edge=fleet(20,1);
+    edge.drivers[19]=driver('da0001',500);
     await seed(edge.drivers,edge.vehicles,{
       driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
       vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
     });
-    await mustDeny('duplicate in the last slot of the 18-row window denies index-zero booking',
+    await mustDeny('duplicate in the last slot of the 20-row window denies index-zero booking',
       ()=>book('2099-03-09','DA0001','ABC001',0,0,80));
 
     const forgedVehicle=fleet(1,2);
@@ -199,21 +200,21 @@ async function main(){
     await mustDeny('privileged forged vehicle index 0 belongs to a different plate',
       ()=>book('2099-03-14','DA0001','XYZ999',0,0,80));
 
-    const full=fleet(18,1);
+    const full=fleet(20,1);
     await seed(full.drivers,full.vehicles,{
       driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
       vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
     });
     await book('2099-03-12','DA0001','ABC001',0,0,80);
     assert.equal((await getDoc(doc(client,'bookings','2099-03-12__ABC001'))).exists(),true);
-    console.log('PASS ALLOW [E+SDK]: unique 18-driver archive at the proof-window limit still books');
+    console.log('PASS ALLOW [E+SDK]: unique 20-driver archive at the proof-window limit still books');
 
-    const over=fleet(19,1);
+    const over=fleet(21,1);
     await seed(over.drivers,over.vehicles,{
       driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
       vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
     });
-    await mustDeny('unique archive longer than the 18-row proof window fails closed',
+    await mustDeny('unique archive longer than the 20-row proof window fails closed',
       ()=>book('2099-03-10','DA0001','ABC001',0,0,80));
 
     const clean=fleet(1,1);
