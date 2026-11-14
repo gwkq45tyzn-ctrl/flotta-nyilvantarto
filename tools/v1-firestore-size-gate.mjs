@@ -24,7 +24,7 @@ export function advisoryJsonSize(obj) {
 }
 function validPart(part){
   return typeof part==='string'&&part!==''&&!['.','..'].includes(part)&&
-    !part.includes('/')&&!/^__.*__$/.test(part)&&Buffer.byteLength(part,'utf8')<=1500;
+    part.isWellFormed()&&!part.includes('/')&&!/^__.*__$/.test(part)&&Buffer.byteLength(part,'utf8')<=1500;
 }
 function documentNameBytes(path){
   if(typeof path!=='string')throw Error('INVALID_DOCUMENT_PATH');
@@ -37,6 +37,7 @@ function documentNameBytes(path){
 }
 function validateFields(node,depth=0,path=''){
   if(Array.isArray(node)){
+    if(node.some(Array.isArray))throw Error('FIRESTORE_NESTED_ARRAY');
     if(depth+1>MAX_FIELD_DEPTH)throw Error('FIRESTORE_FIELD_DEPTH_EXCEEDED');
     node.forEach(v=>validateFields(v,depth+1,path));
     return;
@@ -45,15 +46,16 @@ function validateFields(node,depth=0,path=''){
     if(depth+1>MAX_FIELD_DEPTH)throw Error('FIRESTORE_FIELD_DEPTH_EXCEEDED');
     for(const [name,value] of Object.entries(node)){
       if(!validPart(name))throw Error('FIRESTORE_FIELD_NAME_INVALID');
-      const fieldPath=path?path+'.'+name:name;
-      // Conservatively refuse huge raw names. FieldPath quoting and
-      // SDK field-mask encoding still need exact independent validation.
+      const segment=/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+        ?name:'`'+name.replace(/[\\`]/g,'\\$&')+'`';
+      const fieldPath=path?path+'.'+segment:segment;
       if(Buffer.byteLength(fieldPath,'utf8')>1500)
         throw Error('FIRESTORE_FIELD_PATH_LIMIT_EXCEEDED');
       validateFields(value,depth+1,fieldPath);
     }
     return;
   }
+  if(typeof node==='string'&&!node.isWellFormed())throw Error('INVALID_FIRESTORE_UTF8');
   if(typeof node==='string'&&strSize(node)>FIELD_VALUE_LIMIT)
     throw Error('FIRESTORE_FIELD_VALUE_LIMIT_EXCEEDED');
 }

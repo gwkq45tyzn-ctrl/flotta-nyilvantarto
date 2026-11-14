@@ -2,6 +2,8 @@ name: iMile V1 #185 variable four-block migration rollback
 on:
   pull_request:
     paths:
+      - 'staging/imile-management/fleet/v1-firestore-wire-size*'
+      - 'staging/imile-management/fleet/package*.json'
       - 'tools/v1-variable-block-migration.mjs'
       - 'tools/v1-variable-block-migration.test.mjs'
       - 'tools/v1-migration-dryrun.mjs'
@@ -32,7 +34,8 @@ jobs:
       - name: Offline positive and negative migration checks
         run: |
           git rev-parse HEAD
-          node --test tools/v1-variable-block-migration.test.mjs \
+          node --test staging/imile-management/fleet/v1-firestore-wire-size.test.mjs \
+            tools/v1-variable-block-migration.test.mjs \
             tools/v1-migration-dryrun.test.mjs \
             tools/v1-firestore-size-gate.test.mjs
       - name: Emulator interrupted 12/14/14/5 and larger unequal source
@@ -43,4 +46,4 @@ jobs:
             --config firebase.staging-emulator.json \
             "node staging/imile-management/fleet/v1-variable-block-migration-drill.mjs"
       - name: Scope
-        run: echo "Synthetic emulator only. Encoded size stays unverified. No production approval, seal, or import authority."
+        run: echo "Synthetic emulator only. Measures v1 Document protobufs for the synthetic source, masters and claims. No production approval, seal, or import authority."

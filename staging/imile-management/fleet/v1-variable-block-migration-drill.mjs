@@ -6,8 +6,9 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
-import {collection,doc,deleteDoc,getDoc,getDocs,setDoc,updateDoc,writeBatch,runTransaction}
+import {collection,doc,deleteDoc,getDoc,getDocs,setDoc,updateDoc,runTransaction}
   from 'firebase/firestore';
+import {measureDocumentSet} from './v1-firestore-wire-size.mjs';
 import {sha256} from '../../../tools/v1-migration-dryrun.mjs';
 import {
   PAIR_CHUNK,MAX_BATCH_WRITES,syntheticFourBlockSource,projectBlockPairs,
@@ -37,12 +38,31 @@ function assertLocalOnly(){
 class VariableBlockSession{
   constructor(db,source){
     this.db=db;
-    this.source=source;
     this.prepared=projectBlockPairs(source);
+    this.source=structuredClone(source);
+    const metadata={revision:1,sealed:false,migrationSourceSha256:this.prepared.sourceSha256};
+    for(const [key,value] of Object.entries(metadata)){
+      if(Object.hasOwn(source,key)&&source[key]!==value)throw Error('SOURCE_METADATA_COLLISION: '+key);
+    }
+    this.archive={...this.source,...metadata};
+    this.archiveDigest=sha256(this.archive);
+    const sourceBytes=measureDocumentSet(db,SOURCE,this.archive);
+    let maxKeyedBytes=0;
+    for(const pair of this.prepared.pairs){
+      maxKeyedBytes=Math.max(maxKeyedBytes,measureDocumentSet(db,pair.masterPath,pair.master),
+        measureDocumentSet(db,pair.claimPath,pair.claim));
+    }
+    this.wireSize={sourceBytes,maxKeyedBytes,measuredDocuments:1+2*this.prepared.pairs.length};
     this.chunks=chunkPairs(this.prepared.pairs,PAIR_CHUNK);
     this.journalRef=doc(db,...JOURNAL.split('/'));
     this.sourceRef=doc(db,...SOURCE.split('/'));
     this.approvalRef=doc(db,...APPROVAL.split('/'));
+  }
+  verifySource(archive){
+    if(archive.sealed!==false||archive.revision!==1||
+       archive.migrationSourceSha256!==this.prepared.sourceSha256)
+      throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+    if(sha256(archive)!==this.archiveDigest)throw Error('SOURCE_BLOCK_DRIFT');
   }
   async loadKeyed(){
     const out={};
@@ -73,14 +93,7 @@ class VariableBlockSession{
       throw Error('CLOSING_TRUST_MIXED_INTO_SOURCE');
     const sourceSnap=await getDoc(this.sourceRef);
     if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
-    const sourceData=sourceSnap.data();
-    if(sourceData.sealed!==false||sourceData.revision!==1||
-       sourceData.migrationSourceSha256!==this.prepared.sourceSha256)
-      throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
-    for(const key of BLOCKS){
-      if(sha256(sourceData[key])!==sha256(this.source[key]))
-        throw Error('SOURCE_BLOCK_DRIFT');
-    }
+    this.verifySource(sourceSnap.data());
     if(!Number.isSafeInteger(journal.committedChunks)||
        journal.committedChunks<0||journal.committedChunks>this.chunks.length)
       throw Error('FORGED_OR_STALE_CHECKPOINT');
@@ -107,8 +120,8 @@ class VariableBlockSession{
       for(const pair of chunk){
         const masterCol=pair.masterPath.split('/')[0];
         const claimCol=pair.claimPath.split('/')[0];
-        if(keyed[masterCol].has(pair.id))masters[pair.id]=keyed[masterCol].get(pair.id);
-        if(keyed[claimCol].has(pair.id))claims[pair.id]=keyed[claimCol].get(pair.id);
+        if(keyed[masterCol].has(pair.id))masters[pair.masterPath]=keyed[masterCol].get(pair.id);
+        if(keyed[claimCol].has(pair.id))claims[pair.claimPath]=keyed[claimCol].get(pair.id);
         expected[masterCol].add(pair.id);
         expected[claimCol].add(pair.id);
       }
@@ -152,17 +165,7 @@ class VariableBlockSession{
   async verifyRollbackRemainder(fence){
     const sourceSnap=await getDoc(this.sourceRef);
     if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
-    const sourceData=sourceSnap.data();
-    if(sourceData.sealed!==false||sourceData.revision!==1||
-       sourceData.migrationSourceSha256!==this.prepared.sourceSha256)
-      throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
-    // A privileged writer can change source arrays without changing the
-    // stored SHA field. The interrupted rollback must not silently finish
-    // against a different rich source snapshot.
-    for(const block of BLOCKS){
-      if(sha256(sourceData[block])!==sha256(this.source[block]))
-        throw Error('SOURCE_BLOCK_DRIFT');
-    }
+    this.verifySource(sourceSnap.data());
     // Resume is safe only if the *entire* keyed/receipt workspace matches
     // exactly the not-yet-deleted chunk suffix. A new foreign master, claim
     // or receipt added during the rollback pause must block journal reset.
@@ -209,8 +212,8 @@ class VariableBlockSession{
       for(const pair of chunk){
         const master=await getDoc(doc(this.db,...pair.masterPath.split('/')));
         const claim=await getDoc(doc(this.db,...pair.claimPath.split('/')));
-        if(master.exists())masters[pair.id]=master.data();
-        if(claim.exists())claims[pair.id]=claim.data();
+        if(master.exists())masters[pair.masterPath]=master.data();
+        if(claim.exists())claims[pair.claimPath]=claim.data();
       }
       const assessed=assessChunkReadback({
         chunk,masters,claims,sourceSha256:this.prepared.sourceSha256
@@ -251,14 +254,8 @@ class VariableBlockSession{
            journalSnap.data().rollbackFence||
            journalSnap.data().closed===true)
           throw Error('STALE_IMPORT_CHECKPOINT');
-        if(!sourceSnap.exists()||sourceSnap.data().sealed!==false||
-           sourceSnap.data().revision!==1||
-           sourceSnap.data().migrationSourceSha256!==this.prepared.sourceSha256)
-          throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
-        for(const block of BLOCKS){
-          if(sha256(sourceSnap.data()[block])!==sha256(this.source[block]))
-            throw Error('SOURCE_BLOCK_DRIFT');
-        }
+        if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
+        this.verifySource(sourceSnap.data());
       }else if(journalSnap.exists()||sourceSnap.exists()){
         throw Error('STALE_IMPORT_CHECKPOINT');
       }
@@ -269,10 +266,7 @@ class VariableBlockSession{
       if(current.some(snap=>snap.exists()))
         throw Error('CHUNK_PATH_ALREADY_EXISTS');
       if(!state.journal){
-        tx.set(this.sourceRef,{
-          ...this.source,revision:1,sealed:false,
-          migrationSourceSha256:this.prepared.sourceSha256
-        });
+        tx.set(this.sourceRef,this.archive);
       }
       for(const pair of chunk){
         tx.set(doc(this.db,...pair.masterPath.split('/')),pair.master);
@@ -385,14 +379,7 @@ class VariableBlockSession{
           fence.sourceSha256!==this.prepared.sourceSha256){
           throw Error('ROLLBACK_FENCE_STALE');
         }
-        const archive=currentSource.data();
-        if(archive.revision!==1||archive.sealed!==false||
-           archive.migrationSourceSha256!==this.prepared.sourceSha256)
-          throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
-        for(const block of BLOCKS){
-          if(sha256(archive[block])!==sha256(this.source[block]))
-            throw Error('SOURCE_BLOCK_DRIFT');
-        }
+        this.verifySource(currentSource.data());
         // Firestore revalidates all these transaction reads at commit; a
         // concurrent owner of a target row must cause retry then DENY, not
         // deletion of unverified content. The journal CAS alone cannot see
@@ -425,7 +412,7 @@ class VariableBlockSession{
     if(sourceSnap.exists())assert.equal(sourceSnap.data().sealed,false);
     return {rollbackBatches};
   }
-  async close(){
+  async close(options={}){
     const state=await this.verifyCommitted();
     const approval=await getDoc(this.approvalRef);
     const decision=localCloseDecision({
@@ -434,17 +421,21 @@ class VariableBlockSession{
       alreadyClosed:state.closed
     });
     if(!decision.ok)throw Error(decision.reason);
-    await updateDoc(this.journalRef,{
-      closed:true,
-      sourceTrust:decision.sourceTrust,
-      closingTrust:decision.closingTrust,
-      sealed:false,
-      authorizedForImport:false,
-      productionClosingTrust:false,
-      firestoreEncodedSizeVerified:false
+    if(!state.journal||state.journal.rollbackFence)throw Error('STALE_CLOSE_CHECKPOINT');
+    if(options.afterVerify)await options.afterVerify();
+    await runTransaction(this.db,async tx=>{
+      const [journal,archive,policy]=await Promise.all([
+        tx.get(this.journalRef),tx.get(this.sourceRef),tx.get(this.approvalRef)
+      ]);
+      if(policy.exists())throw Error('CLOSING_TRUST_MUST_NOT_BE_MIGRATION_APPROVAL');
+      if(!journal.exists()||sha256(journal.data())!==sha256(state.journal))
+        throw Error('STALE_CLOSE_CHECKPOINT');
+      if(!archive.exists())throw Error('ORIGINAL_SOURCE_MISSING');
+      this.verifySource(archive.data());
+      tx.update(this.journalRef,{closed:true,sourceTrust:decision.sourceTrust,
+        closingTrust:decision.closingTrust,sealed:false,authorizedForImport:false,
+        productionClosingTrust:false,firestoreEncodedSizeVerified:false});
     });
-    assert.equal((await getDoc(this.sourceRef)).data().sealed,false);
-    assert.equal((await getDoc(this.approvalRef)).exists(),false);
     return decision;
   }
   async unseal(){
@@ -504,6 +495,9 @@ async function main(){
   const summary={shapes:[]};
   try{
     const smallSource=syntheticFourBlockSource(SMALL);
+    // These are valid, independent business keys in different collections.
+    smallSource.vehicles[0].rendszam=smallSource.drivers[10].daCode;
+    smallSource.extra={future:{preserve:'árvíztűrő'}};
     const smallPrepared=projectBlockPairs(smallSource);
     assert.equal(smallPrepared.pairs.length,26);
     assert.equal(smallPrepared.firestoreEncodedSizeVerified,false);
@@ -512,6 +506,14 @@ async function main(){
     const client=env.authenticatedContext(uid,{email}).firestore();
     await env.withSecurityRulesDisabled(async ctx=>{
     const db=ctx.firestore();
+    // A short JSON string representation can still form a >1-MiB Document.
+    const dense={...smallSource,wireProbe:Array(240000).fill('')};
+    assert.equal(projectBlockPairs(dense).size.advisoryOk,true);
+    assert.throws(()=>new VariableBlockSession(db,dense),/FIRESTORE_DOCUMENT_PROTO_LIMIT/);
+    assert.throws(()=>new VariableBlockSession(db,{...smallSource,sealed:true}),/SOURCE_METADATA_COLLISION/);
+    for(const path of [SOURCE,JOURNAL])assert.equal((await getDoc(doc(db,path))).exists(),false);
+    for(const name of [...KEYED,RECEIPTS])assert.equal((await getDocs(collection(db,name))).empty,true);
+    console.log('PASS DENY [E+SDK]: encoded oversized archive and metadata collision blocked before first write');
     const foreignSource=doc(db,'flottaSharedState','current');
     const foreignMaster=doc(db,'flottaDrivers','FOREIGN-KEEP');
     const foreignClaim=doc(db,'flottaDriverClaims','FOREIGN-KEEP');
@@ -673,6 +675,21 @@ async function main(){
     const retry=new VariableBlockSession(db,smallSource);
     await retry.importAll();
     await readback(client,smallSource,smallPrepared);
+    // A cooperating rollback may finish between close's scan and its write.
+    await assert.rejects(()=>retry.close({afterVerify:()=>new VariableBlockSession(db,smallSource).rollback()}),
+      /STALE_CLOSE_CHECKPOINT/);
+    assert.equal((await getDoc(retry.journalRef)).data().closed,false);
+    assert.equal((await getDoc(retry.journalRef)).data().committedChunks,0);
+    await retry.importAll();
+    await assert.rejects(()=>retry.close({afterVerify:()=>updateDoc(retry.sourceRef,
+      {extra:{future:{preserve:'changed'}}})}),/SOURCE_BLOCK_DRIFT/);
+    assert.equal((await getDoc(retry.journalRef)).data().closed,false);
+    await updateDoc(retry.sourceRef,{extra:smallSource.extra});
+    await assert.rejects(()=>retry.close({afterVerify:()=>setDoc(retry.approvalRef,{test:true})}),
+      /CLOSING_TRUST_MUST_NOT_BE_MIGRATION_APPROVAL/);
+    assert.equal((await getDoc(retry.journalRef)).data().closed,false);
+    await deleteDoc(retry.approvalRef);
+    console.log('PASS DENY [E+SDK]: stale close after rollback, changed rich metadata and concurrent approval');
     const closed=await retry.close();
     assert.equal(closed.sourceTrust,'readback-verified');
     assert.equal(closed.closingTrust,'locally-closed-not-production');
@@ -794,6 +811,7 @@ async function main(){
 
     summary.shapes.push({
       counts:SMALL,
+      documentProto:retry.wireSize,
       driverMasters:smallPrepared.counts.drivers,
       vehicleMasters:smallPrepared.counts.vehicles,
       masterAndClaimPairs:smallPrepared.pairs.length,
@@ -805,6 +823,7 @@ async function main(){
     });
     summary.shapes.push({
       counts:LARGE,
+      documentProto:large.wireSize,
       keyedPairs:largePrepared.pairs.length,
       rollbackBatches:largeRollback.rollbackBatches,
       sourceSha256:largePrepared.sourceSha256,
