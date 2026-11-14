@@ -33,6 +33,23 @@ export function planPerformanceSnapshots(report){
  return [...byStation.values()].map(x=>({...x,rows:x.rows.sort((a,b)=>compare(a.daCode,b.daCode)),courierCount:x.rows.length}))
   .sort((a,b)=>compare(a.key,b.key));
 }
+/**
+ * Firestore query promises are not cancellable. Fence every stats refresh and
+ * every Auth session transition so a late result cannot repaint the UI after
+ * a newer refresh / sign-out / sign-in. This controls rendering only; it is
+ * not a claim of server-side authorization.
+ */
+export function createStatsReadGeneration(){
+ let generation=0;
+ return Object.freeze({
+  invalidate(){generation+=1;},
+  begin(){
+   const own=++generation;
+   return ()=>generation===own;
+  }
+ });
+}
+
 /** No averaging percentages: all ratios derive from summed packages. */
 export function buildPerformanceStatistics(dailyDocs){
  if(!Array.isArray(dailyDocs))throw Error('Hiányoznak a statisztikai források.');
