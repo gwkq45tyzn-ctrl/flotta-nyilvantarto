@@ -35,6 +35,30 @@ export const canonicalInventory=s=>JSON.stringify({
  date:s.date,station:s.station,dates:s.dates,
  areas:s.areas.map(a=>[a.area,...a.counts])
 });
+/**
+ * Prevent a stale/privileged writer from forging an old contentHash to make
+ * an inventory replacement appear idempotent. The complete rich area/date
+ * buckets and declared total must match the newly approved local candidate.
+ * This does NOT authenticate a production signer or durable audit chain.
+ */
+export function exactStoredInventoryNoOp(previous,candidate,expectedHash){
+ if(!previous||!candidate||typeof expectedHash!=='string'||
+    !/^[a-f0-9]{64}$/.test(expectedHash)||
+    previous.contentHash!==expectedHash||
+    previous.key!==candidate.key||
+    previous.date!==candidate.date||
+    previous.station!==candidate.station||
+    previous.total!==candidate.total||
+    !Array.isArray(previous.dates)||
+    !Array.isArray(previous.areas)||
+    previous.dates.length!==candidate.dates?.length||
+    previous.areas.length!==candidate.areas?.length)
+  return false;
+ try{
+  return canonicalInventory(previous)===canonicalInventory(candidate);
+ }catch{return false;}
+}
+
 export async function inventoryHash(s){
  const bytes=new TextEncoder().encode(canonicalInventory(s));
  return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))]
