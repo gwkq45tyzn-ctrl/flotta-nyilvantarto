@@ -178,13 +178,23 @@ class VariableBlockSession{
     return step;
   }
   async rollback(){
-    const journalSnap=await getDoc(this.journalRef);
-    if(journalSnap.exists()&&journalSnap.data().closed===true)
-      throw Error('POST_CLOSE_ROLLBACK_DENIED');
+    // Never delete all records returned from a collection query. Another
+    // import, stale client or privileged writer may own some of them.
+    // Validate the complete persisted receipt chain, source SHA and absence
+    // of orphans BEFORE any destructive write. In a journal-less workspace,
+    // verifyCommitted also rejects a pre-existing source/master/claim.
+    const state=await this.verifyCommitted();
+    if(state.closed)throw Error('POST_CLOSE_ROLLBACK_DENIED');
+    if(!state.journal)return {rollbackBatches:0};
+    // Derive deletion targets exclusively from the RECEIPTED chunk manifest.
+    // Do not extend scope if an unrelated keyed document appears later.
     const refs=[];
-    for(const name of [...KEYED,RECEIPTS]){
-      const snap=await getDocs(collection(this.db,name));
-      for(const row of snap.docs)refs.push(row.ref);
+    for(let i=0;i<state.committed;i++){
+      for(const pair of this.chunks[i]){
+        refs.push(doc(this.db,...pair.masterPath.split('/')));
+        refs.push(doc(this.db,...pair.claimPath.split('/')));
+      }
+      refs.push(doc(this.db,RECEIPTS,String(i).padStart(4,'0')));
     }
     let rollbackBatches=0;
     for(let i=0;i<refs.length;i+=MAX_BATCH_WRITES){
@@ -194,14 +204,15 @@ class VariableBlockSession{
       await batch.commit();
       rollbackBatches++;
     }
-    if(journalSnap.exists()){
-      await setDoc(this.journalRef,this.journalBody(0));
-    }
-    for(const name of KEYED){
+    await setDoc(this.journalRef,this.journalBody(0));
+    for(const name of [...KEYED,RECEIPTS]){
       assert.equal((await getDocs(collection(this.db,name))).size,0,name);
     }
     const sourceSnap=await getDoc(this.sourceRef);
     if(sourceSnap.exists())assert.equal(sourceSnap.data().sealed,false);
+    // Deliberate limitation: a crash DURING multi-batch deletion blocks
+    // subsequent verifyCommitted(). No safe restart is claimed without a
+    // transactionally fenced persisted rollback cursor.
     return {rollbackBatches};
   }
   async close(){
