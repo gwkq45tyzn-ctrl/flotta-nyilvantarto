@@ -544,6 +544,15 @@ async function main(){
     assert.equal((await getDoc(foreignResumeClaim)).exists(),true);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
     await deleteDoc(foreignResumeClaim);
+    // A foreign receipt arriving between deletion batches is just as unsafe
+    // as a foreign keyed document. It must not be silently ignored on resume.
+    const foreignReceipt=doc(db,RECEIPTS,'FOREIGN-RECEIPT');
+    await setDoc(foreignReceipt,{sourceSha256:largePrepared.sourceSha256,
+      chunkIndex:999,pairIds:[],pairDigest:'0'.repeat(64)});
+    await assert.rejects(()=>parked.rollback(),/FORGED_OR_STALE_CHECKPOINT/);
+    assert.equal((await getDoc(foreignReceipt)).exists(),true);
+    assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
+    await deleteDoc(foreignReceipt);
     // The hash stored in the source is not itself an authority: compare the
     // actual complete four rich arrays before resuming destructive work.
     const sourceSnapBefore=await getDoc(parked.sourceRef);
