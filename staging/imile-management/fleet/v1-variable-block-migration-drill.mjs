@@ -492,8 +492,27 @@ async function main(){
     assert.equal((await session.verifyCommitted()).committed,2);
     assert.equal((await getDocs(collection(db,RECEIPTS))).size,2);
     console.log('PASS DENY [E+SDK]: simultaneous importNext sessions observing same checkpoint yield exactly one atomic chunk commit');
-    step=await session.importNext();
-    assert.equal(step.committed,3);
+    // Deterministic rollback/import race: importer has verified committed=2
+    // but has not entered its atomic commit. Rollback resets the checkpoint
+    // and deletes owned data. The stale importer must NOT recreate chunk 2.
+    let releaseStaleImporter,notifyImportChecked;
+    const staleImportGate=new Promise(resolve=>{releaseStaleImporter=resolve;});
+    const importerChecked=new Promise(resolve=>{notifyImportChecked=resolve;});
+    const staleImport=new VariableBlockSession(db,smallSource).importNext({
+      afterVerify:async state=>{
+        assert.equal(state.committed,2);
+        notifyImportChecked();
+        await staleImportGate;
+      }
+    });
+    await importerChecked;
+    const interruptedByRollback=await new VariableBlockSession(db,smallSource).rollback();
+    assert.ok(interruptedByRollback.rollbackBatches>=1);
+    releaseStaleImporter();
+    await assert.rejects(staleImport,/STALE_IMPORT_CHECKPOINT/);
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,0);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).size,0);
+    console.log('PASS DENY [E+SDK]: rollback between importer verification and commit fences stale importer and preserves zero checkpoint');
     session=new VariableBlockSession(db,smallSource);
     step=await session.importAll();
     assert.equal(step.done,true);
