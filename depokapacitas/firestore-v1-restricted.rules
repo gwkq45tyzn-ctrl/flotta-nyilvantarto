@@ -506,6 +506,12 @@ service cloud.firestore {
       let fleet = getAfter(/databases/$(database)/documents/flottaSharedState/current).data;
       return booking.driverId == driverId
         && booking.driverIndex is int
+        // A privileged writer may invent a keyed master pointing to index 0
+        // even when that original array slot belongs to another driver.
+        // Duplicate checks alone do not establish that the selected driver
+        // actually EXISTS at the claimed original source index.
+        && fleet.drivers[booking.driverIndex].daCode is string
+        && fleet.drivers[booking.driverIndex].daCode.upper() == driverId
         && driversNotDup(fleet.drivers, booking.driverId, booking.driverIndex);
     }
     function bookingCreateAllowed(bookingId) {
