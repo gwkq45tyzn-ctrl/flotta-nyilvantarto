@@ -299,6 +299,7 @@ class VariableBlockSession{
     const maxWrites=options.maxWrites??MAX_BATCH_WRITES;
     const crashAfter=options.crashAfterBatches??0;
     if(!Number.isSafeInteger(maxWrites)||maxWrites<1||
+       maxWrites>MAX_BATCH_WRITES||
        !Number.isSafeInteger(crashAfter)||crashAfter<0)
       throw Error('INVALID_ROLLBACK_BATCH');
     const journalSnap=await getDoc(this.journalRef);
@@ -324,6 +325,9 @@ class VariableBlockSession{
       if(!state.journal)return {rollbackBatches:0};
       total=state.committed;
     }
+    // Test-only pause lets a cooperating importer commit after this complete
+    // ownership precheck but before the first destructive transaction.
+    if(options.afterVerify)await options.afterVerify({deletedThrough,total});
     let rollbackBatches=0;
     while(deletedThrough<total){
       const refs=[];
@@ -336,15 +340,47 @@ class VariableBlockSession{
         next++;
       }
       const finished=next===total;
-      const batch=writeBatch(this.db);
-      for(const ref of refs)batch.delete(ref);
-      if(finished)batch.set(this.journalRef,this.journalBody(0));
-      else batch.update(this.journalRef,{rollbackFence:{
-        sourceSha256:this.prepared.sourceSha256,
-        deletedThrough:next,
-        total
-      }});
-      await batch.commit();
+      const expectedDeletedThrough=deletedThrough;
+      // A non-transactional writeBatch could reset a journal after an
+      // importer committed a NEW chunk between rollback preflight and delete.
+      // Read the journal + pinned source *inside* the transaction that deletes
+      // this batch. Transactions conflict with the importer journal CAS.
+      await runTransaction(this.db,async tx=>{
+        const [currentJournal,currentSource]=await Promise.all([
+          tx.get(this.journalRef),tx.get(this.sourceRef)
+        ]);
+        if(!currentJournal.exists()||!currentSource.exists())
+          throw Error('ROLLBACK_FENCE_STALE');
+        const data=currentJournal.data();
+        if(data.committedChunks!==total||
+           data.sourceSha256!==this.prepared.sourceSha256||
+           data.closed===true)
+          throw Error('ROLLBACK_FENCE_STALE');
+        const fence=data.rollbackFence;
+        if(expectedDeletedThrough===0){
+          if(fence)throw Error('ROLLBACK_FENCE_STALE');
+        }else if(!fence||
+          fence.deletedThrough!==expectedDeletedThrough||
+          fence.total!==total||
+          fence.sourceSha256!==this.prepared.sourceSha256){
+          throw Error('ROLLBACK_FENCE_STALE');
+        }
+        const archive=currentSource.data();
+        if(archive.revision!==1||archive.sealed!==false||
+           archive.migrationSourceSha256!==this.prepared.sourceSha256)
+          throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+        for(const block of BLOCKS){
+          if(sha256(archive[block])!==sha256(this.source[block]))
+            throw Error('SOURCE_BLOCK_DRIFT');
+        }
+        for(const ref of refs)tx.delete(ref);
+        if(finished)tx.set(this.journalRef,this.journalBody(0));
+        else tx.update(this.journalRef,{rollbackFence:{
+          sourceSha256:this.prepared.sourceSha256,
+          deletedThrough:next,
+          total
+        }});
+      },{maxAttempts:5});
       rollbackBatches++;
       deletedThrough=next;
       if(!finished&&crashAfter&&rollbackBatches>=crashAfter)
@@ -492,15 +528,37 @@ async function main(){
     assert.equal((await session.verifyCommitted()).committed,2);
     assert.equal((await getDocs(collection(db,RECEIPTS))).size,2);
     console.log('PASS DENY [E+SDK]: simultaneous importNext sessions observing same checkpoint yield exactly one atomic chunk commit');
-    // Deterministic rollback/import race: importer has verified committed=2
+    // Reverse race: rollback has verified total=2, but a legal importer
+    // advances the checkpoint to 3 BEFORE the destructive rollback batch.
+    // The rollback transaction must reject, preserving all three chunks.
+    let releaseStaleRollback,notifyRollbackChecked;
+    const staleRollbackGate=new Promise(resolve=>{releaseStaleRollback=resolve;});
+    const rollbackChecked=new Promise(resolve=>{notifyRollbackChecked=resolve;});
+    const staleRollback=new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async state=>{
+        assert.equal(state.total,2);
+        assert.equal(state.deletedThrough,0);
+        notifyRollbackChecked();
+        await staleRollbackGate;
+      }
+    });
+    await rollbackChecked;
+    const importerAhead=await new VariableBlockSession(db,smallSource).importNext();
+    assert.equal(importerAhead.committed,3);
+    releaseStaleRollback();
+    await assert.rejects(staleRollback,/ROLLBACK_FENCE_STALE/);
+    assert.equal((await new VariableBlockSession(db,smallSource).verifyCommitted()).committed,3);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).size,3);
+    console.log('PASS DENY [E+SDK]: importer advances between rollback verification and delete; stale rollback cannot reset journal or erase chunks');
+    // Deterministic importer/rollback race: importer has verified committed=3
     // but has not entered its atomic commit. Rollback resets the checkpoint
-    // and deletes owned data. The stale importer must NOT recreate chunk 2.
+    // and deletes owned data. The stale importer must NOT recreate chunk 3.
     let releaseStaleImporter,notifyImportChecked;
     const staleImportGate=new Promise(resolve=>{releaseStaleImporter=resolve;});
     const importerChecked=new Promise(resolve=>{notifyImportChecked=resolve;});
     const staleImport=new VariableBlockSession(db,smallSource).importNext({
       afterVerify:async state=>{
-        assert.equal(state.committed,2);
+        assert.equal(state.committed,3);
         notifyImportChecked();
         await staleImportGate;
       }
