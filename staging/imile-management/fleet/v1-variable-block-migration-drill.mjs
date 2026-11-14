@@ -299,6 +299,7 @@ class VariableBlockSession{
     const maxWrites=options.maxWrites??MAX_BATCH_WRITES;
     const crashAfter=options.crashAfterBatches??0;
     if(!Number.isSafeInteger(maxWrites)||maxWrites<1||
+       maxWrites>MAX_BATCH_WRITES||
        !Number.isSafeInteger(crashAfter)||crashAfter<0)
       throw Error('INVALID_ROLLBACK_BATCH');
     const journalSnap=await getDoc(this.journalRef);
@@ -324,6 +325,9 @@ class VariableBlockSession{
       if(!state.journal)return {rollbackBatches:0};
       total=state.committed;
     }
+    // Test-only pause lets a cooperating importer commit after this complete
+    // ownership precheck but before the first destructive transaction.
+    if(options.afterVerify)await options.afterVerify({deletedThrough,total});
     let rollbackBatches=0;
     while(deletedThrough<total){
       const refs=[];
@@ -336,15 +340,47 @@ class VariableBlockSession{
         next++;
       }
       const finished=next===total;
-      const batch=writeBatch(this.db);
-      for(const ref of refs)batch.delete(ref);
-      if(finished)batch.set(this.journalRef,this.journalBody(0));
-      else batch.update(this.journalRef,{rollbackFence:{
-        sourceSha256:this.prepared.sourceSha256,
-        deletedThrough:next,
-        total
-      }});
-      await batch.commit();
+      const expectedDeletedThrough=deletedThrough;
+      // A non-transactional writeBatch could reset a journal after an
+      // importer committed a NEW chunk between rollback preflight and delete.
+      // Read the journal + pinned source *inside* the transaction that deletes
+      // this batch. Transactions conflict with the importer journal CAS.
+      await runTransaction(this.db,async tx=>{
+        const [currentJournal,currentSource]=await Promise.all([
+          tx.get(this.journalRef),tx.get(this.sourceRef)
+        ]);
+        if(!currentJournal.exists()||!currentSource.exists())
+          throw Error('ROLLBACK_FENCE_STALE');
+        const data=currentJournal.data();
+        if(data.committedChunks!==total||
+           data.sourceSha256!==this.prepared.sourceSha256||
+           data.closed===true)
+          throw Error('ROLLBACK_FENCE_STALE');
+        const fence=data.rollbackFence;
+        if(expectedDeletedThrough===0){
+          if(fence)throw Error('ROLLBACK_FENCE_STALE');
+        }else if(!fence||
+          fence.deletedThrough!==expectedDeletedThrough||
+          fence.total!==total||
+          fence.sourceSha256!==this.prepared.sourceSha256){
+          throw Error('ROLLBACK_FENCE_STALE');
+        }
+        const archive=currentSource.data();
+        if(archive.revision!==1||archive.sealed!==false||
+           archive.migrationSourceSha256!==this.prepared.sourceSha256)
+          throw Error('SOURCE_SHA_OR_SEAL_DRIFT');
+        for(const block of BLOCKS){
+          if(sha256(archive[block])!==sha256(this.source[block]))
+            throw Error('SOURCE_BLOCK_DRIFT');
+        }
+        for(const ref of refs)tx.delete(ref);
+        if(finished)tx.set(this.journalRef,this.journalBody(0));
+        else tx.update(this.journalRef,{rollbackFence:{
+          sourceSha256:this.prepared.sourceSha256,
+          deletedThrough:next,
+          total
+        }});
+      },{maxAttempts:5});
       rollbackBatches++;
       deletedThrough=next;
       if(!finished&&crashAfter&&rollbackBatches>=crashAfter)
