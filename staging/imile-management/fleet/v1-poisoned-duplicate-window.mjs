@@ -170,6 +170,18 @@ async function main(){
     await mustDeny('privileged poison at driver index 11 still denies index-zero booking',
       ()=>book('2099-03-06','DA0001','ABC001',0,0,80));
 
+    // Whitespace-normalized identity bypass: the privileged writer can seed
+    // a padded DA at a distant row. Uppercase-only equality ignores it even
+    // though normal source mapping trims both edges.
+    const padded=fleet(12,1);
+    padded.drivers[11]=driver('  da0001  ',500);
+    await seed(padded.drivers,padded.vehicles,{
+      driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged padded whitespace duplicate DA denies selected index-zero booking',
+      ()=>book('2099-03-14','DA0001','ABC001',0,0,80));
+
     const edge=fleet(16,1);
     edge.drivers[15]=driver('da0001',500);
     await seed(edge.drivers,edge.vehicles,{
