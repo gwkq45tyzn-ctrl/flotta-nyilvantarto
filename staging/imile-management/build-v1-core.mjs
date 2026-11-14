@@ -107,6 +107,11 @@ try{
   const reports=/<article class="card module reports">[\s\S]*?<\/article>/;
   if(!reports.test(html))throw Error('Report module scope anchor changed');
   html=html.replace(reports,'<!-- OFD + In-Hub excluded from V1; V1.1 only -->');
+  // Replace the hidden QA link with an inert ID: app.mjs expects the
+  // element, but an omitted route must never remain browser-navigable.
+  const qaLink='<a href="./qa/index.html" id="qaLink" hidden>Staging tesztadatok előkészítése</a>';
+  if(!html.includes(qaLink))throw Error('QA link changed: re-review');
+  html=html.replace(qaLink,'<span id="qaLink" hidden aria-hidden="true"></span>');
   // Full hub keeps a permanently hidden legacy QA anchor for historical
   // tests; the reduced offline core bundle must omit the URL entirely.
   const legacyQaAnchor=/<a\b[^>]*href="\.\/fleet\/operations\.html"[^>]*id="fleetMasterLink"[^>]*>[^<]*<\/a>/;
