@@ -8,7 +8,7 @@ const source=()=>({
     status:'aktiv',history:[{type:'service',km:1500}],
     note:'PRIVATE VEHICLE INFORMATION'}],
   drivers:[{id:'local-d1',daCode:'DA0001',name:'PRIVATE DRIVER NAME',
-    agency:'TEST VENDOR',status:'aktiv',phone:'PRIVATE PHONE NUMBER'}],
+    agency:'TEST VENDOR',status:'aktiv',kapacitas:80,phone:'PRIVATE PHONE NUMBER'}],
   fuelCards:[{id:'private-card'}],contacts:[{id:'private-contact'}]
 });
 const input=()=>({local:source(),server:source(),backup:source()});
