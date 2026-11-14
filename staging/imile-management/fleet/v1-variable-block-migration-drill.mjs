@@ -320,7 +320,6 @@ async function main(){
     console.log('PASS DENY [E+SDK]: absent ownership journal refuses preexisting archive/master/claim without overwriting');
 
     let step=await session.importNext();
-    let step=await session.importNext();
     assert.equal(step.committed,1);
     session=new VariableBlockSession(db,smallSource);
     assert.equal((await session.verifyCommitted()).committed,1);
