@@ -43,6 +43,8 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     const depHtml=readFileSync(join(dest,'depokapacitas/index.html'),'utf8');
     assert.doesNotMatch(depHtml,/data-view="attendance"/);
     assert.doesNotMatch(depHtml,/data-view="results"/);
+    assert.doesNotMatch(depHtml,/href="\\.\\/TELEPITES\\.md"/,
+      'Offline artifact must not expose an unbundled installation guide');
     assert.ok(gate.files.every(p=>existsSync(join(dest,p))), 'Every manifest file must actually exist');
     assert.deepEqual(Object.keys(gate.fileSha256),gate.files,
       'Integrity manifest must hash every emitted artifact file');
