@@ -39,6 +39,10 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.doesNotMatch(hub,/class="card module reports"/);
     assert.doesNotMatch(hub,/href="\.\/reports\/index\.html"/);
     assert.doesNotMatch(hub,/href="\.\/fleet\/operations\.html"/);
+    assert.equal(hub.includes('href="./qa/index.html"'),false,
+      'Packaged hub must not leak the omitted QA route');
+    assert.equal(hub.includes('<span id="qaLink"'),true,
+      'Hub must retain inert anchor ID for the JS menu handler');
     assert.match(hub,/href="\.\.\/\.\.\/index\.html" id="fleetLink"/);
     const depHtml=readFileSync(join(dest,'depokapacitas/index.html'),'utf8');
     assert.doesNotMatch(depHtml,/data-view="attendance"/);
