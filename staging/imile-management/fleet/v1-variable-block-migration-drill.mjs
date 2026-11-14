@@ -339,6 +339,26 @@ class VariableBlockSession{
         refs.push(...part);
         next++;
       }
+      // Restrict the destructive transaction to exactly the receipt-owned
+      // version of each master/claim. If a privileged process rewrites a
+      // target AFTER the out-of-transaction preflight, deleting that new
+      // content would silently discard someone else's data.
+      const expectedTargets=new Map();
+      for(let i=deletedThrough;i<next;i++){
+        const chunk=this.chunks[i];
+        for(const pair of chunk){
+          expectedTargets.set(pair.masterPath,pair.master);
+          expectedTargets.set(pair.claimPath,pair.claim);
+        }
+        expectedTargets.set(RECEIPTS+'/'+String(i).padStart(4,'0'),{
+          chunkIndex:i,
+          sourceSha256:this.prepared.sourceSha256,
+          pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
+          pairDigest:sha256(chunk.map(pair=>({
+            id:pair.id,master:pair.master,claim:pair.claim
+          })))
+        });
+      }
       const finished=next===total;
       const expectedDeletedThrough=deletedThrough;
       // A non-transactional writeBatch could reset a journal after an
@@ -372,6 +392,17 @@ class VariableBlockSession{
         for(const block of BLOCKS){
           if(sha256(archive[block])!==sha256(this.source[block]))
             throw Error('SOURCE_BLOCK_DRIFT');
+        }
+        // Firestore revalidates all these transaction reads at commit; a
+        // concurrent owner of a target row must cause retry then DENY, not
+        // deletion of unverified content. The journal CAS alone cannot see
+        // privileged modifications to keyed rows/receipts.
+        const currentTargets=await Promise.all(refs.map(ref=>tx.get(ref)));
+        for(let i=0;i<refs.length;i++){
+          const snapshot=currentTargets[i],expected=expectedTargets.get(refs[i].path);
+          if(!expected||!snapshot.exists()||
+             sha256(snapshot.data())!==sha256(expected))
+            throw Error('ROLLBACK_TARGET_CHANGED');
         }
         for(const ref of refs)tx.delete(ref);
         if(finished)tx.set(this.journalRef,this.journalBody(0));
@@ -577,6 +608,37 @@ async function main(){
     assert.equal(step.committed,chunkPairs(smallPrepared.pairs).length);
     await readback(client,smallSource,smallPrepared);
     console.log('PASS [E+SDK]: 12/14/14/5 interrupted resume and signed-in readback of 26 masters and 26 claims');
+
+    // Privileged SDK change AFTER rollback's complete initial scan, BEFORE
+    // its destructive transaction: this used to delete the altered master
+    // because the transaction read only journal and source archive.
+    const raceMasterPair=session.prepared.pairs[0];
+    const raceMasterRef=doc(db,...raceMasterPair.masterPath.split('/'));
+    const initialChunkCount=(await getDoc(session.journalRef)).data().committedChunks;
+    await assert.rejects(()=>new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async()=>{
+        await updateDoc(raceMasterRef,{history:[{kind:'UNOWNED_AFTER_PREFLIGHT'}]});
+      }
+    }),/ROLLBACK_TARGET_CHANGED/);
+    assert.equal((await getDoc(raceMasterRef)).data().history[0].kind,
+      'UNOWNED_AFTER_PREFLIGHT');
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,
+      initialChunkCount,'Failed rollback must preserve checkpoint');
+    await setDoc(raceMasterRef,raceMasterPair.master);
+    // The SAME safety contract must include receipt content; a forged
+    // receipt after preflight is never a valid reason to delete the chunk.
+    const raceReceipt=doc(db,RECEIPTS,'0000');
+    const intactReceipt=(await getDoc(raceReceipt)).data();
+    await assert.rejects(()=>new VariableBlockSession(db,smallSource).rollback({
+      afterVerify:async()=>{
+        await updateDoc(raceReceipt,{pairDigest:'0'.repeat(64)});
+      }
+    }),/ROLLBACK_TARGET_CHANGED/);
+    assert.equal((await getDoc(raceReceipt)).data().pairDigest,'0'.repeat(64));
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,
+      initialChunkCount);
+    await setDoc(raceReceipt,intactReceipt);
+    console.log('PASS DENY [E+SDK]: changed owned master/receipt after rollback preflight cannot be deleted by transaction');
 
     const tampered=new VariableBlockSession(db,smallSource);
     const first=tampered.prepared.pairs[0];
