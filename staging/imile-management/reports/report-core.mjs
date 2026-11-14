@@ -15,6 +15,12 @@ function calendarDate(x){
 }
 const date=x=>{const v=calendarDate(x);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
 const int=x=>typeof x==='number'?x:typeof x==='string'&&/^\d+$/.test(x.trim())?Number(x.trim()):NaN;
+// A numeric Excel Waybill is only lossless through Number.MAX_SAFE_INTEGER.
+// A longer tracking ID must come as an actual text cell, preserving every
+// digit and leading zero; never silently dedupe a rounded parcel ID.
+const waybill=x=>typeof x==='number'
+ ?(Number.isSafeInteger(x)&&x>=0?String(x):'')
+ :(typeof x==='string'?x.trim():'');
 const header=(matrix,required)=>{if(!Array.isArray(matrix)||!Array.isArray(matrix[0])||matrix.length>10002)throw Error('Hibás vagy túl nagy export.');const h=matrix[0].map(txt);if(new Set(h).size!==h.length)throw Error('Duplikált oszlopfejléc.');for(const k of required)if(!h.includes(k))throw Error('Hiányzó oszlop: '+k);return Object.fromEntries(h.map((v,i)=>[v,i]));};
 const data=matrix=>matrix.slice(1).filter(x=>Array.isArray(x)&&x.some(v=>txt(v)!==''));
 const cmp=(a,b)=>a.localeCompare(b,'hu',{numeric:true});
@@ -27,7 +33,7 @@ export function inhub(matrix){
  const h=header(matrix,['Waybill Number','LM Receive Date','Consignee city','Consignee zipcode']);
  const ids=new Set(),counts=new Map(),days=new Set(),areas=new Set(),issues=[];
  for(const [i,r]of data(matrix).entries()){
-  const id=txt(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
+  const id=waybill(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
   if(!id||!day||!area){issues.push({line:i+2,reason:'invalid_parcel_or_area'});continue;}
   if(ids.has(id)){issues.push({line:i+2,reason:'duplicate_waybill'});continue;}
   ids.add(id);days.add(day);areas.add(area);const k=JSON.stringify([area,day]);counts.set(k,(counts.get(k)||0)+1);
