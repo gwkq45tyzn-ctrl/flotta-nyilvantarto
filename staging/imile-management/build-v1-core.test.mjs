@@ -44,6 +44,19 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.doesNotMatch(depHtml,/data-view="attendance"/);
     assert.doesNotMatch(depHtml,/data-view="results"/);
     assert.ok(gate.files.every(p=>existsSync(join(dest,p))), 'Every manifest file must actually exist');
+    assert.deepEqual(Object.keys(gate.fileSha256),gate.files,
+      'Integrity manifest must hash every emitted artifact file');
+    for(const file of gate.files)
+      assert.equal(gate.fileSha256[file],sha(readFileSync(join(dest,file))),
+        'Emitted-byte digest mismatch: '+file);
+    const candidateDepotJs=readFileSync(join(dest,'depokapacitas/app.js'),'utf8');
+    assert.doesNotMatch(candidateDepotJs,/fleet\\/operations\\.html/,
+      'Packaged Depot must never point at the omitted Fleet prototype');
+    assert.match(candidateDepotJs,/href="\\.\\.\\/index\\.html"/,
+      'Depot detail page must open the unchanged original Fleet');
+    const originalDepotJs=readFileSync(join(root,'depokapacitas/app.js'),'utf8');
+    assert.match(originalDepotJs,/fleet\\/operations\\.html/,
+      'Only the packaged copy may be rewritten');
     assert.match(readFileSync(join(dest,'staging/imile-management/app.mjs'),'utf8'),/fleetMasterLink/);
     console.log('PASS original Fleet SHA, no reports/PWA/prototype, blocked source-only artifact');
   } finally {rmSync(dest,{recursive:true,force:true});}
