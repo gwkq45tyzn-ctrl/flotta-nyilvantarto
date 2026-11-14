@@ -31,7 +31,29 @@ test('NARROWED first-release preview excludes all OFD/In-Hub/Excel assets and li
  assert.doesNotMatch(menu,/class="card module reports"/);
  assert.doesNotMatch(menu,/In-Hub\/OFD riportkészítő/);
  assert.equal(existsSync(join(output,'staging/imile-management/reports')),false);
- assert.equal(existsSync(join(output,'staging/imile-management/fleet/index.html')),true);
+ assert.equal(existsSync(join(output,'staging/imile-management/qa')),false,
+   'No direct-access staging QA route in first release preview');
+ assert.equal(existsSync(join(output,'staging/imile-management/fleet/operations.html')),false,
+   'No Fleet replacement prototype in core preview');
+ assert.equal(existsSync(join(output,'staging/imile-management/fleet/operations-data.mjs')),true,
+   'Pure fleet expiry schema remains available to Depot alerts');
+ assert.doesNotMatch(menu,/href="\.\/qa\/|href="\.\/fleet\/operations\.html"/);
+ const depot=readFileSync(join(output,'depokapacitas/app.js'),'utf8');
+ const alerts=readFileSync(join(output,'staging/imile-management/central-alerts.mjs'),'utf8');
+ assert.doesNotMatch(depot,/fleet\/operations\.html/);
+ assert.doesNotMatch(alerts,/fleet\/operations\.html/);
+ assert.match(depot,/staging\/imile-management\/cutover\.html/);
+ for(const dependency of [
+   'depokapacitas/keyed-live-master.mjs',
+   'depokapacitas/keyed-booking-capacity.mjs',
+   'depokapacitas/canonical-booking-transaction.mjs',
+   'depokapacitas/canonical-booking-gate.mjs',
+   'depokapacitas/canonical-source-health.mjs',
+   'features/fleet-depo-canonical-transition.mjs'
+ ]) assert.equal(existsSync(join(output,dependency)),true,
+   'Required Depot module missing: '+dependency);
+ assert.equal(existsSync(join(output,'staging/imile-management/fleet/index.html')),false,
+   'Fleet prototype landing page must not be packaged as the original Fleet');
  assert.equal(existsSync(join(output,'depokapacitas/index.html')),true);
  assert.equal(existsSync(join(output,'staging/imile-management/cutover.html')),true);
  assert.equal(existsSync(join(output,'index.html')),true);
