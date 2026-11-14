@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync,statSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync,statSync,symlinkSync,existsSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
 import {sha256} from './v1-migration-dryrun.mjs';
 import {syntheticFourBlockSource} from './v1-variable-block-migration.mjs';
 import {runPrivateFleetPreparation} from './v1-fleet-remediation-cli.mjs';
@@ -104,4 +105,20 @@ test('reject oversized private JSON and unsupported flags without exposing raw i
   assert.throws(()=>runPrivateFleetPreparation([
     'audit','--input',f.source,'--execute-import','yes'
   ]),/INVALID_OR_DUPLICATE_ARGUMENT/);
+});
+
+
+test('symlinked outside directory that points into Git checkout is rejected',t=>{
+  const f=localFixture(t);
+  const repo=resolve(fileURLToPath(new URL('../',import.meta.url)));
+  const link=join(f.temp,'link-to-checkout');
+  symlinkSync(repo,link,'dir');
+  const leakName='imile-v1-private-leak-should-not-exist.json';
+  const destination=join(link,leakName);
+  assert.equal(existsSync(join(repo,leakName)),false);
+  assert.throws(()=>runPrivateFleetPreparation([
+    'prepare','--input',f.source,'--patches',f.patches,
+    '--expected-sha',f.sha,'--output',destination
+  ]),/PRIVATE_OUTPUT_MUST_BE_OUTSIDE_GIT_CHECKOUT/);
+  assert.equal(existsSync(join(repo,leakName)),false);
 });
