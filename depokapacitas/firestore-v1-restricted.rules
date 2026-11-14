@@ -484,22 +484,22 @@ service cloud.firestore {
     // IAM boundary and not a signer anti-rollback.
     function driversNotDup(rows, id, index) {
       return rows is list && rows.size() >= 1 && rows.size() <= 16
-        && (0 == index || !(rows[0].daCode is string && rows[0].daCode.upper() == id))
-        && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.upper() == id))
-        && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.upper() == id))
-        && (rows.size() <= 3 || 3 == index || !(rows[3].daCode is string && rows[3].daCode.upper() == id))
-        && (rows.size() <= 4 || 4 == index || !(rows[4].daCode is string && rows[4].daCode.upper() == id))
-        && (rows.size() <= 5 || 5 == index || !(rows[5].daCode is string && rows[5].daCode.upper() == id))
-        && (rows.size() <= 6 || 6 == index || !(rows[6].daCode is string && rows[6].daCode.upper() == id))
-        && (rows.size() <= 7 || 7 == index || !(rows[7].daCode is string && rows[7].daCode.upper() == id))
-        && (rows.size() <= 8 || 8 == index || !(rows[8].daCode is string && rows[8].daCode.upper() == id))
-        && (rows.size() <= 9 || 9 == index || !(rows[9].daCode is string && rows[9].daCode.upper() == id))
-        && (rows.size() <= 10 || 10 == index || !(rows[10].daCode is string && rows[10].daCode.upper() == id))
-        && (rows.size() <= 11 || 11 == index || !(rows[11].daCode is string && rows[11].daCode.upper() == id))
-        && (rows.size() <= 12 || 12 == index || !(rows[12].daCode is string && rows[12].daCode.upper() == id))
-        && (rows.size() <= 13 || 13 == index || !(rows[13].daCode is string && rows[13].daCode.upper() == id))
-        && (rows.size() <= 14 || 14 == index || !(rows[14].daCode is string && rows[14].daCode.upper() == id))
-        && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.upper() == id));
+        && (0 == index || !(rows[0].daCode is string && rows[0].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 3 || 3 == index || !(rows[3].daCode is string && rows[3].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 4 || 4 == index || !(rows[4].daCode is string && rows[4].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 5 || 5 == index || !(rows[5].daCode is string && rows[5].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 6 || 6 == index || !(rows[6].daCode is string && rows[6].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 7 || 7 == index || !(rows[7].daCode is string && rows[7].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 8 || 8 == index || !(rows[8].daCode is string && rows[8].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 9 || 9 == index || !(rows[9].daCode is string && rows[9].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 10 || 10 == index || !(rows[10].daCode is string && rows[10].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 11 || 11 == index || !(rows[11].daCode is string && rows[11].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 12 || 12 == index || !(rows[12].daCode is string && rows[12].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 13 || 13 == index || !(rows[13].daCode is string && rows[13].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 14 || 14 == index || !(rows[14].daCode is string && rows[14].daCode.replace('[[:space:]]','').upper() == id))
+        && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.replace('[[:space:]]','').upper() == id));
     }
     function claimSourceIsUnique(bookingId, driverId) {
       let booking = getAfter(/databases/$(database)/documents/bookings/$(bookingId)).data;
