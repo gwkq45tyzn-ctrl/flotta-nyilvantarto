@@ -1,7 +1,19 @@
 /** Read-only iMile report transforms. No cloud writes, no inferred source aliases. */
 export const COLORS=Object.freeze({navy:'002060',blue:'8AB8E6',gray:'E6E6E6',pivot:'DDEBF7',red:'D45D60',yellow:'E7D67B',green:'5AAC6F',lightgreen:'A8C375',missing:'FFF2CC'});
 const txt=x=>typeof x==='string'?x.trim():x==null?'':String(x).trim();
-const date=x=>{const v=x instanceof Date?x.toISOString().slice(0,10):txt(x).slice(0,10);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
+function calendarDate(x){
+  if(x instanceof Date&&Number.isFinite(x.getTime()))
+    return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Budapest',year:'numeric',month:'2-digit',day:'2-digit'}).format(x);
+  if(typeof x==='number'&&Number.isFinite(x)){
+    const whole=Math.floor(x);
+    // Excel 1900 date system: serial 25569 is 1970-01-01. The fraction is a
+    // time of day and must not move the calendar date across UTC.
+    if(whole>=1&&whole<=80000)
+      return new Date(Date.UTC(1970,0,1)+(whole-25569)*86400000).toISOString().slice(0,10);
+  }
+  return txt(x).slice(0,10);
+}
+const date=x=>{const v=calendarDate(x);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
 const int=x=>typeof x==='number'?x:typeof x==='string'&&/^\d+$/.test(x.trim())?Number(x.trim()):NaN;
 const header=(matrix,required)=>{if(!Array.isArray(matrix)||!Array.isArray(matrix[0])||matrix.length>10002)throw Error('Hibás vagy túl nagy export.');const h=matrix[0].map(txt);if(new Set(h).size!==h.length)throw Error('Duplikált oszlopfejléc.');for(const k of required)if(!h.includes(k))throw Error('Hiányzó oszlop: '+k);return Object.fromEntries(h.map((v,i)=>[v,i]));};
 const data=matrix=>matrix.slice(1).filter(x=>Array.isArray(x)&&x.some(v=>txt(v)!==''));
