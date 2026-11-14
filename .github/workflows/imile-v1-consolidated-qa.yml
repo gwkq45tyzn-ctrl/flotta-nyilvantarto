@@ -5,6 +5,9 @@ on:
       - 'tools/**'
       - 'docs/**'
       - 'staging/imile-management/fleet/**'
+      - 'staging/imile-management/build-preview.mjs'
+      - 'staging/imile-management/core-preview-scope.test.mjs'
+      - 'staging/imile-management/index.html'
       - 'depokapacitas/**'
       - 'features/**'
       - '.github/workflows/imile-v1-consolidated-qa.yml'
@@ -24,6 +27,8 @@ jobs:
           node-version: '24'
       - name: Pin exact unmerged source HEAD
         run: git rev-parse HEAD
+      - name: Phase-1 Fleet+Depot CORE-only bundle boundary
+        run: node --test staging/imile-management/core-preview-scope.test.mjs
       - name: Read-only source SHA-256 evidence and adversarial integrity tests
         run: |
           node --test tools/v1-release-fingerprint.test.mjs
