@@ -149,6 +149,18 @@ async function main(){
     assert.equal((await getDoc(doc(client,'bookings','2099-03-05__ABC123'))).data().driverId,'DA-0002');
     console.log('PASS ALLOW [E+SDK]: hyphenated DA remains bookable when it is the only normalized match');
 
+    // P0: a privileged writer can fabricate a keyed DA identity with
+    // sourceIndex=0 when the original source row actually has a DIFFERENT DA.
+    // Existing duplicate-only proof would pass because the target DA occurs
+    // nowhere in the original array. It must be rejected atomically.
+    const absent=fleet(2,1);
+    await seed(absent.drivers,absent.vehicles,{
+      driverSlots:[{id:'DA9999',daCode:'DA9999',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged keyed driver DA9999 absent from original sourceIndex zero',
+      ()=>book('2099-03-13','DA9999','ABC001',0,0,80));
+
     const far=fleet(12,1);
     far.drivers[11]=driver('da0001',500);
     await seed(far.drivers,far.vehicles,{
