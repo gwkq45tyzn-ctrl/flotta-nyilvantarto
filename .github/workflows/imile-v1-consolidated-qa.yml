@@ -24,6 +24,14 @@ jobs:
           node-version: '24'
       - name: Pin exact unmerged source HEAD
         run: git rev-parse HEAD
+      - name: Read-only source SHA-256 evidence and adversarial integrity tests
+        run: |
+          node --test tools/v1-release-fingerprint.test.mjs
+          node tools/v1-release-fingerprint.mjs
+      - name: Full V1 module contract cannot be narrowed to Fleet+Depot
+        run: |
+          node --test tools/v1-release-full-scope-gate.test.mjs
+          node tools/v1-release-full-scope-gate.mjs
       - name: Full-rich offline importer / strict Firestore size / Apps Script evidence
         run: |
           node --test \

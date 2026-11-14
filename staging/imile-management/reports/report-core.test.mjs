@@ -10,6 +10,29 @@ test('Vidék település neve',()=>assert.equal(cityOrDistrict('Szigetszentmikl�
 test('Dunaharaszti nem numerikus kerület',()=>assert.equal(cityOrDistrict('Dunaharaszti','2330'),'Dunaharaszti'));
 test('Hibás Budapest irányítószám nem megtippelt',()=>assert.equal(cityOrDistrict('Budapest','9999'),null));
 test('In-Hub Pivot helyes összegek',()=>{const r=inhub([h,row('001','2026-10-30 10:00'),row('002','2026-10-30','Dunaharaszti','2330'),row('003','2026-10-29')]);assert.equal(r.total,3);assert.deepEqual(r.columnTotals,[1,2]);assert.equal(r.rows.length,2)});
+test('Excel numeric Waybill a JS pontos egész határán túl tiltva',()=>{
+ const unsafe=Number.MAX_SAFE_INTEGER+1;
+ const r=inhub([h,row(unsafe,'2026-10-30')]);
+ assert.equal(r.status,'blocked');
+ assert.equal(r.total,null);
+ assert.ok(r.issues.some(x=>x.reason==='invalid_parcel_or_area'));
+});
+test('Hosszú Waybill szövegként pontosan megmarad, vezető nullákkal is',()=>{
+ const r=inhub([h,row('00090071992547409929','2026-10-30'),
+   row('90071992547409929','2026-10-30')]);
+ assert.equal(r.status,'ready');
+ assert.equal(r.total,2);
+});
+test('Pontosan ábrázolható numerikus Waybill továbbra is elfogadott',()=>{
+ const r=inhub([h,row(49729600088221,'2026-10-30')]);
+ assert.equal(r.status,'ready');
+ assert.equal(r.total,1);
+});
+test('Waybill logikai érték vagy negatív szám nem lehet csomagazonosító',()=>{
+ const r=inhub([h,row(true,'2026-10-30'),row(-1,'2026-10-30')]);
+ assert.equal(r.status,'blocked');
+ assert.equal(r.total,null);
+});
 test('Duplikált waybill tiltva',()=>{
   const r=inhub([h,row('001','2026-10-30'),row('001','2026-10-30')]);
   assert.equal(r.status,'blocked');
@@ -31,4 +54,29 @@ test('Vállalkozói mutató súlyozott',()=>{const r=ofd([ho,o('D1',5,5),o('D2',
 test('Kézbesített nem lehet több OFD-nél',()=>assert.equal(ofd([ho,o('D1',4,5)]).status,'blocked'));
 test('Eltérő nap külön csoport',()=>assert.equal(ofd([ho,o('D1',5,4,'V','2026-10-29'),o('D1',5,4)]).vendors.length,2));
 test('Üres OFD nem nulla',()=>assert.equal(ofd([ho]).totalOfd,null));
+test('Azonos DA ismétlődő, egyenként safe sorok unsafe összege tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0),o('D1',1,0)]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalOfd,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Külön futárok, azonos vállalkozó unsafe csoportösszege tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0),o('D2',1,0)]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalDelivered,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Eltérő vállalkozók unsafe napi globális összesítése tiltva',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0,'V1'),
+    o('D2',1,0,'V2')]);
+  assert.equal(r.status,'blocked');
+  assert.equal(r.totalOfd,null);
+  assert.ok(r.issues.some(x=>x.reason==='metric_total_overflow'));
+});
+test('Határértéken még pontos egész OFD megmarad, normalizálás nem veszít sort',()=>{
+  const r=ofd([ho,o('D1',Number.MAX_SAFE_INTEGER,0,'V1')]);
+  assert.equal(r.status,'ready');
+  assert.equal(r.totalOfd,Number.MAX_SAFE_INTEGER);
+  assert.equal(r.rows[0].ofd,Number.MAX_SAFE_INTEGER);
+});
 console.log('PASS: '+passed+' In-Hub/DA OFD report contracts and safe metrics');

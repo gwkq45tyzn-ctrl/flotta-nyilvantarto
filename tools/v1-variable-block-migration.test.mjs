@@ -68,17 +68,17 @@ test('oversized source is refused before any projected write',()=>{
 test('resume denies missing, orphan, tampered history, duplicate sourceIndex and sha drift',()=>{
   const projected=projectBlockPairs(syntheticFourBlockSource(SMALL));
   const chunk=chunkPairs(projected.pairs)[0];
-  const masters=Object.fromEntries(chunk.map(p=>[p.id,p.master]));
-  const claims=Object.fromEntries(chunk.map(p=>[p.id,p.claim]));
+  const masters=Object.fromEntries(chunk.map(p=>[p.masterPath,p.master]));
+  const claims=Object.fromEntries(chunk.map(p=>[p.claimPath,p.claim]));
   assert.equal(assessChunkReadback({
     chunk,masters,claims,sourceSha256:projected.sourceSha256
   }).ok,true);
-  const missing={...masters};delete missing[chunk[0].id];
+  const missing={...masters};delete missing[chunk[0].masterPath];
   assert.equal(assessChunkReadback({
     chunk,masters:missing,claims,sourceSha256:projected.sourceSha256
   }).reason,'ORPHAN_CLAIM');
   const tampered=structuredClone(masters);
-  tampered[chunk[0].id].history=[];
+  tampered[chunk[0].masterPath].history=[];
   assert.equal(assessChunkReadback({
     chunk,masters:tampered,claims,sourceSha256:projected.sourceSha256
   }).reason,'RICH_MASTER_MISMATCH');
@@ -89,8 +89,8 @@ test('resume denies missing, orphan, tampered history, duplicate sourceIndex and
   const duplicated=structuredClone(chunk);
   duplicated[1]={...duplicated[1],claim:{...duplicated[1].claim,
     sourceIndex:duplicated[0].sourceIndex}};
-  const dupMasters=Object.fromEntries(duplicated.map(p=>[p.id,p.master]));
-  const dupClaims=Object.fromEntries(duplicated.map(p=>[p.id,p.claim]));
+  const dupMasters=Object.fromEntries(duplicated.map(p=>[p.masterPath,p.master]));
+  const dupClaims=Object.fromEntries(duplicated.map(p=>[p.claimPath,p.claim]));
   assert.equal(assessChunkReadback({
     chunk:duplicated,masters:dupMasters,claims:dupClaims,
     sourceSha256:projected.sourceSha256

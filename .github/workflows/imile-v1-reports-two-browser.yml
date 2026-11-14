@@ -4,7 +4,14 @@ on:
     paths:
       - 'staging/imile-management/fleet/v1-reports-two-browser.e2e.mjs'
       - 'staging/imile-management/reports/report-core.mjs'
+      - 'staging/imile-management/reports/report-core.test.mjs'
+      - 'staging/imile-management/reports/report-statistics.mjs'
+      - 'staging/imile-management/reports/report-statistics.test.mjs'
+      - 'staging/imile-management/reports/inventory-statistics.mjs'
+      - 'staging/imile-management/reports/inventory-statistics.test.mjs'
       - 'staging/imile-management/reports/report-app.mjs'
+      - 'staging/imile-management/reports/xlsx-lite.mjs'
+      - 'staging/imile-management/reports/xlsx-lite.test.mjs'
       - 'depokapacitas/capacity-eligibility.mjs'
       - 'depokapacitas/app.js'
       - 'features/firestore-bridge.js'
@@ -29,7 +36,10 @@ jobs:
           java-version: '21'
       - name: Offline report date and capacity checks
         run: |
+          node staging/imile-management/reports/xlsx-lite.test.mjs
           node staging/imile-management/reports/report-core.test.mjs
+          node staging/imile-management/reports/report-statistics.test.mjs
+          node staging/imile-management/reports/inventory-statistics.test.mjs
           node depokapacitas/capacity-eligibility.test.mjs
           node features/s7-projection-contract.test.mjs
       - name: Install pinned SDK and free Chromium

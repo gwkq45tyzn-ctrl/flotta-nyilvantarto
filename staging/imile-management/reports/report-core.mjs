@@ -15,6 +15,12 @@ function calendarDate(x){
 }
 const date=x=>{const v=calendarDate(x);if(!/^20\d\d-\d\d-\d\d$/.test(v))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v?v:null};
 const int=x=>typeof x==='number'?x:typeof x==='string'&&/^\d+$/.test(x.trim())?Number(x.trim()):NaN;
+// A numeric Excel Waybill is only lossless through Number.MAX_SAFE_INTEGER.
+// A longer tracking ID must come as an actual text cell, preserving every
+// digit and leading zero; never silently dedupe a rounded parcel ID.
+const waybill=x=>typeof x==='number'
+ ?(Number.isSafeInteger(x)&&x>=0?String(x):'')
+ :(typeof x==='string'?x.trim():'');
 const header=(matrix,required)=>{if(!Array.isArray(matrix)||!Array.isArray(matrix[0])||matrix.length>10002)throw Error('Hibás vagy túl nagy export.');const h=matrix[0].map(txt);if(new Set(h).size!==h.length)throw Error('Duplikált oszlopfejléc.');for(const k of required)if(!h.includes(k))throw Error('Hiányzó oszlop: '+k);return Object.fromEntries(h.map((v,i)=>[v,i]));};
 const data=matrix=>matrix.slice(1).filter(x=>Array.isArray(x)&&x.some(v=>txt(v)!==''));
 const cmp=(a,b)=>a.localeCompare(b,'hu',{numeric:true});
@@ -27,7 +33,7 @@ export function inhub(matrix){
  const h=header(matrix,['Waybill Number','LM Receive Date','Consignee city','Consignee zipcode']);
  const ids=new Set(),counts=new Map(),days=new Set(),areas=new Set(),issues=[];
  for(const [i,r]of data(matrix).entries()){
-  const id=txt(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
+  const id=waybill(r[h['Waybill Number']]),day=date(r[h['LM Receive Date']]),area=cityOrDistrict(r[h['Consignee city']],r[h['Consignee zipcode']]);
   if(!id||!day||!area){issues.push({line:i+2,reason:'invalid_parcel_or_area'});continue;}
   if(ids.has(id)){issues.push({line:i+2,reason:'duplicate_waybill'});continue;}
   ids.add(id);days.add(day);areas.add(area);const k=JSON.stringify([area,day]);counts.set(k,(counts.get(k)||0)+1);
@@ -46,14 +52,35 @@ export function ofd(matrix){
   if(!day||!name||!code||!vendor||!station||!Number.isSafeInteger(out)||!Number.isSafeInteger(del)||out<0||del<0||del>out){issues.push({line:i+2,reason:'invalid_da_metric'});continue;}
   const key=JSON.stringify([day,station,code,vendor]);
   if(!byId.has(key))byId.set(key,{date:day,station,code,name,vendor,ofd:0,delivered:0,sourceCount:0,district:null});
-  const v=byId.get(key);if(v.name!==name)issues.push({line:i+2,reason:'conflicting_da_name'});v.ofd+=out;v.delivered+=del;v.sourceCount++;
+  const v=byId.get(key);
+  if(v.name!==name)issues.push({line:i+2,reason:'conflicting_da_name'});
+  // Excel rows may be individually safe integers, but summing a repeated
+  // courier's OFD and Delivered can exceed JS exact integer precision.
+  // Never export or persist a rounded/unsafe parcel count.
+  const nextOfd=v.ofd+out,nextDelivered=v.delivered+del;
+  if(!Number.isSafeInteger(nextOfd)||!Number.isSafeInteger(nextDelivered)){
+   issues.push({line:i+2,reason:'metric_total_overflow'});continue;
+  }
+  v.ofd=nextOfd;v.delivered=nextDelivered;v.sourceCount++;
  }
  if(issues.length)return {kind:'ofd',status:'blocked',issues,rows:[],vendors:[],totalOfd:null,totalDelivered:null};
  const rows=[...byId.values()].sort((a,b)=>cmp(a.date,b.date)||cmp(a.vendor,b.vendor)||cmp(a.station,b.station)||cmp(a.name,b.name));
  if(!rows.length)return {kind:'ofd',status:'missing',rows:[],vendors:[],totalOfd:null,totalDelivered:null,issues:[]};
  const vendors=new Map();
- for(const r of rows){const k=JSON.stringify([r.date,r.station,r.vendor]);if(!vendors.has(k))vendors.set(k,{date:r.date,station:r.station,vendor:r.vendor,ofd:0,delivered:0,driverCount:0});const x=vendors.get(k);x.ofd+=r.ofd;x.delivered+=r.delivered;x.driverCount++;}
+ let totalOfd=0,totalDelivered=0;
+ for(const r of rows){
+  const k=JSON.stringify([r.date,r.station,r.vendor]);
+  if(!vendors.has(k))vendors.set(k,{date:r.date,station:r.station,vendor:r.vendor,ofd:0,delivered:0,driverCount:0});
+  const x=vendors.get(k);
+  const nextVendorOfd=x.ofd+r.ofd,nextVendorDelivered=x.delivered+r.delivered;
+  const nextTotalOfd=totalOfd+r.ofd,nextTotalDelivered=totalDelivered+r.delivered;
+  if(![nextVendorOfd,nextVendorDelivered,nextTotalOfd,nextTotalDelivered].every(Number.isSafeInteger)){
+   issues.push({line:0,reason:'metric_total_overflow'});break;
+  }
+  x.ofd=nextVendorOfd;x.delivered=nextVendorDelivered;x.driverCount++;
+  totalOfd=nextTotalOfd;totalDelivered=nextTotalDelivered;
+ }
+ if(issues.length)return {kind:'ofd',status:'blocked',issues,rows:[],vendors:[],totalOfd:null,totalDelivered:null};
  const summaries=[...vendors.values()].map(v=>({...v,rate:v.ofd?v.delivered/v.ofd:null,spr:v.ofd/v.driverCount}));
- const totalOfd=rows.reduce((a,r)=>a+r.ofd,0),totalDelivered=rows.reduce((a,r)=>a+r.delivered,0);
  return {kind:'ofd',status:'ready',rows:rows.map(r=>({...r,rate:r.ofd?r.delivered/r.ofd:null,p90:r.ofd*.9-r.delivered})),vendors:summaries,uniqueCouriers:rows.length,totalOfd,totalDelivered,rate:totalOfd?totalDelivered/totalOfd:null,issues:[],sourceRows:data(matrix).length,analyticsPreview:rows.map(r=>({date:r.date,station:r.station,daCode:r.code,daName:r.name,vendor:r.vendor,ofd:r.ofd,delivered:r.delivered}))};
 }

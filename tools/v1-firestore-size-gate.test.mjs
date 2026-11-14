@@ -101,3 +101,12 @@ test('even when all size calculations succeed, cannot promote estimated bytes to
   assert.match(o.reason,/ADVISORY_ONLY/);
   assert.equal(CONSERVATIVE_JSON_BUDGET,800*1024);
 });
+
+test('quoted UTF-8 field paths, malformed UTF-16 and directly nested arrays fail before writes',()=>{
+  const raw=generateLargeFixture(0,0);
+  const check=extra=>checkSizeGate({...raw,extra},{}).reason;
+  assert.match(check({['x`'.repeat(500)]:1}),/FIELD_PATH_LIMIT/);
+  assert.match(check({note:'\ud800'}),/INVALID_FIRESTORE_UTF8/);
+  assert.match(check([['x']]),/FIRESTORE_NESTED_ARRAY/);
+  assert.equal(checkSizeGate({...raw,extra:[{items:['árvíz']}]},{}).advisoryOk,true);
+});

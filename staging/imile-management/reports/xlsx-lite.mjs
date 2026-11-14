@@ -92,41 +92,126 @@ export function writeReportXlsx(sourceRows,report){
  const wbRel=`${xmlHeader}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
  return pack([['[Content_Types].xml',contentTypes],['_rels/.rels',rootRel],['xl/workbook.xml',wbXml],['xl/_rels/workbook.xml.rels',wbRel],['xl/styles.xml',stylesXml()],['xl/worksheets/sheet1.xml',sheetXml(raw,{widths:sourceRows[0].map((x,i)=>i===0?22:20),freeze:1})],['xl/worksheets/sheet2.xml',sheetXml(out,{widths,merges,freeze:report.kind==='inhub'?4:2,autoFilter:report.kind==='ofd'?`A2:J${report.rows.length+2}`:null})]]);
 }
+// A ZIP header's uncompressed size is untrusted. Stream DEFLATE output
+// rather than buffering the ENTIRE expanded payload before checking it.
+// An 8 MB compressed XLSX can otherwise exhaust browser memory.
+const MAX_XLSX_ENTRY_BYTES=25*1024*1024;
+export async function inflateRawXlsxBounded(compressed,expectedBytes){
+ if(!(compressed instanceof Uint8Array)||
+    !Number.isSafeInteger(expectedBytes)||expectedBytes<0||
+    expectedBytes>MAX_XLSX_ENTRY_BYTES)
+  throw Error('XLSX_DEFLATE_SIZE_DENIED');
+ let reader;
+ try{
+  reader=new Blob([compressed]).stream()
+   .pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+ }catch{throw Error('XLSX_DEFLATE_UNSUPPORTED');}
+ const parts=[];let total=0;
+ try{
+  while(true){
+   const {value,done}=await reader.read();
+   if(done)break;
+   total+=value.byteLength;
+   // The declared expected size cannot be trusted as an allocation hint.
+   // Stop as soon as a malicious stream expands beyond that claim.
+   if(total>expectedBytes||total>MAX_XLSX_ENTRY_BYTES)
+    throw Error('XLSX_DEFLATE_SIZE_DENIED');
+   parts.push(value);
+  }
+ }catch(error){
+  try{await reader.cancel();}catch{}
+  if(error?.message==='XLSX_DEFLATE_SIZE_DENIED')throw error;
+  throw Error('XLSX_DEFLATE_CORRUPT');
+ }finally{reader.releaseLock();}
+ if(total!==expectedBytes)throw Error('XLSX_DEFLATE_SIZE_MISMATCH');
+ const raw=new Uint8Array(total);let offset=0;
+ for(const part of parts){raw.set(part,offset);offset+=part.byteLength;}
+ return raw;
+}
+
 export async function readXlsxFirstSheet(data){
  if(!(data instanceof ArrayBuffer)||data.byteLength>8*1024*1024)throw Error('Legfeljebb 8 MB méretű .xlsx fájl támogatott.');
  const d=new DataView(data),bytes=new Uint8Array(data);let end=-1;
  for(let p=data.byteLength-22;p>=Math.max(0,data.byteLength-65557);p--)if(i32(d,p)===0x06054b50){end=p;break;}
  if(end<0)throw Error('Érvénytelen XLSX/ZIP fájl.');
- const n=i16(d,end+10),offset=i32(d,end+16);if(n>500||offset>=data.byteLength)throw Error('Nem támogatott Excel-archívum.');
+ const n=i16(d,end+10),offset=i32(d,end+16),centralBytes=i32(d,end+12);
+ // We only accept a complete single-disk ZIP with an in-bounds directory.
+ if(n<1||n>500||i16(d,end+4)!==0||i16(d,end+6)!==0||
+    i16(d,end+8)!==n||offset>=end||
+    centralBytes>end-offset)throw Error('Nem támogatott Excel-archívum.');
  const files=new Map();let p=offset;
  for(let i=0;i<n;i++){
-  if(i32(d,p)!==0x02014b50)throw Error('Hibás ZIP-tartalom.');
-  const compressed=i32(d,p+20),uncompressed=i32(d,p+24),method=i16(d,p+10),nameLen=i16(d,p+28),extra=i16(d,p+30),comment=i16(d,p+32),local=i32(d,p+42);
-  const name=td.decode(bytes.subarray(p+46,p+46+nameLen));p+=46+nameLen+extra+comment;
-  if(uncompressed>25*1024*1024||compressed>8*1024*1024)throw Error('Túl nagy Excel-munkalap.');
-  files.set(name,{compressed,uncompressed,method,local});
+  if(p+46>end||i32(d,p)!==0x02014b50)throw Error('Hibás ZIP-tartalom.');
+  const compressed=i32(d,p+20),uncompressed=i32(d,p+24),
+   method=i16(d,p+10),flags=i16(d,p+8),crc=i32(d,p+16),
+   nameLen=i16(d,p+28),extra=i16(d,p+30),
+   comment=i16(d,p+32),local=i32(d,p+42);
+  const stop=p+46+nameLen+extra+comment;
+  if(!nameLen||stop>end)throw Error('Hibás ZIP-könyvtár.');
+  const name=td.decode(bytes.subarray(p+46,p+46+nameLen));p=stop;
+  if(flags&0x0041)throw Error('Titkosított ZIP-munkalap nem támogatott.');
+  if(files.has(name))throw Error('Duplikált XLSX ZIP-összetevő.');
+  if(uncompressed>25*1024*1024||compressed>8*1024*1024)
+   throw Error('Túl nagy Excel-munkalap.');
+  files.set(name,{compressed,uncompressed,method,local,crc});
+ }
+ // Structural ZIP checks must happen for ALL entries before any XML
+ // parsing. This also refuses a forged local header in an unused part and
+ // prevents a malformed input from ever reaching the browser DOM parser.
+ for(const [name,ent] of files){
+  const q=ent.local;
+  if(q+30>offset||i32(d,q)!==0x04034b50)
+   throw Error('Érvénytelen ZIP-fejléc.');
+  const localNameLen=i16(d,q+26),localExtra=i16(d,q+28);
+  const start=q+30+localNameLen+localExtra;
+  const localName=td.decode(bytes.subarray(q+30,q+30+localNameLen));
+  if(localName!==name||i16(d,q+8)!==ent.method||
+     (i16(d,q+6)&0x0041)||start+ent.compressed>offset)
+   throw Error('XLSX ZIP-összetevő eltérés.');
+  ent.start=start;
  }
  async function file(name){
   const ent=files.get(name);if(!ent)throw Error('Hiányzó XLSX-összetevő: '+name);
-  const q=ent.local;if(i32(d,q)!==0x04034b50)throw Error('Érvénytelen ZIP-fejléc.');
-  const start=q+30+i16(d,q+26)+i16(d,q+28);
-  const compressed=bytes.slice(start,start+ent.compressed);let raw;
+  const compressed=bytes.slice(ent.start,ent.start+ent.compressed);let raw;
   if(ent.method===0)raw=compressed;
-  else if(ent.method===8){raw=new Uint8Array(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());}
+  else if(ent.method===8)raw=await inflateRawXlsxBounded(compressed,ent.uncompressed);
   else throw Error('Nem támogatott ZIP-tömörítés.');
-  if(raw.length!==ent.uncompressed)throw Error('Sérült XLSX-tartalom.');return td.decode(raw);
+  if(raw.length!==ent.uncompressed||crc32(raw)!==ent.crc)
+   throw Error('Sérült XLSX-tartalom vagy hibás CRC.');
+  return td.decode(raw);
  }
  const readXml=x=>{if(/<!DOCTYPE/i.test(x))throw Error('Nem támogatott XML-tartalom.');const xml=new DOMParser().parseFromString(x,'application/xml');if(xml.querySelector('parsererror'))throw Error('Hibás XML-munkalap.');return xml;};
  const strings=[];if(files.has('xl/sharedStrings.xml')){
   const xml=readXml(await file('xl/sharedStrings.xml'));
   for(const si of xml.getElementsByTagName('si'))strings.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
  }
- let sheetPath='xl/worksheets/sheet1.xml';
- if(!files.has(sheetPath)){
-  // Historical exports may have different worksheet names, so read first relationship.
-  const candidates=[...files.keys()].filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/.test(k));
-  if(!candidates.length)throw Error('Nincs munkalap az exportban.');sheetPath=candidates.sort()[0];
- }
+ // ZIP filenames are storage details, NOT the logical worksheet order.
+ // Bind the selected first Sheet to its workbook r:id and the workbook's
+ // relationship target, rejecting ambiguous, external or traversal targets.
+ // Otherwise an XLSX with a reordered sheet list could silently feed pivot
+ // output instead of the raw In-Hub/OFD export (or vice versa).
+ const workbook=readXml(await file('xl/workbook.xml'));
+ const workbookRels=readXml(await file('xl/_rels/workbook.xml.rels'));
+ const firstSheet=workbook.getElementsByTagName('sheet')[0];
+ const relId=firstSheet?.getAttribute('r:id')||
+  firstSheet?.getAttributeNS(
+   'http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+ if(!relId||!/^[A-Za-z0-9_-]{1,80}$/.test(relId))
+  throw Error('Hiányzó első Excel-munkalap kapcsolat.');
+ const matching=[...workbookRels.getElementsByTagName('Relationship')]
+  .filter(r=>r.getAttribute('Id')===relId);
+ if(matching.length!==1||
+    matching[0].getAttribute('Type')!==
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'||
+    matching[0].getAttribute('TargetMode')==='External')
+  throw Error('Nem hiteles első Excel-munkalap kapcsolat.');
+ const target=matching[0].getAttribute('Target')||'';
+ const sheetPath=target.startsWith('/xl/')?target.slice(1):
+  target.startsWith('worksheets/')?'xl/'+target:null;
+ if(!sheetPath||!/^xl\/worksheets\/sheet[1-9]\d*\.xml$/.test(sheetPath)||
+    !files.has(sheetPath))
+  throw Error('Érvénytelen vagy hiányzó első munkalap.');
+
  const xml=readXml(await file(sheetPath)),sheetData=xml.getElementsByTagName('sheetData')[0];
  if(!sheetData)throw Error('Nincs feldolgozható Excel-adat.');
  const result=[];
