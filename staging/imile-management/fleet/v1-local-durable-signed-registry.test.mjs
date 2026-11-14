@@ -15,7 +15,8 @@ import {fileURLToPath} from 'node:url';
 import {readFile} from 'node:fs/promises';
 import {generateKeyPairSync,createHash,sign as cryptoSign} from 'node:crypto';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
-import {doc,setDoc} from 'firebase/firestore';
+import {doc,setDoc,getDoc} from 'firebase/firestore';
+import {createLocalSignedRegistryHighwater} from './v1-local-durable-signed-registry.mjs';
 import {canonicalStringify} from '../../../features/migration-manifest.mjs';
 
 const projectId='demo-imile-v1-registry-highwater';
@@ -157,6 +158,28 @@ async function withWorkers(fn){
   }
 }
 try {
+  await test('caller mutation during async adoption cannot detach high-water from the signed payload',async()=>{
+    await env.clearFirestore();
+    const keys=makeKeys();
+    await env.withSecurityRulesDisabled(async ctx=>{
+      const db=ctx.firestore();
+      const gate=createLocalSignedRegistryHighwater({db,projectId,
+        rootPublicKeySpkiBase64:keys.rootSpki,independentlyPinnedRootSha256:keys.rootPin});
+      const bundle=registry(keys,1,[]);
+      const verified=structuredClone(bundle);
+      const pending=gate.adoptRootSignedRegistry(bundle);
+      bundle.payload.sequence=999;
+      bundle.payload.revokedSignerFingerprints.push(keys.fingerprint);
+      const result=await pending;
+      good(result);
+      const saved=(await getDoc(doc(db,'v1SyntheticOwnerRegistryHighwater/current'))).data();
+      assert.equal(saved.sequence,1);
+      assert.deepEqual(saved.revokedSignerFingerprints,[]);
+      assert.equal(saved.registryDigest,createHash('sha256').update(canonicalStringify(verified.payload)).digest('hex'));
+      good(await gate.verifyCurrentRootSignedRegistry(verified));
+      reject(await gate.verifyCurrentRootSignedRegistry(bundle),/SIGNATURE_INVALID/);
+    });
+  });
   await test('two OS processes + third after restart: signed root seq/revocation high-water persists and stale signed registry is refused',async()=>{
     await withWorkers(async({a,b,keys,spawn})=>{
       const seq1=registry(keys,1,[]);

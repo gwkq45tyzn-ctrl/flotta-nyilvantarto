@@ -36,9 +36,6 @@ export async function commitCanonicalDepotBooking({
     driverClaim:sdk.doc(db,'driverClaims',driverKey),
     keyedDriver:sdk.doc(db,'flottaDrivers',driverId),
     keyedVehicle:sdk.doc(db,'flottaVehicles',vehicleId),
-    driver:sdk.doc(db,'drivers',driverId),
-    vehicle:sdk.doc(db,'vehicles',vehicleId),
-    capacity:sdk.doc(db,'driverCapacities',driverId),
     fleet:sdk.doc(db,'flottaSharedState','current'),
     approval:sdk.doc(db,'flottaMigrationApproval','current')
   };
@@ -46,10 +43,9 @@ export async function commitCanonicalDepotBooking({
   // localStorage inside it. No success signal until runTransaction resolves.
   const confirmation=await sdk.runTransaction(db,async tx=>{
     if(getCurrentUid()!==uid)throw Error('BOOKING_BLOCKED: session_changed');
-    const [oldBook,oldClaim,driver,vehicle,capacity,fleet,approval,
+    const [oldBook,oldClaim,fleet,approval,
       keyedDriver,keyedVehicle]=await Promise.all([
       tx.get(refs.booking),tx.get(refs.driverClaim),
-      tx.get(refs.driver),tx.get(refs.vehicle),tx.get(refs.capacity),
       tx.get(refs.fleet),tx.get(refs.approval),
       // Canonical identity masters must be SEEDED before booking.
       // Never create/overwrite them in a booking transaction.
@@ -62,8 +58,8 @@ export async function commitCanonicalDepotBooking({
       approval:approval.exists()?approval.data():null,
       uid:getCurrentUid()===uid?uid:null,
       driverId,vehicleId,
-      depotDriver:driver.exists()?{id:driverId,...driver.data()}:null,
-      depotVehicle:vehicle.exists()?{id:vehicleId,...vehicle.data()}:null
+      keyedDriver:keyedDriver.exists()?keyedDriver.data():null,
+      keyedVehicle:keyedVehicle.exists()?keyedVehicle.data():null
     });
     if(!check.ready)throw Error('BOOKING_BLOCKED: '+check.code);
     const fleetData=fleet.exists()?fleet.data():{};
@@ -94,8 +90,6 @@ export async function commitCanonicalDepotBooking({
     const driverIndex=(fleetData.drivers||[]).findIndex(d=>normDriver(d.daCode)===driverId);
     const vehicleIndex=(fleetData.vehicles||[]).findIndex(v=>normVehicle(v.rendszam)===vehicleId);
     if(driverIndex<0||vehicleIndex<0)throw Error('BOOKING_BLOCKED: master_index_not_found');
-    if(!keyedDriver.exists()||!keyedVehicle.exists())
-      throw Error('BOOKING_BLOCKED: missing_keyed_master');
     const kd=keyedDriver.data(),kv=keyedVehicle.data();
     // P0 verified source-index proof is a PRIVILEGED, immutable field of
     // the canonical keyed document itself. A separate browser-writable
@@ -105,9 +99,7 @@ export async function commitCanonicalDepotBooking({
        !Number.isSafeInteger(kv.sourceIndex)||
        kd.sourceIndex!==driverIndex||kv.sourceIndex!==vehicleIndex||
        normDriver(kd.daCode)!==driverId||
-       normVehicle(kv.rendszam)!==vehicleId||
-       !['aktiv','aktív'].includes(kd.status)||
-       !['aktiv','aktív'].includes(kv.status))
+       normVehicle(kv.rendszam)!==vehicleId)
       throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
     tx.set(refs.driverClaim,{date,driverId,bookingId});

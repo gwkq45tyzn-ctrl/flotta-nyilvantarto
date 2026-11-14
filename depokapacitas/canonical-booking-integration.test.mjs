@@ -15,12 +15,12 @@ test('Depot booking calls actual shared transaction adapter and awaits server ac
    app.indexOf("toast('Foglalás szerveroldalon visszaigazolva."),
    'No success toast before server-acknowledged commit');
 });
-test('transaction adapter re-reads approval, full Fleet and live mirror docs before BOTH writes',()=>{
+test('transaction adapter re-reads approval, full Fleet and both live keyed masters before BOTH writes',()=>{
  assert.match(txn,/await sdk\.runTransaction\(db,async tx=>/);
  assert.match(txn,/tx\.get\(refs\.fleet\)/);
  assert.match(txn,/tx\.get\(refs\.approval\)/);
- assert.match(txn,/tx\.get\(refs\.driver\)/);
- assert.match(txn,/tx\.get\(refs\.vehicle\)/);
+ assert.match(txn,/tx\.get\(refs\.keyedDriver\)/);
+ assert.match(txn,/tx\.get\(refs\.keyedVehicle\)/);
  assert.match(txn,/assessCanonicalBookingMaster\(/);
  assert.ok(txn.indexOf('assessCanonicalBookingMaster(') <
    txn.indexOf('tx.set(refs.booking,'),'Canonical match MUST precede any writes');
