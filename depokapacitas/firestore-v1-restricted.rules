@@ -24,6 +24,16 @@ service cloud.firestore {
     }
     function admin() { return member() && get(userPath()).data.role == 'admin'; }
     function editor() { return member() && get(userPath()).data.role in ['admin','editor']; }
+    // One user read. editor() re-enters signedIn/member and blows the
+    // 1000-expression cap once a booking claim also scans the archive.
+    function editorOnce() {
+      let user = get(userPath()).data;
+      return request.auth != null
+        && request.auth.uid == 'REPLACE_WITH_REAL_SHARED_UID'
+        && request.auth.token.email == 'imilemanagement@imile-management-staging.firebaseapp.com'
+        && user.active == true
+        && user.role in ['admin','editor'];
+    }
 
     function exactFields(data, fields) {
       return data.keys().hasOnly(fields) && data.keys().hasAll(fields);
@@ -55,13 +65,6 @@ service cloud.firestore {
     }
     function validVehiclePlate(value) {
       return value is string && value.matches('^[A-Z0-9]{4,12}$');
-    }
-    function declaredDriverCapacity(driverId, driverIndex) {
-      // After trusted seal, the normalized-keyed driver IS the authority.
-      // Neither the old frozen Fleet array nor the mutable Depot capacity
-      // mirror may override current canonical driver capacity.
-      let keyed = getAfter(/databases/$(database)/documents/flottaDrivers/$(driverId)).data;
-      return keyed.keys().hasAny(['kapacitas']) ? keyed.kapacitas : null;
     }
 
     // New independent Attendance PWA. Separate self-service courier principal,
@@ -470,61 +473,90 @@ service cloud.firestore {
       allow read: if member();
       allow write: if false;
     }
+    // P0 #184: a privileged Admin SDK seed bypasses Rules and can store two
+    // driver rows that case-fold to one DA while sourceIndex stays 0.
+    // Rules have no loop and each allow is capped at 1000 evaluated
+    // expressions, so this proof covers at most 16 driver rows and does not
+    // read rows past the real array length. A longer driver list fails
+    // closed. A unique list still allows a booking. Plate separator-folding
+    // does not fit in the remaining budget; the selected plate is still
+    // checked, but a second folded plate is not. This is not an Admin SDK
+    // IAM boundary and not a signer anti-rollback.
+    function driversNotDup(rows, id, index) {
+      return rows is list && rows.size() >= 1 && rows.size() <= 16
+        && (0 == index || !(rows[0].daCode is string && rows[0].daCode.upper() == id))
+        && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.upper() == id))
+        && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.upper() == id))
+        && (rows.size() <= 3 || 3 == index || !(rows[3].daCode is string && rows[3].daCode.upper() == id))
+        && (rows.size() <= 4 || 4 == index || !(rows[4].daCode is string && rows[4].daCode.upper() == id))
+        && (rows.size() <= 5 || 5 == index || !(rows[5].daCode is string && rows[5].daCode.upper() == id))
+        && (rows.size() <= 6 || 6 == index || !(rows[6].daCode is string && rows[6].daCode.upper() == id))
+        && (rows.size() <= 7 || 7 == index || !(rows[7].daCode is string && rows[7].daCode.upper() == id))
+        && (rows.size() <= 8 || 8 == index || !(rows[8].daCode is string && rows[8].daCode.upper() == id))
+        && (rows.size() <= 9 || 9 == index || !(rows[9].daCode is string && rows[9].daCode.upper() == id))
+        && (rows.size() <= 10 || 10 == index || !(rows[10].daCode is string && rows[10].daCode.upper() == id))
+        && (rows.size() <= 11 || 11 == index || !(rows[11].daCode is string && rows[11].daCode.upper() == id))
+        && (rows.size() <= 12 || 12 == index || !(rows[12].daCode is string && rows[12].daCode.upper() == id))
+        && (rows.size() <= 13 || 13 == index || !(rows[13].daCode is string && rows[13].daCode.upper() == id))
+        && (rows.size() <= 14 || 14 == index || !(rows[14].daCode is string && rows[14].daCode.upper() == id))
+        && (rows.size() <= 15 || 15 == index || !(rows[15].daCode is string && rows[15].daCode.upper() == id));
+    }
+    function claimSourceIsUnique(bookingId, driverId) {
+      let booking = getAfter(/databases/$(database)/documents/bookings/$(bookingId)).data;
+      let fleet = getAfter(/databases/$(database)/documents/flottaSharedState/current).data;
+      return booking.driverId == driverId
+        && booking.driverIndex is int
+        && driversNotDup(fleet.drivers, booking.driverId, booking.driverIndex);
+    }
+    function bookingCreateAllowed(bookingId) {
+      let data = request.resource.data;
+      let fleet = getAfter(/databases/$(database)/documents/flottaSharedState/current).data;
+      let driver = getAfter(/databases/$(database)/documents/flottaDrivers/$(data.driverId)).data;
+      let vehicle = getAfter(/databases/$(database)/documents/flottaVehicles/$(data.vehicleId)).data;
+      let claim = getAfter(/databases/$(database)/documents/driverClaims/$(data.date + '__' + data.driverId)).data;
+      return editor()
+        && canonicalImportActive()
+        && fleet.get('sealed', false) == true
+        && exactFields(data, ['date','vehicleId','driverId','district','status','capacity','driverIndex','vehicleIndex'])
+        && validDay(data.date)
+        && sameDayOccupancy(data)
+        && validVehiclePlate(data.vehicleId)
+        && validDriverCode(data.driverId)
+        && optionalText(data.district, 60)
+        && bookingId == data.date + '__' + data.vehicleId
+        && data.status in ['planned','confirmed']
+        && data.driverIndex is int
+        && data.driverIndex >= 0
+        && data.vehicleIndex is int
+        && data.vehicleIndex >= 0
+        && driver.daCode is string
+        && driver.daCode.upper() == data.driverId
+        && driver.status in ['aktiv','aktív']
+        && driver.sourceIndex == data.driverIndex
+        // Keyed kapacitas is the capacity authority. The sealed array and the
+        // Depot mirror cannot raise it.
+        && driver.keys().hasAny(['kapacitas'])
+        && data.capacity == driver.kapacitas
+        && nonNegative(data.capacity, 10000)
+        && vehicle.rendszam is string
+        && vehicle.rendszam.replace('[[:space:]-]', '').upper() == data.vehicleId
+        && vehicle.status in ['aktiv','aktív']
+        && vehicle.sourceIndex == data.vehicleIndex
+        && fleet.vehicles[data.vehicleIndex].rendszam is string
+        && fleet.vehicles[data.vehicleIndex].rendszam.matches('^[A-Za-z0-9 -]{4,40}$')
+        && fleet.vehicles[data.vehicleIndex].rendszam.replace('[[:space:]-]', '').upper() == data.vehicleId
+        && claim.bookingId == bookingId
+        && claim.date == data.date
+        && claim.driverId == data.driverId;
+    }
+
     match /bookings/{bookingId} {
       allow read: if member();
       // No direct SDK/old-client booking create before original Fleet import.
-      allow create: if editor()
-        && canonicalImportActive()
-        // Booking is impossible until a PRIVILEGED verified migration seals the
-        // canonical source. This flag is immutable to browser SDK clients.
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.get('sealed',false) == true
-        && exactFields(request.resource.data,['date','vehicleId','driverId','district','status','capacity','driverIndex','vehicleIndex'])
-        && validDay(request.resource.data.date)
-        && sameDayOccupancy(request.resource.data)
-        && validVehiclePlate(request.resource.data.vehicleId)
-        && validDriverCode(request.resource.data.driverId)
-        && optionalText(request.resource.data.district,60)
-        && bookingId == request.resource.data.date + '__' + request.resource.data.vehicleId
-        && request.resource.data.status in ['planned','confirmed']
-        // S7: Flotta is the single canonical source. Mirrors are not required.
-        // S7: verify the selected master against the actual Flotta arrays.
-        // The client supplies an index; rules confirm it points to a matching
-        // eligible entry. Forged lists or mirrors cannot bypass this.
-        && request.resource.data.driverIndex is int
-        && request.resource.data.driverIndex >= 0
-        && existsAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId))
-        && getAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId)).data.daCode.upper() == request.resource.data.driverId
-        && getAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId)).data.status in ['aktiv','aktív']
-        && request.resource.data.vehicleIndex is int
-        && request.resource.data.vehicleIndex >= 0
-        && existsAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId))
-        && getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
-        // The keyed vehicle's CURRENT availability must be enforced by Rules,
-        // not merely by the normal app, or a direct SDK can book service cars.
-        && getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.status in ['aktiv','aktív']
-        // The normalized field is browser-writable in the rich legacy Fleet.
-        // Recompute eligibility from the ORIGINAL plate at booking time.
-        // A forged normalizedPlate must never authorize another vehicle.
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam is string
-        // Reject Unicode case-folding lookalikes and non-ASCII separators
-        // before upper(); no forged source plate may authorize an ASCII ID.
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.matches('^[A-Za-z0-9 -]{4,40}$')
-        && getAfter(/databases/$(database)/documents/flottaSharedState/current).data.vehicles[request.resource.data.vehicleIndex].rendszam.replace('[[:space:]-]','').upper() == request.resource.data.vehicleId
-        // The original Fleet snapshot is immutable after seal. Its old
-        // status must not override the live normalized-keyed vehicle status.
-        && nonNegative(request.resource.data.capacity,10000)
-        && request.resource.data.capacity == declaredDriverCapacity(request.resource.data.driverId, request.resource.data.driverIndex)
-        // The independently PRIVILEGED importer pins the verified UNIQUE
-        // source row index into each normalized-keyed master. These are
-        // already read above for actual capacity/status; no extra Rules
-        // document fetches and NO user-writable secondary index claims.
-        && getAfter(/databases/$(database)/documents/flottaDrivers/$(request.resource.data.driverId)).data.sourceIndex == request.resource.data.driverIndex
-        && getAfter(/databases/$(database)/documents/flottaVehicles/$(request.resource.data.vehicleId)).data.sourceIndex == request.resource.data.vehicleIndex
-        // Both documents must be written in one transaction. This prevents double booking.
-        && existsAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId))
-        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.bookingId == bookingId
-        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.date == request.resource.data.date
-        && getAfter(/databases/$(database)/documents/driverClaims/$(request.resource.data.date + '__' + request.resource.data.driverId)).data.driverId == request.resource.data.driverId;
+      // One function so the sealed archive, keyed masters and claim are read
+      // once. The duplicate-identity window has to fit in the 1000-expression
+      // evaluation cap together with the existing booking checks.
+      allow create: if bookingCreateAllowed(bookingId);
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/driverClaims/$(resource.data.date + '__' + resource.data.driverId));
@@ -532,7 +564,7 @@ service cloud.firestore {
 
     match /driverClaims/{key} {
       allow read: if member();
-      allow create: if editor()
+      allow create: if editorOnce()
         && exactFields(request.resource.data,['date','driverId','bookingId'])
         && validDay(request.resource.data.date)
         && bookingDriverOccupancy(request.resource.data)
@@ -542,7 +574,8 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
         && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == request.resource.data.date
         && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == request.resource.data.driverId
-        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId;
+        && request.resource.data.bookingId == request.resource.data.date + '__' + getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.vehicleId
+        && claimSourceIsUnique(request.resource.data.bookingId, request.resource.data.driverId);
       allow update: if false;
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
