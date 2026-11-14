@@ -52,7 +52,7 @@ export function fingerprintSources({
     roles.add(item.role);paths.add(item.path);
     const bytes=readFileSync(checkedPath(root,item.path));
     return {role:item.role,path:item.path,bytes:bytes.length,sha256:sha256(bytes)};
-  }).sort((a,b)=>a.path.localeCompare(b.path,'en'));
+  }).sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
   const evidence=JSON.stringify({commitSha,files});
   return {
     evidenceType:'V1_READ_ONLY_SOURCE_FINGERPRINT_NOT_DEPLOY_ATTESTATION',
