@@ -9,7 +9,13 @@ function projectStrictMasters(draft) {
   const drivers = (draft.drivers || []).map(d => {
     const id = code(d.daCode);
     if (!id) return null;
-    return { id, data: { name: String(d.name || d.nev || '').trim(), daCode: id, vendor: String(d.agency || d.vendor || '').trim(), capacity: Number(d.kapacitas || d.capacity || 0), active: ['aktiv','aktív'].includes(String(d.status || '').toLowerCase()) } };
+      const listed=[d.kapacitas,d.capacity];
+      let capacity=null;
+      for(const value of listed){
+        if(Number.isSafeInteger(value)&&value>=0&&value<=10000){capacity=value;break;}
+      }
+      const active=['aktiv','aktív'].includes(String(d.status || '').toLowerCase())&&capacity!==null;
+      return { id, data: { name: String(d.name || d.nev || '').trim(), daCode: id, vendor: String(d.agency || d.vendor || '').trim(), capacity, active } };
   }).filter(Boolean);
   const vehicles = (draft.vehicles || []).map(v => {
     const id = plate(v.rendszam);
@@ -34,6 +40,18 @@ test('projects strict fields and drops rich history', () => {
   assert.equal(p.vehicles[0].id, 'ABC123');
   assert.equal(p.vehicles[0].data.status, 'Elérhető');
   assert.ok(!p.vehicles[0].data.history);
+});
+
+test('explicit zero stays zero and missing capacity is not an active zero', () => {
+  const zero = projectStrictMasters({ drivers: [{ daCode: 'DA0002', name: 'Nulla', status: 'aktiv', kapacitas: 0, capacity: 70 }] });
+  assert.equal(zero.drivers[0].data.capacity, 0);
+  assert.equal(zero.drivers[0].data.active, true);
+  const missing = projectStrictMasters({ drivers: [{ daCode: 'DA0003', name: 'Nincs', status: 'aktiv' }] });
+  assert.equal(missing.drivers[0].data.capacity, null);
+  assert.equal(missing.drivers[0].data.active, false);
+  const inactive = projectStrictMasters({ drivers: [{ daCode: 'DA0004', name: 'Inaktív', status: 'inaktiv', kapacitas: 80 }] });
+  assert.equal(inactive.drivers[0].data.active, false);
+  assert.equal(inactive.drivers[0].data.capacity, 80);
 });
 
 test('unknown status fails closed to Leállított', () => {

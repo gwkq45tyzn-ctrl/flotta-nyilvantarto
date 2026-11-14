@@ -26,7 +26,7 @@ test('post-import: rules recompute eligibility from original rendszam', () => {
 });
 
 test('post-import: capacity from Fleet kapacitas', () => {
-  assert.match(rules, /declaredDriverCapacity/);
+  assert.match(rules, /data\.capacity == driver\.kapacitas/);
 });
 
 test('post-import: mirror writes closed after import', () => {

@@ -14,9 +14,12 @@ export function assessBooking(booking, drivers, vehicles, today) {
   return {eligible:true,reason:'available'};
 }
 export function effectiveCapacity(booking, drivers, vehicles, today) {
-  const valid=assessBooking(booking,drivers,vehicles,today).eligible;
-  const cap=Math.max(0,Number(booking.capacity)||0);
-  return valid ? cap : 0;
+  if(!assessBooking(booking,drivers,vehicles,today).eligible)return 0;
+  // Explicit 0 is a real capacity. Missing, blank and negative values are
+  // not an authorized zero and must not be planned.
+  if(!Number.isSafeInteger(booking.capacity)||booking.capacity<0||booking.capacity>10000)
+    return null;
+  return booking.capacity;
 }
 export function eligibleDriver(driver) {
   return driver?.active === true;

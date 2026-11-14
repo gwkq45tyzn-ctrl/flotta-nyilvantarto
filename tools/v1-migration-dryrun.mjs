@@ -96,7 +96,11 @@ export function buildPlan(snapshot,claimedPreflight) {
     sourceCounts:trusted.counts,sourceJsonBytes:trusted.jsonBytes,
     requiresPrivilegedImporter:true,requiresSourceParityBeforeSeal:true,
     firestoreEncodedSizeVerified:false,authorizedForImport:false,
-    sealed:true, // Proposed desired final state, NOT an executed or approved seal.
+    // Source content preflight is not a closing decision. A later privileged
+    // close has to be a separate record; this plan must not look sealed.
+    sealed:false,
+    sourceTrust:'preflight-only',
+    closingTrust:'not-closed',
     drivers:keyed('drivers','daCode',normDA),
     vehicles:keyed('vehicles','rendszam',normPlate),
     fuelCards:clone(snapshot.fuelCards),contacts:clone(snapshot.contacts)
