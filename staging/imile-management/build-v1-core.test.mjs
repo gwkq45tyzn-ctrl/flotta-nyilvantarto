@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {spawnSync} from 'node:child_process';
-import {existsSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {existsSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';
 
@@ -66,6 +66,22 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.match(readFileSync(join(dest,'staging/imile-management/app.mjs'),'utf8'),/fleetMasterLink/);
     console.log('PASS original Fleet SHA, no reports/PWA/prototype, blocked source-only artifact');
   } finally {rmSync(dest,{recursive:true,force:true});}
+});
+
+test('core builder rejects a CSS url() that is not in the package',()=>{
+  const cssPath=join(root,'depokapacitas/style.css');
+  const original=readFileSync(cssPath);
+  assert.equal(existsSync(dest),false,'Never overwrite any existing QA artifact');
+  try{
+    writeFileSync(cssPath,Buffer.concat([original,Buffer.from('\n.probe{background:url("./missing-core-font.woff")}\n')]));
+    const result=spawnSync(process.execPath,[build],{cwd:root,encoding:'utf8',timeout:25000});
+    assert.notEqual(result.status,0,'A missing local CSS asset must fail the core build');
+    assert.match(result.stderr||'',/missing-core-font\.woff/);
+  }finally{
+    writeFileSync(cssPath,original);
+    rmSync(dest,{recursive:true,force:true});
+    assert.deepEqual(readFileSync(cssPath),original,'Depot CSS must be restored byte-for-byte');
+  }
 });
 
 test('builder never publishes, imports or alters real Firebase/App Script',()=>{
