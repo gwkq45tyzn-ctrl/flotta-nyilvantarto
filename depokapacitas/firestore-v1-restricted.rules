@@ -596,7 +596,19 @@ service cloud.firestore {
         && key == request.resource.data.date + '__' + request.resource.data.driverId
         && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
         && claimSourceIsUnique(request.resource.data.bookingId, request.resource.data.driverId, request.resource.data.date);
-      allow update: if false;
+      allow update: if editor()
+        && request.resource.data.keys().hasOnly(['date','driverId','bookingId'])
+        && request.resource.data.date == resource.data.date
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.bookingId is string
+        && request.resource.data.bookingId.size() > 0
+        && request.resource.data.bookingId.size() <= 120
+        && request.resource.data.bookingId != resource.data.bookingId
+        && existsAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.driverId == resource.data.driverId
+        && getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.date == resource.data.date
+        && resource.data.bookingId is string
+        && !exists(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
       allow delete: if editor()
         && !existsAfter(/databases/$(database)/documents/bookings/$(resource.data.bookingId));
     }
