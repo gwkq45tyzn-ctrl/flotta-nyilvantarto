@@ -20,6 +20,9 @@ const denied=(reason,counts={})=>({
 });
 
 export function prepareReviewedCourierCapacities(raw,decisions){
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&
+    (raw.sealed===true||Object.prototype.hasOwnProperty.call(raw,'migrationSourceSha256')))
+    return denied('SEALED_OR_ALREADY_MIGRATED_SOURCE_NOT_EDITABLE');
   const source=preflight(raw);
   if(!source.ok)return denied('INVALID_RICH_SOURCE');
   if(!Array.isArray(decisions))return denied('REVIEWED_DECISIONS_ARRAY_REQUIRED');
