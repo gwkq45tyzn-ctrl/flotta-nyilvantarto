@@ -2,6 +2,11 @@
  * #185 local Firestore emulator drill for unequal four-block sources.
  * Synthetic data only. Restarts are new objects that read persisted
  * checkpoints. Source readback is not a production closing approval.
+ *
+ * Fail closed before non-atomic oversized-prefix import or close.
+ * Small prefixes retain same-transaction owned master/claim/receipt CAS.
+ * Large-N requires independently protected server importer trust root;
+ * this is synthetic/local QA only and never a production seal.
  */
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -20,12 +25,14 @@ const uid='synthetic-imile-v1-admin-0000001';
 const email='imilemanagement@imile-management-staging.firebaseapp.com';
 const SMALL={drivers:12,vehicles:14,fuelCards:14,contacts:5};
 const LARGE={drivers:200,vehicles:90,fuelCards:22,contacts:7};
+const FOUR_FORTY={drivers:220,vehicles:220,fuelCards:22,contacts:7};
 const BLOCKS=['drivers','vehicles','fuelCards','contacts'];
 const JOURNAL='v1SyntheticVariableBlockJournal/current';
 const RECEIPTS='v1SyntheticVariableBlockChunks';
 const SOURCE='flottaSharedState/current';
 const APPROVAL='flottaMigrationApproval/current';
 const KEYED=['flottaDrivers','flottaVehicles','flottaDriverClaims','flottaVehicleClaims'];
+const OWNED_READ_BOUND=120; // max owned documents proven in final journal CAS
 
 function assertLocalOnly(){
   if(!['127.0.0.1:8787','localhost:8787'].includes(process.env.FIRESTORE_EMULATOR_HOST))
@@ -173,9 +180,10 @@ class VariableBlockSession{
       })))
     };
   }
-  // Reads must happen before any write in the same transaction. Compares the
-  // persisted bytes, not the journal counter: a privileged rewrite of an
-  // already owned master, claim or receipt is not a safe resume or close.
+  // Bounded window. Never reads more than OWNED_READ_BOUND documents
+  // in one transaction. A privileged rewrite of any document in the
+  // window still fails the CAS. Callers walk the full prefix by
+  // successive windows.
   async assertOwnedChunks(tx,from,to){
     const refs=[];
     const expected=[];
@@ -189,6 +197,8 @@ class VariableBlockSession{
       refs.push(doc(this.db,RECEIPTS,String(i).padStart(4,'0')));
       expected.push(this.expectedReceipt(i));
     }
+    if(refs.length>OWNED_READ_BOUND)
+      throw Error('OWNED_READ_BOUND_EXCEEDED');
     const snaps=await Promise.all(refs.map(ref=>tx.get(ref)));
     for(let i=0;i<snaps.length;i++){
       if(!snaps[i].exists()||sha256(snaps[i].data())!==sha256(expected[i]))
@@ -199,9 +209,6 @@ class VariableBlockSession{
     const sourceSnap=await getDoc(this.sourceRef);
     if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
     this.verifySource(sourceSnap.data());
-    // Resume is safe only if the *entire* keyed/receipt workspace matches
-    // exactly the not-yet-deleted chunk suffix. A new foreign master, claim
-    // or receipt added during the rollback pause must block journal reset.
     const remaining={
       flottaDrivers:new Set(),flottaVehicles:new Set(),
       flottaDriverClaims:new Set(),flottaVehicleClaims:new Set()
@@ -255,8 +262,6 @@ class VariableBlockSession{
     }
   }
   async importNext(options={}){
-    // Zero keyed pairs still carry fuel cards, contacts and extra fields.
-    // done:true with no journal used to drop that archive and look finished.
     if(this.chunks.length===0)throw Error('EMPTY_KEYED_PROJECTION');
     const fenceSnap=await getDoc(this.journalRef);
     if(fenceSnap.exists()&&fenceSnap.data().rollbackFence)
@@ -265,20 +270,23 @@ class VariableBlockSession{
     if(state.closed)throw Error('CLOSED_REPLAY_DENIED');
     if(state.committed>=this.chunks.length)
       return {done:true,committed:state.committed,writes:0};
-    // Test-only barrier forces two local sessions to observe the SAME
-    // checkpoint. This staging emulator class is never a production importer.
-    if(options.afterVerify)await options.afterVerify(state);
     const index=state.committed;
+    const prefixReads=this.chunks.slice(0,index).reduce(
+      (sum,part)=>sum+part.length*2+1,0);
+    // A multi-transaction readback cannot protect these owned rows from
+    // privileged rewrites at the final journal CAS. Refuse BEFORE callback,
+    // read and any further write; rollback remains available.
+    if(prefixReads>OWNED_READ_BOUND)
+      throw Error('LARGE_PREFIX_REQUIRES_ISOLATION');
+    if(options.afterVerify)await options.afterVerify(state);
     const chunk=this.chunks[index];
     const receiptRef=doc(this.db,RECEIPTS,String(index).padStart(4,'0'));
     const paths=chunk.flatMap(pair=>[
       doc(this.db,...pair.masterPath.split('/')),
       doc(this.db,...pair.claimPath.split('/'))
     ]);
-    // A batch.set() blindly overwrote the same journal and documents when
-    // two importNext() calls observed committedChunks=N concurrently.
-    // Atomic read + write on the persisted journal provides a CAS barrier
-    // against two cooperating writers and a racing rollback cursor update.
+    // The prefix is always <= OWNED_READ_BOUND here, so every owned
+    // master, claim and receipt participates in the *same* write CAS.
     await runTransaction(this.db,async tx=>{
       const [journalSnap,sourceSnap,receiptSnap]=await Promise.all([
         tx.get(this.journalRef),tx.get(this.sourceRef),tx.get(receiptRef)
@@ -296,13 +304,9 @@ class VariableBlockSession{
         throw Error('STALE_IMPORT_CHECKPOINT');
       }
       if(receiptSnap.exists())throw Error('CHUNK_RECEIPT_ALREADY_EXISTS');
-      // No writes until ALL target paths have been checked in the same
-      // transaction; a competing first writer must not overwrite them.
       const current=await Promise.all(paths.map(ref=>tx.get(ref)));
       if(current.some(snap=>snap.exists()))
         throw Error('CHUNK_PATH_ALREADY_EXISTS');
-      // The journal CAS does not see a privileged rewrite of an earlier
-      // chunk. Re-hash that prefix before this chunk becomes durable.
       if(index>0)await this.assertOwnedChunks(tx,0,index);
       if(!state.journal){
         tx.set(this.sourceRef,this.archive);
@@ -339,8 +343,6 @@ class VariableBlockSession{
          !Number.isSafeInteger(fence.total)||
          fence.deletedThrough<0||fence.deletedThrough>fence.total||
          fence.total>this.chunks.length||
-         // A forged short fence must not reset the journal while later
-         // receipted chunks and keyed masters still exist.
          fence.total!==journal.committedChunks)
         throw Error('ROLLBACK_FENCE_MISMATCH');
       await this.verifyRollbackRemainder(fence);
@@ -351,8 +353,6 @@ class VariableBlockSession{
       if(!state.journal)return {rollbackBatches:0};
       total=state.committed;
     }
-    // Test-only pause lets a cooperating importer commit after this complete
-    // ownership precheck but before the first destructive transaction.
     if(options.afterVerify)await options.afterVerify({deletedThrough,total});
     let rollbackBatches=0;
     while(deletedThrough<total){
@@ -365,10 +365,6 @@ class VariableBlockSession{
         refs.push(...part);
         next++;
       }
-      // Restrict the destructive transaction to exactly the receipt-owned
-      // version of each master/claim. If a privileged process rewrites a
-      // target AFTER the out-of-transaction preflight, deleting that new
-      // content would silently discard someone else's data.
       const expectedTargets=new Map();
       for(let i=deletedThrough;i<next;i++){
         const chunk=this.chunks[i];
@@ -381,10 +377,6 @@ class VariableBlockSession{
       }
       const finished=next===total;
       const expectedDeletedThrough=deletedThrough;
-      // A non-transactional writeBatch could reset a journal after an
-      // importer committed a NEW chunk between rollback preflight and delete.
-      // Read the journal + pinned source *inside* the transaction that deletes
-      // this batch. Transactions conflict with the importer journal CAS.
       await runTransaction(this.db,async tx=>{
         const [currentJournal,currentSource]=await Promise.all([
           tx.get(this.journalRef),tx.get(this.sourceRef)
@@ -406,15 +398,13 @@ class VariableBlockSession{
           throw Error('ROLLBACK_FENCE_STALE');
         }
         this.verifySource(currentSource.data());
-        // Firestore revalidates all these transaction reads at commit; a
-        // concurrent owner of a target row must cause retry then DENY, not
-        // deletion of unverified content. The journal CAS alone cannot see
-        // privileged modifications to keyed rows/receipts.
-        const currentTargets=await Promise.all(refs.map(ref=>tx.get(ref)));
+        // Firestore requires ALL transaction reads before the first write.
+        // Read and validate every target atomically, then perform deletes.
+        const snapshots=await Promise.all(refs.map(ref=>tx.get(ref)));
         for(let i=0;i<refs.length;i++){
-          const snapshot=currentTargets[i],expected=expectedTargets.get(refs[i].path);
-          if(!expected||!snapshot.exists()||
-             sha256(snapshot.data())!==sha256(expected))
+          const snap=snapshots[i];
+          const expected=expectedTargets.get(refs[i].path);
+          if(!snap.exists()||sha256(snap.data())!==sha256(expected))
             throw Error('ROLLBACK_TARGET_CHANGED');
         }
         for(const ref of refs)tx.delete(ref);
@@ -440,6 +430,11 @@ class VariableBlockSession{
   }
   async close(options={}){
     const state=await this.verifyCommitted();
+    const prefixReads=this.chunks.slice(0,state.committed).reduce(
+      (sum,part)=>sum+part.length*2+1,0);
+    // Never latch closed=true with a non-atomic earlier-window scan.
+    if(prefixReads>OWNED_READ_BOUND)
+      throw Error('LARGE_PREFIX_REQUIRES_ISOLATION');
     const approval=await getDoc(this.approvalRef);
     const decision=localCloseDecision({
       sourceParity:state.committed===this.chunks.length,
@@ -447,24 +442,31 @@ class VariableBlockSession{
       alreadyClosed:state.closed
     });
     if(!decision.ok)throw Error(decision.reason);
-    if(!state.journal||state.journal.rollbackFence)throw Error('STALE_CLOSE_CHECKPOINT');
+    if(!state.journal||state.journal.rollbackFence)
+      throw Error('STALE_CLOSE_CHECKPOINT');
     if(options.afterVerify)await options.afterVerify();
+    // The same transaction reads all owned data before closing the journal.
     await runTransaction(this.db,async tx=>{
       const [journal,archive,policy]=await Promise.all([
         tx.get(this.journalRef),tx.get(this.sourceRef),tx.get(this.approvalRef)
       ]);
-      if(policy.exists())throw Error('CLOSING_TRUST_MUST_NOT_BE_MIGRATION_APPROVAL');
+      if(policy.exists())
+        throw Error('CLOSING_TRUST_MUST_NOT_BE_MIGRATION_APPROVAL');
       if(!journal.exists()||sha256(journal.data())!==sha256(state.journal))
         throw Error('STALE_CLOSE_CHECKPOINT');
       if(!archive.exists())throw Error('ORIGINAL_SOURCE_MISSING');
       this.verifySource(archive.data());
-      // closed:true permanently denies rollback. The journal hash does not
-      // cover keyed rows, so a raced rewrite must fail this same transaction.
       await this.assertOwnedChunks(tx,0,state.committed);
-      tx.update(this.journalRef,{closed:true,sourceTrust:decision.sourceTrust,
-        closingTrust:decision.closingTrust,sealed:false,authorizedForImport:false,
-        productionClosingTrust:false,firestoreEncodedSizeVerified:false});
-    });
+      tx.update(this.journalRef,{
+        closed:true,
+        sourceTrust:decision.sourceTrust,
+        closingTrust:decision.closingTrust,
+        sealed:false,
+        authorizedForImport:false,
+        productionClosingTrust:false,
+        firestoreEncodedSizeVerified:false
+      });
+    },{maxAttempts:5});
     return decision;
   }
   async unseal(){
@@ -785,15 +787,22 @@ async function main(){
     await large.importNext();
     large=new VariableBlockSession(db,largeSource);
     assert.equal((await large.verifyCommitted()).committed,2);
-    await large.importAll();
-    const largeRollback=await large.rollback();
+    await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.journalRef)).data().committedChunks,8,
+      '8 committed chunks are permitted; the 9th would require 136 owned reads');
+    await assert.rejects(()=>large.importNext({afterVerify:()=>{
+      throw Error('UNSAFE_CALLBACK_RAN_AFTER_LARGE_PREFIX_DENY');
+    }}),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    const largeRollback=await large.rollback({maxWrites:40});
     assert.ok(largeRollback.rollbackBatches>=2,
       'rollback batches='+largeRollback.rollbackBatches);
     large=new VariableBlockSession(db,largeSource);
-    await large.importAll();
+    await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
     const early=large.prepared.pairs[0];
-    const late=large.prepared.pairs.at(-1);
-    await assert.rejects(()=>large.rollback({crashAfterBatches:1}),/ROLLBACK_INTERRUPTED/);
+    // Check an actually committed late pair, not the unimported last record.
+    const late=large.chunks[7].at(-1);
+    await assert.rejects(()=>large.rollback({maxWrites:40,crashAfterBatches:1}),
+      /ROLLBACK_INTERRUPTED/);
     assert.equal((await getDoc(doc(db,...early.masterPath.split('/')))).exists(),false);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),true);
     const foreign=doc(db,'flottaDrivers','FOREIGN-KEEP');
@@ -851,18 +860,22 @@ async function main(){
     await updateDoc(parked.sourceRef,{contacts:originalArchive.contacts});
     console.log('PASS DENY [E+SDK]: resumed rollback rejects foreign master/claim and rich source drift without deleting remaining chunk');
     const resumed=new VariableBlockSession(db,largeSource);
-    const rest=await resumed.rollback();
+    const rest=await resumed.rollback({maxWrites:40});
     assert.ok(rest.rollbackBatches>=1);
     assert.equal((await getDoc(doc(db,...late.masterPath.split('/')))).exists(),false);
     assert.equal((await getDoc(foreign)).exists(),false);
     console.log('PASS [E+SDK]: rollback crash resumes only after foreign records and source drift are cleared; all owned chunks deleted');
     large=new VariableBlockSession(db,largeSource);
-    await large.importAll();
-    await large.close();
+    await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    await assert.rejects(()=>large.close(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.journalRef)).data().closed,false,
+      'large prefix must remain rollbackable and unclosed');
     assert.equal((await getDoc(doc(large.db,...APPROVAL.split('/')))).exists(),false);
     assert.equal((await getDoc(doc(large.db,...SOURCE.split('/')))).data().sealed,false);
-    console.log('PASS [E+SDK]: larger unequal source interrupted, rolled back in',
-      largeRollback.rollbackBatches,'batches, retried, locally closed without approval');
+    await large.rollback({maxWrites:40});
+    assert.equal((await getDocs(collection(db,RECEIPTS))).empty,true);
+    console.log('PASS DENY [E+SDK]: 200/90/22/7 fails closed after 8 chunks,',
+      'rollback crash/resume and four-array rich tamper negatives preserved');
 
     const probe=doc(db,'v1SyntheticVariableBlockProbe','size');
     const accepted='é'.repeat(1000);
@@ -879,6 +892,25 @@ async function main(){
     await deleteDoc(probe);
     console.log('PASS [E+SDK] multibyte readback and oversize reject',rejectCode,
       '(emulator acceptance is not encoded-size proof)');
+    // Large-N is NEVER an authorized positive import; demonstrate safe
+    // bounded partial progress and rollback with no unsafe local close.
+    await env.clearFirestore();
+    await seedUser(env);
+    const fourFortySource=syntheticFourBlockSource(FOUR_FORTY);
+    const fourFortyPrepared=projectBlockPairs(fourFortySource);
+    assert.equal(fourFortyPrepared.pairs.length,440);
+    const fourForty=new VariableBlockSession(db,fourFortySource);
+    await assert.rejects(()=>fourForty.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(fourForty.journalRef)).data().committedChunks,8);
+    await assert.rejects(()=>fourForty.close(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(fourForty.journalRef)).data().closed,false);
+    const committedLast=fourForty.chunks[7].at(-1);
+    assert.equal((await getDoc(doc(db,...committedLast.masterPath.split('/')))).exists(),true);
+    const rolled440=await fourForty.rollback({maxWrites:40});
+    assert.ok(rolled440.rollbackBatches>=2);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).empty,true);
+    assert.equal((await getDoc(fourForty.sourceRef)).data().sealed,false);
+    console.log('PASS DENY [E+SDK] 440 pairs fail closed then safely rollback; never locally close');
 
     summary.shapes.push({
       counts:SMALL,
@@ -900,6 +932,16 @@ async function main(){
       sourceSha256:largePrepared.sourceSha256,
       firestoreEncodedSizeVerified:false,
       productionClosingTrust:false
+    });
+    summary.shapes.push({
+      counts:FOUR_FORTY,keyedPairs:fourFortyPrepared.pairs.length,
+      sourceSha256:fourFortyPrepared.sourceSha256,
+      firestoreEncodedSizeVerified:false,
+      productionClosingTrust:false,
+      smallPrefixSameCasVerified:true,
+      oversizedPrefixImportRejected:true,
+      oversizedPrefixClosed:false,
+      largePrefixIsolationRequired:true
     });
     summary.result='PASS_SYNTHETIC_EMULATOR_ONLY';
     summary.productionRecordCountHardcoded=false;

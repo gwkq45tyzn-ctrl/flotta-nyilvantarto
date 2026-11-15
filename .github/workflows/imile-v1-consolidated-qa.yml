@@ -44,9 +44,15 @@ jobs:
           node --test \
             tools/v1-migration-dryrun.test.mjs \
             tools/v1-migration-acceptance.test.mjs \
+            tools/v1-pinned-backup-trust.test.mjs \
+            tools/v1-operational-readiness.test.mjs \
+            tools/v1-owner-readiness-cli.test.mjs \
+            tools/v1-capacity-remediation.test.mjs \
             tools/v1-trusted-importer-attestation.test.mjs \
             tools/v1-firestore-size-gate.test.mjs \
             tools/v1-firestore-size-estimator.test.mjs \
+            tools/v1-apps-script-cutover-evidence.test.mjs \
+            tools/v1-apps-script-cutover-cli.test.mjs \
             docs/v1-apps-script-inventory-static.test.mjs
   signed-in-restricted-rules:
     runs-on: ubuntu-24.04

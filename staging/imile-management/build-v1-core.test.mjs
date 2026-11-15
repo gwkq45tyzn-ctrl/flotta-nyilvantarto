@@ -36,6 +36,11 @@ test('offline narrow V1 QA bundle preserves original Fleet and excludes deferred
     assert.equal(existsSync(join(dest,'staging/imile-management/fleet/operations.html')),false);
     assert.equal(existsSync(join(dest,'depokapacitas/google-sync/Code.gs')),false);
     const hub=readFileSync(join(dest,'staging/imile-management/index.html'),'utf8');
+    assert.match(hub,/kizárólag az eredeti Flotta Nyilvántartót és a DepóKapacitást tartalmazza/);
+    assert.doesNotMatch(hub,/a fejlett DepóKapacitás és az In-Hub\/OFD riportkészítő/);
+    assert.match(readFileSync(join(root,'staging/imile-management/index.html'),'utf8'),
+      /a fejlett DepóKapacitás és az In-Hub\/OFD riportkészítő/,
+      'Only the emitted review copy may change its scope notice');
     assert.doesNotMatch(hub,/class="card module reports"/);
     assert.doesNotMatch(hub,/href="\.\/reports\/index\.html"/);
     assert.doesNotMatch(hub,/href="\.\/fleet\/operations\.html"/);
