@@ -105,6 +105,7 @@ jobs:
           node staging/imile-management/build-v1-core.mjs
       - name: Original Fleet to Depot, genuine app, authenticated full E2E
         run: |
+          node --test staging/imile-management/fleet/v1-qa-asset-routes.test.mjs
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only auth,firestore --project demo-imile-qa \
             --config firebase.depo-qa.json \
