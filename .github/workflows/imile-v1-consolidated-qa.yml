@@ -53,6 +53,7 @@ jobs:
             tools/v1-firestore-size-estimator.test.mjs \
             tools/v1-apps-script-cutover-evidence.test.mjs \
             tools/v1-apps-script-cutover-cli.test.mjs \
+            tools/v1-owner-capacity-review.static.test.mjs \
             docs/v1-apps-script-inventory-static.test.mjs
   signed-in-restricted-rules:
     runs-on: ubuntu-24.04
@@ -140,6 +141,9 @@ jobs:
             --only auth,firestore --project demo-imile-qa \
             --config firebase.depo-qa.json \
             "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
+      - name: Offline owner four-array capacity review in real Chromium (NO CLOUD)
+        run: |
+          node tools/v1-owner-capacity-review.e2e.mjs
   p0-poisoned-privileged-source-hardstop:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
