@@ -134,19 +134,41 @@ try {
     writeFileSync(alertFile,alerts.replaceAll(oldDetail,
       '../staging/imile-management/cutover.html'));
   }
-  // Fail closed when a copied ESM file imports a missing relative module.
-  for(const p of packageFiles.filter(p=>/\.(?:mjs|js)$/.test(p))){
+  // Same hard stop as the offline core bundle: the setup card links a
+  // markdown guide that is not copied into either preview.
+  const depotHtmlFile=join(target,'depokapacitas/index.html');
+  const installHelp='Részletes lépések: <a href="./TELEPITES.md">Telepítési útmutató</a>.';
+  const depotHtml=readFileSync(depotHtmlFile,'utf8');
+  if(!depotHtml.includes(installHelp))
+    throw Error('Depot setup link changed: re-review for preview scope');
+  writeFileSync(depotHtmlFile,depotHtml.replace(installHelp,
+    'Az éles beállítás kizárólag külön rendszergazdai jóváhagyással történhet.'));
+  // Fail closed when a copied file points at a local module, page, or CSS
+  // asset that was not packaged. Scheme and bare CDN references are ignored.
+  for(const p of packageFiles.filter(p=>/\.(?:mjs|js|html|css)$/.test(p))){
     const source=readFileSync(join(target,p),'utf8');
-    const references=[
-      ...source.matchAll(/\b(?:import|export)\s+(?:[^'"\n]+?\s+from\s*)?['"](\.[^'"]+)['"]/g),
-      ...source.matchAll(/\b(?:import|export)\s*\{[\s\S]*?\}\s*from\s*['"](\.[^'"]+)['"]/g),
-      ...source.matchAll(/\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g)
-    ].map(hit=>hit[1]);
+    const references=[];
+    if(/\.(?:mjs|js)$/.test(p)){
+      references.push(
+        ...[...source.matchAll(/\b(?:import|export)\s+(?:[^'"\n]+?\s+from\s*)?['"](\.[^'"]+)['"]/g)].map(hit=>hit[1]),
+        ...[...source.matchAll(/\b(?:import|export)\s*\{[\s\S]*?\}\s*from\s*['"](\.[^'"]+)['"]/g)].map(hit=>hit[1]),
+        ...[...source.matchAll(/\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g)].map(hit=>hit[1])
+      );
+    }
+    if(p.endsWith('.html')){
+      references.push(...[...source.matchAll(/\b(?:src|href)=['"](\.[^'"]+)['"]/g)].map(hit=>hit[1]));
+    }
+    if(p.endsWith('.css')){
+      references.push(
+        ...[...source.matchAll(/url\(\s*['"]?(\.[^'")\s]+)['"]?\s*\)/g)].map(hit=>hit[1]),
+        ...[...source.matchAll(/@import\s+(?:url\(\s*)?['"](\.[^'"]+)['"]/g)].map(hit=>hit[1])
+      );
+    }
     for(const ref of references){
       const destination=resolve(dirname(join(target,p)),ref.split(/[?#]/)[0]);
       if((destination!==target&&!destination.startsWith(target+sep))||
         !existsSync(destination))
-        throw Error('Unbundled local module '+ref+' imported by '+p);
+        throw Error('Unbundled local asset '+ref+' referenced by '+p);
     }
   }
   writeFileSync(join(target,'index.html'),
