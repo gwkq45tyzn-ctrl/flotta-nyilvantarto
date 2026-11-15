@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>iMile Flotta – offline futárkapacitás ellenőrzés</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#17243d;background:#eff3f9}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 15px 80px}
+main{max-width:1030px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+h1{font-size:clamp(1.5rem,4vw,2.15rem);margin:14px 0 5px}h2{font-size:1.12rem;margin:0 0 12px}
+p{line-height:1.55;margin:9px 0}.muted{color:#5d6a7f}.small{font-size:.86rem}
+.pill{background:#e1ecff;color:#184992;border:1px solid #c1d8fc;padding:7px 11px;border-radius:100px;font-size:.8rem;font-weight:700}
+.panel{margin-top:17px;background:white;border:1px solid #d7e1ee;border-radius:14px;padding:20px;box-shadow:0 3px 14px #203a6010}
+label.file{display:inline-flex;gap:12px;align-items:center;font-weight:650;cursor:pointer}
+input[type=file]{display:block;max-width:100%;margin-top:9px}
+.message{padding:12px 14px;border-radius:10px;border:1px solid #c7d8f1;background:#f0f6ff;font-weight:600;margin-top:14px}
+.message.error{border-color:#f2b4b4;background:#fff0f0;color:#8b2525}
+.numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px;margin:14px 0}
+.metric{border:1px solid #e3e9f3;background:#f8faff;border-radius:10px;padding:11px}
+.metric strong{font-size:1.45rem;display:block;font-variant-numeric:tabular-nums}.metric span{font-size:.82rem;color:#536077}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:570px}
+th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #edf0f6}th{font-size:.82rem;color:#52627a}
+code{font-size:.88rem;color:#243a5c;background:#eef3f9;padding:4px 6px;border-radius:5px}
+input[type=number]{font:inherit;width:126px;max-width:100%;border:1px solid #acbdd5;border-radius:8px;padding:9px}
+.review{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;cursor:pointer;font-size:.9rem}
+.review input{width:18px;height:18px;accent-color:#1665bb}
+.buttons{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+button{background:#175db2;border:0;border-radius:9px;padding:12px 17px;color:white;font:inherit;font-weight:680;cursor:pointer}
+button.secondary{background:#eff4fb;color:#184576;border:1px solid #bfd0e6}
+button:disabled{background:#dae2ec;color:#68788d;cursor:not-allowed}
+.note{border-left:3px solid #a0b4d2;padding-left:13px;color:#435471}
+.warning{color:#783b0b;background:#fff7ed;border:1px solid #f8d5a4;border-radius:9px;padding:11px}
+footer{margin-top:18px;color:#536077;font-size:.85rem}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>Flotta – futárkapacitás előkészítése</h1>
+    <p class="muted">iMile Management · magyar nyelvű, teljesen offline segédeszköz</p>
+  </div>
+  <span class="pill">NEM ÉLES IMPORT</span>
+</header>
+<section class="panel">
+  <h2>1. Válaszd ki a saját Flotta-exportodat</h2>
+  <p>A teljes, eredeti <strong>JSON-mentést</strong> válaszd ki, amely a <code>drivers</code>, <code>vehicles</code>, <code>fuelCards</code> és <code>contacts</code> tömböket tartalmazza. A fájlt a böngésző csak a gépeden olvassa.</p>
+  <label for="sourceFile">Helyi Flotta JSON-fájl</label>
+  <input id="sourceFile" type="file" accept=".json,application/json">
+  <p class="small muted">Semmit nem küldünk a szerverre, nincs bejelentkezés, szinkronizálás, automatikus mentés vagy adatgyűjtés.</p>
+  <div id="message" class="message" role="status" aria-live="polite">Még nem választottál fájlt.</div>
+  <div id="numbers" class="numbers" hidden></div>
+  <p id="otherRows" class="warning small" hidden></p>
+</section>
+<section id="reviewPanel" class="panel" hidden>
+  <h2>2. Ellenőrizd a futárokat egyenként</h2>
+  <p class="note">A <strong>70 csomag</strong> csak szerkeszthető javaslat, nem automatikus beállítás. Minden aktív futárnál meg kell adnod egy egész számot (1–10 000), majd külön bepipálnod az ellenőrzést.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Futár azonosítója</th><th>Jelenlegi kapacitás</th><th>Jóváhagyott kapacitás (db)</th><th>Ellenőriztem</th></tr></thead>
+      <tbody id="driverRows"></tbody>
+    </table>
+  </div>
+  <p id="reviewStatus" class="small muted" aria-live="polite"></p>
+  <div class="buttons">
+    <button id="exportButton" disabled>Új, teljes Flotta JSON mentése</button>
+    <button id="summaryButton" class="secondary" disabled>Adatmentes ellenőrzési összesítő</button>
+  </div>
+  <p class="warning small">Az elkészült fájl <strong>privát Flotta-adatokat</strong> tartalmaz. Csak a saját gépeden őrizd! Az eredeti mentés változatlan marad. Az új fájlról külön független biztonsági mentés, új SHA-ellenőrzés és tulajdonosi jóváhagyás szükséges.</p>
+</section>
+<footer>Ez kizárólag helyi adat-előkészítés. Nem igazolja a Firestore-méretet, a Firebase IAM-et, a régi Apps Script írók leállítását vagy az élesítés engedélyét. Az OFD, In-Hub és Excel-riportok nem részei ennek a segédeszköznek.</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const MAX_FILE_BYTES=1200000,MAX_CANONICAL_BYTES=800*1024,MAX_DRIVERS=25;
+  const $=id=>document.getElementById(id);
+  const nodes={file:$('sourceFile'),message:$('message'),numbers:$('numbers'),
+    other:$('otherRows'),panel:$('reviewPanel'),rows:$('driverRows'),
+    status:$('reviewStatus'),export:$('exportButton'),summary:$('summaryButton')};
+  const active=s=>typeof s==='string'&&['aktiv','aktív'].includes(s.trim().toLowerCase());
+  const inactive=s=>typeof s==='string'&&['inaktiv','inaktív'].includes(s.trim().toLowerCase());
+  const cap=n=>Number.isSafeInteger(n)&&n>=1&&n<=10000;
+  const da=s=>typeof s==='string'&&/^[A-Za-z0-9_-]{4,40}$/.test(s.trim())
+    ?s.trim().toUpperCase():'';
+  const plate=s=>typeof s==='string'&&/^[A-Za-z0-9 -]{4,40}$/.test(s)
+    ?s.replace(/[ -]/g,'').toUpperCase():'';
+  const isRecord=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
+  const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+  let original=null,reviewRows=[],savedCandidate=null,savedSummary=null;
+
+  function notice(message,error=false){
+    nodes.message.textContent=message;
+    nodes.message.className='message'+(error?' error':'');
+  }
+  function reset(message='Válassz egy teljes Flotta JSON-exportot.',error=false){
+    original=null;reviewRows=[];savedCandidate=null;savedSummary=null;
+    nodes.rows.replaceChildren();nodes.numbers.replaceChildren();
+    nodes.panel.hidden=true;nodes.numbers.hidden=true;nodes.other.hidden=true;
+    nodes.export.disabled=true;nodes.summary.disabled=true;notice(message,error);
+  }
+  function normalizedSource(source){
+    if(!isRecord(source)||!['drivers','vehicles','fuelCards','contacts']
+      .every(k=>Array.isArray(source[k])))throw Error('HIÁNYZÓ_NÉGY_TÖMB');
+    if(source.sealed===true||own(source,'migrationSourceSha256'))
+      throw Error('LEZÁRT_VAGY_IMPORTÁLT_FORRÁS');
+    if(source.drivers.length>MAX_DRIVERS)throw Error('TÖBB_MINT_25_FUTÁR');
+    const idKeys=['drivers','vehicles'];
+    for(const key of ['drivers','vehicles','fuelCards','contacts']){
+      const ids=new Set();
+      for(const row of source[key]){
+        if(!isRecord(row)||own(row,'history')&&!Array.isArray(row.history))
+          throw Error('HIBÁS_REKORD_VAGY_HISTORY');
+        if(own(row,'revision')&&(!Number.isSafeInteger(row.revision)||row.revision<1))
+          throw Error('HIBÁS_REVÍZIÓ');
+        if(idKeys.includes(key)){
+          if(typeof row.id!=='string'||!row.id.trim()||ids.has(row.id)||
+             own(row,'sourceIndex'))throw Error('HIBÁS_REKORD_AZONOSÍTÓ');
+          ids.add(row.id);
+        }
+      }
+    }
+    const daSeen=new Set(),platesSeen=new Set();
+    for(const row of source.drivers){
+      const id=da(row.daCode);
+      if(!id||daSeen.has(id))throw Error('HIBÁS_VAGY_DUPLA_DA');
+      daSeen.add(id);
+    }
+    for(const row of source.vehicles){
+      const p=plate(row.rendszam);
+      if(p.length<4||p.length>40||platesSeen.has(p))
+        throw Error('HIBÁS_VAGY_DUPLA_RENDSZÁM');
+      platesSeen.add(p);
+    }
+    const activeRows=source.drivers.map((row,index)=>({row,index,id:da(row.daCode)}))
+      .filter(entry=>active(entry.row.status));
+    if(!activeRows.length)throw Error('NINCS_AKTÍV_FUTÁR');
+    if(!source.vehicles.some(v=>active(v.status)))throw Error('NINCS_AKTÍV_JÁRMŰ');
+    return {activeRows,
+      inactive:source.drivers.filter(d=>inactive(d.status)).length,
+      unknown:source.drivers.filter(d=>!active(d.status)&&!inactive(d.status)).length,
+      missing:activeRows.filter(e=>!cap(e.row.kapacitas)).length};
+  }
+  function canonical(value){
+    if(value===null)return 'null';
+    if(typeof value==='string'||typeof value==='number'&&Number.isFinite(value)||
+       typeof value==='boolean')return JSON.stringify(value);
+    if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+    if(isRecord(value))return '{'+Object.keys(value).sort()
+      .map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
+    throw Error('NEM_SZABÁLYOS_JSON');
+  }
+  function canonicalBytes(data){
+    const str=canonical(data);
+    if(new TextEncoder().encode(str).byteLength>MAX_CANONICAL_BYTES)
+      throw Error('TÚL_NAGY_ADATÁLLOMÁNY');
+    return str;
+  }
+  async function digest(text){
+    if(!globalThis.crypto||!crypto.subtle)throw Error('SHA256_NEM_ELÉRHETŐ');
+    const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+    return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function metric(label,value){
+    const el=document.createElement('div');el.className='metric';
+    const strong=document.createElement('strong'),caption=document.createElement('span');
+    strong.textContent=String(value);caption.textContent=label;
+    el.append(strong,caption);nodes.numbers.append(el);
+  }
+  function render(source,details){
+    nodes.numbers.replaceChildren();
+    metric('Összes futár',source.drivers.length);
+    metric('Aktív futár',details.activeRows.length);
+    metric('Hiányzó aktív kapacitás',details.missing);
+    metric('Aktív jármű',source.vehicles.filter(v=>active(v.status)).length);
+    metric('Tankolókártya',source.fuelCards.length);
+    metric('Kapcsolat',source.contacts.length);
+    nodes.numbers.hidden=false;nodes.other.hidden=false;
+    nodes.other.textContent='Nem aktív futárok: '+details.inactive+
+      '. Bizonytalan státuszú futárok: '+details.unknown+
+      '. Ezeket a segéd nem módosítja; a státuszuk tulajdonosi ellenőrzést igényelhet.';
+    nodes.rows.replaceChildren();reviewRows=[];
+    for(const entry of details.activeRows){
+      const tr=document.createElement('tr');
+      const idCell=document.createElement('td'),id=document.createElement('code');
+      id.textContent=entry.id;idCell.append(id);
+      const previous=document.createElement('td');
+      previous.textContent=cap(entry.row.kapacitas)?String(entry.row.kapacitas):'Hiányzik / hibás';
+      const valueCell=document.createElement('td'),number=document.createElement('input');
+      number.type='number';number.min='1';number.max='10000';number.step='1';
+      number.placeholder='70 (javaslat)';
+      number.setAttribute('aria-label',entry.id+' jóváhagyott kapacitása');
+      if(cap(entry.row.kapacitas))number.value=String(entry.row.kapacitas);
+      valueCell.append(number);
+      const confirmCell=document.createElement('td'),label=document.createElement('label');
+      label.className='review';const checkbox=document.createElement('input');
+      checkbox.type='checkbox';checkbox.setAttribute('aria-label',entry.id+' ellenőriztem');
+      const span=document.createElement('span');span.textContent='Ellenőriztem';
+      label.append(checkbox,span);confirmCell.append(label);
+      tr.append(idCell,previous,valueCell,confirmCell);
+      nodes.rows.append(tr);reviewRows.push({entry,number,checkbox});
+      number.addEventListener('input',updated);
+      checkbox.addEventListener('change',updated);
+    }
+    nodes.panel.hidden=false;
+    updated();
+  }
+  function updated(){
+    savedCandidate=null;savedSummary=null;nodes.summary.disabled=true;
+    const checked=reviewRows.filter(r=>r.checkbox.checked).length;
+    const valid=reviewRows.every(r=>r.checkbox.checked&&/^[0-9]+$/.test(r.number.value)&&
+      cap(Number(r.number.value)));
+    nodes.export.disabled=!original||!valid;
+    nodes.status.textContent=checked+' / '+reviewRows.length+
+      ' futár ellenőrizve. '+(valid?'Minden kapacitás ellenőrzött, készíthető a helyi mentés.':
+      'A mentéshez minden aktív futárnál érvényes egész szám és külön jelölés kell.');
+  }
+  function download(name,content,mime){
+    const blob=new Blob([content],{type:mime});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=name;
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }
+  async function prepare(){
+    if(nodes.export.disabled||!original)throw Error('NINCS_TELJES_ELLENŐRZÉS');
+    const candidate=JSON.parse(JSON.stringify(original));
+    for(const r of reviewRows){
+      if(!r.checkbox.checked||!/^[0-9]+$/.test(r.number.value)||
+         !cap(Number(r.number.value)))throw Error('HIÁNYZÓ_FUTÁR_JÓVÁHAGYÁS');
+      candidate.drivers[r.entry.index].kapacitas=Number(r.number.value);
+    }
+    const details=normalizedSource(candidate);
+    if(details.missing)throw Error('HIÁNYZÓ_KAPACITÁS');
+    const before=canonicalBytes(original),after=canonicalBytes(candidate);
+    return {candidate,summary:{
+      schema:'imile-local-owner-capacity-review-1',
+      counts:{drivers:candidate.drivers.length,activeDrivers:details.activeRows.length,
+        vehicles:candidate.vehicles.length,fuelCards:candidate.fuelCards.length,
+        contacts:candidate.contacts.length,uncertainStatusDrivers:details.unknown},
+      reviewedActiveDrivers:reviewRows.length,
+      originalLocalSha256:await digest(before),
+      candidateLocalSha256:await digest(after),
+      authorizedForImport:false,productionIamVerified:false,
+      independentSourcePinVerified:false,firestoreEncodedSizeVerified:false,
+      newIndependentBackupRequired:true,
+      note:'HELYI ELŐKÉSZÍTÉS — NEM ÉLES IMPORT / NEM TULAJDONOSI ÉLESÍTÉSI ENGEDÉLY'
+    }};
+  }
+  nodes.file.addEventListener('change',async()=>{
+    reset('Helyi fájl ellenőrzése…');
+    const file=nodes.file.files&&nodes.file.files[0];
+    if(!file){reset();return;}
+    if(file.size<1||file.size>MAX_FILE_BYTES){reset('Elutasítva: üres vagy túl nagy fájl.',true);return;}
+    try{
+      const source=JSON.parse(await file.text());
+      const details=normalizedSource(source);
+      canonicalBytes(source); // same conservative budget as existing local preflight
+      original=source;render(source,details);
+      notice('A négytömbös forrás helyben beolvasva. Éles import továbbra is tiltva.');
+    }catch{
+      reset('A helyi fájl elutasítva: hiányzó vagy hibás adatok, duplikált azonosítók, '+
+        'lezárt forrás, 25-nél több futár, vagy érvénytelen JSON. '+
+        'Semmit nem írtunk és nem küldtünk el.',true);
+    }
+  });
+  nodes.export.addEventListener('click',async()=>{
+    if(nodes.export.disabled)return;
+    try{
+      const prepared=await prepare();
+      savedCandidate=prepared.candidate;savedSummary=prepared.summary;
+      download('imile-flotta-kapacitas-ellenorzott.json',
+        JSON.stringify(savedCandidate,null,2)+'\n','application/json');
+      nodes.summary.disabled=false;
+      notice('Az új, teljes Flotta-adatállomány helyben elkészült. '+
+        'Független mentés és új forrás-SHA rögzítése szükséges.');
+    }catch{
+      savedCandidate=null;savedSummary=null;nodes.summary.disabled=true;
+      notice('A helyi export biztonsági ellenőrzése nem sikerült. Nincs éles adatmozgás.',true);
+    }
+  });
+  nodes.summary.addEventListener('click',()=>{
+    if(!savedCandidate||!savedSummary||nodes.summary.disabled)return;
+    download('imile-flotta-ellenorzes-osszesito.json',
+      JSON.stringify(savedSummary,null,2)+'\n','application/json');
+  });
+  reset();
+})();
+</script>
+</body>
+</html>
