@@ -6,6 +6,7 @@ on:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'staging/imile-management/fleet/v1-canonical-booking-emulator.mjs'
+      - 'staging/imile-management/fleet/v1-orphan-claim-rebook-emulator.mjs'
       - 'depokapacitas/canonical-booking*.mjs'
       - 'staging/imile-management/fleet/v1-cancel-missing-claim-emulator.mjs'
       - 'features/migration-manifest*'
@@ -19,6 +20,7 @@ on:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'staging/imile-management/fleet/v1-canonical-booking-emulator.mjs'
+      - 'staging/imile-management/fleet/v1-orphan-claim-rebook-emulator.mjs'
       - 'depokapacitas/canonical-booking*.mjs'
       - 'staging/imile-management/fleet/v1-cancel-missing-claim-emulator.mjs'
       - 'features/migration-manifest*'
@@ -67,7 +69,7 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.staging-emulator.json \
-            "node staging/imile-management/fleet/v1-canonical-booking-emulator.mjs && node staging/imile-management/fleet/v1-cancel-missing-claim-emulator.mjs"
+            "node staging/imile-management/fleet/v1-canonical-booking-emulator.mjs && node staging/imile-management/fleet/v1-cancel-missing-claim-emulator.mjs && node staging/imile-management/fleet/v1-orphan-claim-rebook-emulator.mjs"
       - name: Protect active staging Rules and actual original Fleet
         run: |
           test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
