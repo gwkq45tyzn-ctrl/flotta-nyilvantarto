@@ -1,28 +1,27 @@
 # iMile V1 Apps Script / legacy writer inventory — static code evidence only
 
-**Status: NO-GO for production cutover; deployment/trigger status remains explicitly UNKNOWN.** Source re-checked at `2dfa84f7ba5b8f8d10aeb45c9f7983894ae733c1`. Earlier file:line pins had drifted (the Fleet `pushRemote` writer is `index.html:1220-1254`, not `1214-1254`, and `gateOldSync` is also invoked at boot, not only after login). This is **not a live Google account/deployment inventory**. No endpoint, trigger, or Sheet was accessed or disabled.
+**Status: NO-GO for production cutover; deployment/trigger status remains explicitly UNKNOWN.** Locations are function blocks, not frozen line numbers. The structural test finds `gateOldSync` wherever it sits, and still requires the call after `boot` and after `verifyMember` on both the login and restored-session paths. This is **not a live Google account/deployment inventory**. No endpoint, trigger, or Sheet was accessed or disabled.
 
-## Verified source-code paths (exact file and line range)
+## Verified source-code paths (function blocks)
 
 | Repository source | Actual operation visible in code | Impact / classification |
 |---|---|---|
-| `index.html:1157-1161` | Original Fleet HTML defines a historical Apps Script backend URL and localStorage key (the URL is not repeated in this inventory) | Potential legacy Fleet remote endpoint; **deployment unverified** |
-| `index.html:1186-1198` | Original `pullRemote` performs JSONP readback and replaces local Fleet arrays | Read path can reintroduce stale data in an old browser |
-| `index.html:1199-1211` | `configureBackend` accepts and stores an Apps Script `/exec` URL | Per-browser endpoint selection; not visible from GitHub |
-| `index.html:1212-1254` | `save` queues `pushRemote`, which POSTs `{action:'save', data:snapshot}` with `mode:'no-cors'` and confirms by JSONP `requestId` | **Fleet writer in source.** Opaque `no-cors` is not success evidence |
-| `index.html:1255-1268` | `init` reloads cached/pending data; `pullRemote` every 7 seconds and on focus | Stale open pages can keep calling the legacy backend |
-| `flotta-nyilvantarto-elesitesre.html:1152-1153` and `:1212-1246` | Second full Fleet HTML copy with the same `DEFAULT_BACKEND_URL` pattern and `pushRemote` POST | Same writer shape, different file; deployment still UNKNOWN |
-| `flotta-bejelentkezes-v18.html:1103` | Alternate HTML sets `DEFAULT_BACKEND_URL` to an empty string | Not a baked-in endpoint |
-| `flotta-bejelentkezes-v18.html:1141-1145` and `:1229-1254` | `fleetPost` plus `pushRemote` still POST `{action:'save'}` when a token and backend URL exist | Separate legacy build; repo presence is not deployment |
-| `features/firestore-bridge.js:579-594` | `gateOldSync()` replaces `window.pushRemote` and `window.pullRemote` with no-ops | Browser-local only. Does not disable a deployed page or a server trigger |
-| `features/firestore-bridge.js:773` | Called after a successful shared-account login | Auth path |
-| `features/firestore-bridge.js:817` | Called when a restored session still has a valid member profile | Session path |
-| `features/firestore-bridge.js:866-873` | `boot` calls `gateOldSync()` as soon as `save` exists, before login | Earlier inventory missed this pre-auth gate. It still cannot stop a page that never loads the bridge |
+| `index.html` constant `DEFAULT_BACKEND_URL` | Original Fleet HTML defines a historical Apps Script backend URL and localStorage key (the URL is not repeated in this inventory) | Potential legacy Fleet remote endpoint; **deployment unverified** |
+| `index.html` function `pullRemote` | Original `pullRemote` performs JSONP readback and replaces local Fleet arrays | Read path can reintroduce stale data in an old browser |
+| `index.html` function `configureBackend` | `configureBackend` accepts and stores an Apps Script `/exec` URL | Per-browser endpoint selection; not visible from GitHub |
+| `index.html` function `save` and function `pushRemote` | `save` queues `pushRemote`, which POSTs `{action:'save', data:snapshot}` with `mode:'no-cors'` and confirms by JSONP `requestId` | **Fleet writer in source.** Opaque `no-cors` is not success evidence. This path does not call `syncAttendance` and does not write `flottaSharedState` |
+| `index.html` function `init` | `init` reloads cached/pending data; `pullRemote` every 7 seconds and on focus | Stale open pages can keep calling the legacy backend |
+| `flotta-nyilvantarto-elesitesre.html` function `pushRemote` | Second full Fleet HTML copy with the same `DEFAULT_BACKEND_URL` pattern and `pushRemote` POST | Same writer shape, different file; deployment still UNKNOWN |
+| `flotta-bejelentkezes-v18.html` constant `DEFAULT_BACKEND_URL` | Alternate HTML sets `DEFAULT_BACKEND_URL` to an empty string | Not a baked-in endpoint |
+| `flotta-bejelentkezes-v18.html` function `fleetPost` and function `pushRemote` | `fleetPost` plus `pushRemote` still POST `{action:'save'}` when a token and backend URL exist | Separate legacy build; repo presence is not deployment |
+| `features/firestore-bridge.js` function `gateOldSync` | Replaces `window.pushRemote` and `window.pullRemote` with no-ops. The body does not call `fetch` or `UrlFetchApp` | Browser-local only. Does not disable a deployed page or a server trigger |
+| `features/firestore-bridge.js` function `patchLogin` | `gateOldSync()` runs only after `verifyMember` accepts the shared account | Server-verified Auth path. A rejected profile signs out before the gate |
+| `features/firestore-bridge.js` function `resumeIfSession` | `gateOldSync()` runs only after `verifyMember` accepts a restored session. The invalid-profile branch does not call it | Session path |
+| `features/firestore-bridge.js` function `boot` | `boot` calls `gateOldSync()` as soon as `save` exists, and only then calls `resumeIfSession` | Pre-auth gate. It still cannot stop a page that never loads the bridge |
 | No `doGet` / `doPost` in repository `.gs` files | The Fleet web app that would receive `action:'save'` is not in this repo | Server behavior of the historical `/exec` endpoint is UNKNOWN |
-| `depokapacitas/google-sync/Code.gs:13-20` | Separate `syncAttendance` reads a named Sheet under a script lock | **Attendance**, not the Fleet `pushRemote` path |
-| `depokapacitas/google-sync/Code.gs:65-80` | `UrlFetchApp.fetch` commits Firestore REST `attendance/{id}` in batches of 200 | **Attendance writer in source.** `flottaSharedState` is not written here. Project id in source is still a placeholder |
-| `depokapacitas/google-sync/Code.gs:98-105` | `installFiveMinuteTrigger` would install a 5-minute `syncAttendance` trigger; `resetAttendanceImport` resets the watermark | Defining the function is not proof the trigger is installed |
-| `depokapacitas/google-sync/appsscript.json:5-9` | Manifest requests spreadsheets.readonly, datastore, script.external_request, and script.scriptapp | The datastore scope is broader than the attendance-only commit in `Code.gs`. Scope grant on a live project is UNKNOWN |
+| `depokapacitas/google-sync/Code.gs` function `syncAttendance` | Reads a named Sheet under a script lock, then `UrlFetchApp.fetch` commits Firestore REST `attendance/{id}` in batches of 200 | **Attendance writer in source.** It does not write `flottaSharedState` and it does not send `action:'save'`. Project id in source is still a placeholder |
+| `depokapacitas/google-sync/Code.gs` function `installFiveMinuteTrigger` | Would install a 5-minute `syncAttendance` trigger; `resetAttendanceImport` resets the watermark | Defining the function is not proof the trigger is installed |
+| `depokapacitas/google-sync/appsscript.json` | Manifest requests spreadsheets.readonly, datastore, script.external_request, and script.scriptapp | The datastore scope is broader than the attendance-only commit in `Code.gs`. Scope grant on a live project is UNKNOWN |
 
 **Explicit distinction:** the source contains **two categories of potential remote writers**: the original Fleet legacy `pushRemote` path and the separate attendance-to-Firestore Apps Script `syncAttendance`. They must not be conflated. The latter has an unresolved deployment status and is **excluded from narrowed Flotta+Depó V1 release scope**, but may warrant a separately approved audit because it has a Google Sheet and OAuth scope. The existence of a Sheet identifier and default backend URL in legacy source must not be repeated in GitHub issue comments, logs or runbooks; never publish credentials or personal records.
 

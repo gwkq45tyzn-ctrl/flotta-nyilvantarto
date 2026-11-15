@@ -109,10 +109,11 @@ try{
  const archived=(await getDoc(ref('flottaSharedState/current'))).data();
  const keyedD=(await getDoc(ref('flottaDrivers/DA0001'))).data();
  const keyedV=(await getDoc(ref('flottaVehicles/ABC123'))).data();
- if(archived.contacts[0].name!=='Updated original contact'){
-  failures.push('P1 CONTACTS-ONLY SEALED SAVE FAILED');
-  console.error(failures.at(-1),'bridgeErrors:',b.bridgeErrors,'attempted:',b.writes);
- }else console.log('PASS [E+REAL BRIDGE] contacts-only edit saved');
+ if(archived.contacts[0].name!=='Original contact'||archived.revision!==1){
+  failures.push('P0 CONTACTS ARRAY REPLACEMENT WAS NOT DENIED');
+  console.error(failures.at(-1),{name:archived.contacts[0].name,revision:archived.revision,
+    bridgeErrors:b.bridgeErrors,attempted:b.writes});
+ }else console.log('PASS DENY [E+REAL BRIDGE] sealed contacts array cannot be replaced by the original form');
  if(!keyedD.history||!keyedD.extra||!keyedD.name){
   failures.push('P0 RICH DRIVER DATA LOSS FROM UNRELATED CONTACTS SAVE');
   console.error(failures.at(-1),keyedD);

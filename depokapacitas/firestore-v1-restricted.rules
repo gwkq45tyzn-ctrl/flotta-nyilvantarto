@@ -1021,9 +1021,14 @@ service cloud.firestore {
         // privileged import creates the keyed sources and seals the archive.
         // Browser editor may update nonidentity metadata only, not arrays.
         // Seal itself remains privileged; client cannot flip or delete it.
+        // fuelCards and contacts are part of the attested four-block archive.
+        // List equality is one comparison each, not a per-element scan, so it
+        // does not spend the 1000-expression booking budget.
         && request.resource.data.get('sealed', false) == resource.data.get('sealed', false)
         && request.resource.data.drivers == resource.data.drivers
-        && request.resource.data.vehicles == resource.data.vehicles;
+        && request.resource.data.vehicles == resource.data.vehicles
+        && request.resource.data.fuelCards == resource.data.fuelCards
+        && request.resource.data.contacts == resource.data.contacts;
         // STRUCTURAL NOTE: counter maps alone do not prevent duplicates.
         // True uniqueness requires one document per identity. See
         // docs/STRUCTURAL_IDENTITY_MODEL.md.
