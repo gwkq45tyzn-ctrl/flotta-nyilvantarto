@@ -4,7 +4,8 @@
  * Nothing is uploaded, written or connected to Google/Firebase.
  */
 import {readFileSync,statSync} from 'node:fs';
-import {fileURLToPath,resolve} from 'node:url';
+import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
 import {assessAppsScriptCutoverEvidence,CUTOVER_SCHEMA}
   from './v1-apps-script-cutover-evidence.mjs';
 const FILE_LIMIT=256*1024;
