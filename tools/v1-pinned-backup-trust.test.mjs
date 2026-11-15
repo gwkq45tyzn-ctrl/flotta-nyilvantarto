@@ -30,6 +30,9 @@ test('valid FULL rich source + genuine normalized identity projection accepted O
   assert.equal(res.trustedExternalProvenanceVerified,false);
   assert.equal(res.sealed,false);
   assert.equal(res.firestoreAdvisory.firestoreEncodedSizeVerified,false);
+  assert.equal(res.operationalReadiness.ready,true);
+  assert.equal(res.operationalReadiness.authorizedForImport,false);
+  assert.equal(res.operationalReadiness.counts.activeDrivers,2);
 });
 test('digest supplied by backup cannot replace independently pinned digest',()=>{
   const raw=source(),b=simulateBackup(raw);
