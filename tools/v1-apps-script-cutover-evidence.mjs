@@ -15,7 +15,6 @@ const has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const exact=(o,fields)=>plain(o)&&Object.keys(o).length===fields.length&&
   fields.every(f=>has(o,f));
 const ref=s=>typeof s==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(s);
-const cap=n=>Number.isSafeInteger(n)&&n>=0&&n<=1024;
 const enums=(s,values)=>typeof s==='string'&&values.includes(s);
 const array=a=>Array.isArray(a)&&a.length<=1024;
 const flags={ownerEvidenceAuthenticated:false,liveDeploymentVerified:false,
@@ -47,7 +46,8 @@ export function assessAppsScriptCutoverEvidence(manifest,{now=Date.now()}={}){
   if(manifest.schemaVersion!==CUTOVER_SCHEMA)add('UNSUPPORTED_MANIFEST_VERSION');
   if(!validTimestamp(manifest.capturedAt,now))add('OWNER_SNAPSHOT_STALE_OR_INVALID');
   if(manifest.ownerDeclaredComplete!==true)add('OWNER_COMPLETENESS_UNCONFIRMED');
-  if(!/^[a-f0-9]{64}$/.test(manifest.sourceSha256??''))
+  if(typeof manifest.sourceSha256!=='string'||
+     !/^[a-f0-9]{64}$/.test(manifest.sourceSha256))
     add('UNPINNED_SOURCE_FINGERPRINT');
   if(!exact(manifest.coverage,COVERAGE)||
     !COVERAGE.every(key=>manifest.coverage[key]===true))
