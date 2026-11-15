@@ -145,3 +145,10 @@ test('malformed JSON-shaped objects never crash or expose private metadata',()=>
   // inherited keys are either strict own field sets or object prototype guards.
   assert.equal(assess(hacked).productionCutoverAuthorized,false);
 });
+
+test('malicious nonstring source hash fails closed without invoking custom string coercion',()=>{
+  const obj=fixture();
+  obj.sourceSha256={toString:'MALICIOUS_CANARY'};
+  const r=deny(obj,'UNPINNED_SOURCE_FINGERPRINT');
+  assert.doesNotMatch(JSON.stringify(r),/MALICIOUS_CANARY/);
+});
