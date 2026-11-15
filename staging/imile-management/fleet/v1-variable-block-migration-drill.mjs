@@ -419,13 +419,16 @@ class VariableBlockSession{
           throw Error('ROLLBACK_FENCE_STALE');
         }
         this.verifySource(currentSource.data());
-        for(const ref of refs){
-          const snap=await tx.get(ref);
-          const expected=expectedTargets.get(ref.path);
+        // Firestore requires ALL transaction reads before the first write.
+        // Read and validate every target atomically, then perform deletes.
+        const snapshots=await Promise.all(refs.map(ref=>tx.get(ref)));
+        for(let i=0;i<refs.length;i++){
+          const snap=snapshots[i];
+          const expected=expectedTargets.get(refs[i].path);
           if(!snap.exists()||sha256(snap.data())!==sha256(expected))
             throw Error('ROLLBACK_TARGET_MISMATCH');
-          tx.delete(ref);
         }
+        for(const ref of refs)tx.delete(ref);
         if(finished)tx.set(this.journalRef,this.journalBody(0));
         else tx.update(this.journalRef,{rollbackFence:{
           sourceSha256:this.prepared.sourceSha256,
