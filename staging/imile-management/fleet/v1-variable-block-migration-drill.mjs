@@ -321,6 +321,18 @@ class VariableBlockSession{
     return {done:false,committed:index+1,writes:chunk.length*2+1};
   }
   async importAll(){
+    // The full unattended import must never leave an intentionally
+    // uncloseable partial workspace. Importing 8 safe chunks into an
+    // oversized source only to reject the 9th would require operator
+    // rollback. Reject the entire request BEFORE the first write.
+    //
+    // importNext remains available ONLY to exercise interrupted-batch
+    // and rollback adversarial tests. This is local synthetic QA, not
+    // a production importer or an IAM authorization.
+    const ownedDocs=this.chunks.reduce(
+      (total,chunk)=>total+chunk.length*2+1,0);
+    if(ownedDocs>OWNED_READ_BOUND)
+      throw Error('LARGE_PREFIX_REQUIRES_ISOLATION');
     let step=await this.importNext();
     while(!step.done)step=await this.importNext();
     return step;
@@ -783,11 +795,23 @@ async function main(){
     assert.notEqual(largePrepared.counts.drivers,largePrepared.counts.vehicles);
     assert.ok(largePrepared.pairs.length>smallPrepared.pairs.length);
     let large=new VariableBlockSession(db,largeSource);
+    await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.sourceRef)).exists(),false,
+      'large unattended import must not write the source before refusing');
+    assert.equal((await getDoc(large.journalRef)).exists(),false,
+      'large unattended import must not create an orphan journal');
+    for(const col of [...KEYED,RECEIPTS])
+      assert.equal((await getDocs(collection(db,col))).empty,true,col);
+    console.log('PASS DENY [E+SDK]: 290 pairs importAll preflight refuses BEFORE first write');
+    // Manual single-chunk calls continue to test partial-import rollback.
     await large.importNext();
     await large.importNext();
     large=new VariableBlockSession(db,largeSource);
     assert.equal((await large.verifyCommitted()).committed,2);
     await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.journalRef)).data().committedChunks,2,
+      'blocked full import must not advance an already-partial workspace');
+    for(let i=2;i<8;i++)await large.importNext();
     assert.equal((await getDoc(large.journalRef)).data().committedChunks,8,
       '8 committed chunks are permitted; the 9th would require 136 owned reads');
     await assert.rejects(()=>large.importNext({afterVerify:()=>{
@@ -798,6 +822,8 @@ async function main(){
       'rollback batches='+largeRollback.rollbackBatches);
     large=new VariableBlockSession(db,largeSource);
     await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.journalRef)).data().committedChunks,0);
+    for(let i=0;i<8;i++)await large.importNext();
     const early=large.prepared.pairs[0];
     // Check an actually committed late pair, not the unimported last record.
     const late=large.chunks[7].at(-1);
@@ -867,6 +893,8 @@ async function main(){
     console.log('PASS [E+SDK]: rollback crash resumes only after foreign records and source drift are cleared; all owned chunks deleted');
     large=new VariableBlockSession(db,largeSource);
     await assert.rejects(()=>large.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(large.journalRef)).data().committedChunks,0);
+    for(let i=0;i<8;i++)await large.importNext();
     await assert.rejects(()=>large.close(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
     assert.equal((await getDoc(large.journalRef)).data().closed,false,
       'large prefix must remain rollbackable and unclosed');
@@ -901,6 +929,13 @@ async function main(){
     assert.equal(fourFortyPrepared.pairs.length,440);
     const fourForty=new VariableBlockSession(db,fourFortySource);
     await assert.rejects(()=>fourForty.importAll(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(fourForty.sourceRef)).exists(),false);
+    assert.equal((await getDoc(fourForty.journalRef)).exists(),false);
+    for(const col of [...KEYED,RECEIPTS])
+      assert.equal((await getDocs(collection(db,col))).empty,true,col);
+    console.log('PASS DENY [E+SDK]: 440 pairs importAll preflight refuses BEFORE first write');
+    for(let i=0;i<8;i++)await fourForty.importNext();
+    await assert.rejects(()=>fourForty.importNext(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
     assert.equal((await getDoc(fourForty.journalRef)).data().committedChunks,8);
     await assert.rejects(()=>fourForty.close(),/LARGE_PREFIX_REQUIRES_ISOLATION/);
     assert.equal((await getDoc(fourForty.journalRef)).data().closed,false);
