@@ -162,6 +162,39 @@ class VariableBlockSession{
     refs.push(doc(this.db,RECEIPTS,String(index).padStart(4,'0')));
     return refs;
   }
+  expectedReceipt(index){
+    const chunk=this.chunks[index];
+    return {
+      chunkIndex:index,
+      sourceSha256:this.prepared.sourceSha256,
+      pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
+      pairDigest:sha256(chunk.map(pair=>({
+        id:pair.id,master:pair.master,claim:pair.claim
+      })))
+    };
+  }
+  // Reads must happen before any write in the same transaction. Compares the
+  // persisted bytes, not the journal counter: a privileged rewrite of an
+  // already owned master, claim or receipt is not a safe resume or close.
+  async assertOwnedChunks(tx,from,to){
+    const refs=[];
+    const expected=[];
+    for(let i=from;i<to;i++){
+      for(const pair of this.chunks[i]){
+        refs.push(doc(this.db,...pair.masterPath.split('/')));
+        expected.push(pair.master);
+        refs.push(doc(this.db,...pair.claimPath.split('/')));
+        expected.push(pair.claim);
+      }
+      refs.push(doc(this.db,RECEIPTS,String(i).padStart(4,'0')));
+      expected.push(this.expectedReceipt(i));
+    }
+    const snaps=await Promise.all(refs.map(ref=>tx.get(ref)));
+    for(let i=0;i<snaps.length;i++){
+      if(!snaps[i].exists()||sha256(snaps[i].data())!==sha256(expected[i]))
+        throw Error('OWNED_READBACK_MISMATCH');
+    }
+  }
   async verifyRollbackRemainder(fence){
     const sourceSnap=await getDoc(this.sourceRef);
     if(!sourceSnap.exists())throw Error('ORIGINAL_SOURCE_MISSING');
@@ -222,6 +255,9 @@ class VariableBlockSession{
     }
   }
   async importNext(options={}){
+    // Zero keyed pairs still carry fuel cards, contacts and extra fields.
+    // done:true with no journal used to drop that archive and look finished.
+    if(this.chunks.length===0)throw Error('EMPTY_KEYED_PROJECTION');
     const fenceSnap=await getDoc(this.journalRef);
     if(fenceSnap.exists()&&fenceSnap.data().rollbackFence)
       throw Error('ROLLBACK_FENCE_HELD');
@@ -265,6 +301,9 @@ class VariableBlockSession{
       const current=await Promise.all(paths.map(ref=>tx.get(ref)));
       if(current.some(snap=>snap.exists()))
         throw Error('CHUNK_PATH_ALREADY_EXISTS');
+      // The journal CAS does not see a privileged rewrite of an earlier
+      // chunk. Re-hash that prefix before this chunk becomes durable.
+      if(index>0)await this.assertOwnedChunks(tx,0,index);
       if(!state.journal){
         tx.set(this.sourceRef,this.archive);
       }
@@ -272,14 +311,7 @@ class VariableBlockSession{
         tx.set(doc(this.db,...pair.masterPath.split('/')),pair.master);
         tx.set(doc(this.db,...pair.claimPath.split('/')),pair.claim);
       }
-      tx.set(receiptRef,{
-        chunkIndex:index,
-        sourceSha256:this.prepared.sourceSha256,
-        pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
-        pairDigest:sha256(chunk.map(pair=>({
-          id:pair.id,master:pair.master,claim:pair.claim
-        })))
-      });
+      tx.set(receiptRef,this.expectedReceipt(index));
       tx.set(this.journalRef,this.journalBody(index+1));
     },{maxAttempts:5});
     return {done:false,committed:index+1,writes:chunk.length*2+1};
@@ -344,14 +376,8 @@ class VariableBlockSession{
           expectedTargets.set(pair.masterPath,pair.master);
           expectedTargets.set(pair.claimPath,pair.claim);
         }
-        expectedTargets.set(RECEIPTS+'/'+String(i).padStart(4,'0'),{
-          chunkIndex:i,
-          sourceSha256:this.prepared.sourceSha256,
-          pairIds:chunk.map(pair=>pair.kind+'/'+pair.id),
-          pairDigest:sha256(chunk.map(pair=>({
-            id:pair.id,master:pair.master,claim:pair.claim
-          })))
-        });
+        expectedTargets.set(RECEIPTS+'/'+String(i).padStart(4,'0'),
+          this.expectedReceipt(i));
       }
       const finished=next===total;
       const expectedDeletedThrough=deletedThrough;
@@ -432,6 +458,9 @@ class VariableBlockSession{
         throw Error('STALE_CLOSE_CHECKPOINT');
       if(!archive.exists())throw Error('ORIGINAL_SOURCE_MISSING');
       this.verifySource(archive.data());
+      // closed:true permanently denies rollback. The journal hash does not
+      // cover keyed rows, so a raced rewrite must fail this same transaction.
+      await this.assertOwnedChunks(tx,0,state.committed);
       tx.update(this.journalRef,{closed:true,sourceTrust:decision.sourceTrust,
         closingTrust:decision.closingTrust,sealed:false,authorizedForImport:false,
         productionClosingTrust:false,firestoreEncodedSizeVerified:false});
@@ -531,6 +560,14 @@ async function main(){
     await deleteDoc(foreignMaster);
     await deleteDoc(foreignClaim);
     console.log('PASS DENY [E+SDK]: journal-less cold start refuses a foreign source and keyed rows');
+    const emptyKeyed=syntheticFourBlockSource({drivers:0,vehicles:0,fuelCards:2,contacts:1});
+    emptyKeyed.extra={future:{preserve:'árvíztűrő'}};
+    const emptySession=new VariableBlockSession(db,emptyKeyed);
+    assert.equal(emptySession.chunks.length,0);
+    await assert.rejects(()=>emptySession.importNext(),/EMPTY_KEYED_PROJECTION/);
+    assert.equal((await getDoc(emptySession.sourceRef)).exists(),false);
+    assert.equal((await getDoc(emptySession.journalRef)).exists(),false);
+    console.log('PASS DENY [E+SDK]: zero keyed pairs cannot report import done without a journal');
     let session=new VariableBlockSession(db,smallSource);
     let step=await session.importNext();
     assert.equal(step.committed,1);
@@ -561,6 +598,21 @@ async function main(){
     assert.equal((await session.verifyCommitted()).committed,2);
     assert.equal((await getDocs(collection(db,RECEIPTS))).size,2);
     console.log('PASS DENY [E+SDK]: simultaneous importNext sessions observing same checkpoint yield exactly one atomic chunk commit');
+    // verifyCommitted() already accepted chunks 0..1. A privileged rewrite of
+    // an owned master after that scan must not let the next chunk commit:
+    // the journal would move forward and rollback could no longer start.
+    const resumePair=session.prepared.pairs[0];
+    const resumeMaster=doc(db,...resumePair.masterPath.split('/'));
+    const resumeBefore=(await getDoc(session.journalRef)).data().committedChunks;
+    assert.equal(resumeBefore,2);
+    await assert.rejects(()=>new VariableBlockSession(db,smallSource).importNext({
+      afterVerify:()=>updateDoc(resumeMaster,{history:[{kind:'UNOWNED_DURING_RESUME'}]})
+    }),/OWNED_READBACK_MISMATCH/);
+    assert.equal((await getDoc(session.journalRef)).data().committedChunks,resumeBefore);
+    assert.equal((await getDocs(collection(db,RECEIPTS))).size,resumeBefore);
+    assert.equal((await getDoc(resumeMaster)).data().history[0].kind,'UNOWNED_DURING_RESUME');
+    await setDoc(resumeMaster,resumePair.master);
+    console.log('PASS DENY [E+SDK]: resume cannot commit the next chunk after a privileged rewrite of an already owned master');
     // Reverse race: rollback has verified total=2, but a legal importer
     // advances the checkpoint to 3 BEFORE the destructive rollback batch.
     // The rollback transaction must reject, preserving all three chunks.
@@ -690,6 +742,25 @@ async function main(){
     assert.equal((await getDoc(retry.journalRef)).data().closed,false);
     await deleteDoc(retry.approvalRef);
     console.log('PASS DENY [E+SDK]: stale close after rollback, changed rich metadata and concurrent approval');
+    // Journal and source hashes stay valid while an owned master or receipt
+    // changes. Close must not latch readback-verified: that denies rollback.
+    const closePair=retry.prepared.pairs[0];
+    const closeMaster=doc(db,...closePair.masterPath.split('/'));
+    await assert.rejects(()=>retry.close({
+      afterVerify:()=>updateDoc(closeMaster,{history:[{kind:'UNOWNED_BEFORE_CLOSE'}]})
+    }),/OWNED_READBACK_MISMATCH/);
+    assert.equal((await getDoc(retry.journalRef)).data().closed,false);
+    assert.equal((await getDoc(closeMaster)).data().history[0].kind,'UNOWNED_BEFORE_CLOSE');
+    await setDoc(closeMaster,closePair.master);
+    const closeReceipt=doc(db,RECEIPTS,'0000');
+    const closeReceiptBody=(await getDoc(closeReceipt)).data();
+    await assert.rejects(()=>retry.close({
+      afterVerify:()=>updateDoc(closeReceipt,{pairDigest:'0'.repeat(64)})
+    }),/OWNED_READBACK_MISMATCH/);
+    assert.equal((await getDoc(retry.journalRef)).data().closed,false);
+    assert.equal((await getDoc(closeReceipt)).data().pairDigest,'0'.repeat(64));
+    await setDoc(closeReceipt,closeReceiptBody);
+    console.log('PASS DENY [E+SDK]: local close cannot latch over a raced owned master or receipt rewrite');
     const closed=await retry.close();
     assert.equal(closed.sourceTrust,'readback-verified');
     assert.equal(closed.closingTrust,'locally-closed-not-production');
