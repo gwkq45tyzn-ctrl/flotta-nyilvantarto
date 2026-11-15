@@ -37,7 +37,10 @@ export function prepareReviewedCourierCapacities(raw,decisions){
   const reviewed=new Map();
   for(const entry of decisions){
     if(!entry||typeof entry!=='object'||Array.isArray(entry)||
-       Object.keys(entry).some(k=>!['daCode','kapacitas','reviewed'].includes(k))||
+       ![Object.prototype,null].includes(Object.getPrototypeOf(entry))||
+       Object.keys(entry).length!==3||
+       !['daCode','kapacitas','reviewed'].every(k=>
+         Object.prototype.hasOwnProperty.call(entry,k))||
        entry.reviewed!==true||!okCapacity(entry.kapacitas))
       return denied('INVALID_EXPLICIT_REVIEW_ENTRY');
     const id=da(entry.daCode);
