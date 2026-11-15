@@ -54,6 +54,10 @@ test('NARROWED first-release preview excludes all OFD/In-Hub/Excel assets and li
    'Required Depot module missing: '+dependency);
  assert.equal(existsSync(join(output,'staging/imile-management/fleet/index.html')),false,
    'Fleet prototype landing page must not be packaged as the original Fleet');
+ const depHtml=readFileSync(join(output,'depokapacitas/index.html'),'utf8');
+ assert.equal(depHtml.includes('href="./TELEPITES.md"'),false,
+  'Core preview must not link an install guide that is not in the package');
+ assert.equal(existsSync(join(output,'depokapacitas/TELEPITES.md')),false);
  assert.equal(existsSync(join(output,'depokapacitas/index.html')),true);
  assert.equal(existsSync(join(output,'staging/imile-management/cutover.html')),true);
  assert.equal(existsSync(join(output,'index.html')),true);
