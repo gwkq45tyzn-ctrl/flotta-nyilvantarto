@@ -80,3 +80,12 @@ test('already approved capacity may be explicitly revised but cannot cause seal 
   assert.equal(res.previewOnly,true);
   assert.equal(res.productionIamVerified,false);
 });
+
+test('already sealed or migrated source cannot be altered by offline capacity preparation',()=>{
+  const sealed=source();sealed.sealed=true;
+  assert.equal(prepare(sealed,[{daCode:'DA-0001',kapacitas:70,reviewed:true}]).reason,
+    'SEALED_OR_ALREADY_MIGRATED_SOURCE_NOT_EDITABLE');
+  const imported=source();imported.migrationSourceSha256='a'.repeat(64);
+  assert.equal(prepare(imported,[{daCode:'DA-0001',kapacitas:70,reviewed:true}]).reason,
+    'SEALED_OR_ALREADY_MIGRATED_SOURCE_NOT_EDITABLE');
+});
