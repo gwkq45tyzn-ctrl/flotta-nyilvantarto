@@ -790,6 +790,39 @@ async function main(){
 
     await env.clearFirestore();
     await seedUser(env);
+    // Exact bound (7 * (8 master + 8 claim + 1 receipt) = 119):
+    // the last safe Fleet source MUST complete, not become always-deny.
+    const boundarySource=syntheticFourBlockSource({
+      drivers:25,vehicles:31,fuelCards:3,contacts:2
+    });
+    const boundary=new VariableBlockSession(db,boundarySource);
+    assert.equal(boundary.chunks.reduce(
+      (total,chunk)=>total+chunk.length*2+1,0),119);
+    const boundaryResult=await boundary.importAll();
+    assert.equal(boundaryResult.done,true);
+    const boundaryClose=await boundary.close();
+    assert.equal(boundaryClose.ok,true);
+    assert.equal((await getDoc(boundary.journalRef)).data().closed,true);
+    assert.equal((await getDoc(boundary.sourceRef)).data().sealed,false);
+    console.log('PASS ALLOW [E+SDK]: exactly 56 keyed pairs / 119 owned docs can import and locally close');
+
+    await env.clearFirestore();
+    await seedUser(env);
+    // One extra keyed pair introduces the 8th chunk: 122 owned docs.
+    const overBoundary=new VariableBlockSession(db,
+      syntheticFourBlockSource({drivers:25,vehicles:32,fuelCards:3,contacts:2}));
+    assert.equal(overBoundary.chunks.reduce(
+      (total,chunk)=>total+chunk.length*2+1,0),122);
+    await assert.rejects(()=>overBoundary.importAll(),
+      /LARGE_PREFIX_REQUIRES_ISOLATION/);
+    assert.equal((await getDoc(overBoundary.sourceRef)).exists(),false);
+    assert.equal((await getDoc(overBoundary.journalRef)).exists(),false);
+    for(const col of [...KEYED,RECEIPTS])
+      assert.equal((await getDocs(collection(db,col))).empty,true,col);
+    console.log('PASS DENY [E+SDK]: 57 keyed pairs / 122 owned docs refuse before the first write');
+
+    await env.clearFirestore();
+    await seedUser(env);
     const largeSource=syntheticFourBlockSource(LARGE);
     const largePrepared=projectBlockPairs(largeSource);
     assert.notEqual(largePrepared.counts.drivers,largePrepared.counts.vehicles);
