@@ -51,6 +51,7 @@ test('no arbitrary, duplicate, unreviewed, inactive or numerically invalid appro
     [{daCode:'DA-0001',kapacitas:'70',reviewed:true}],
     [{daCode:'DA-0001',kapacitas:0,reviewed:true}],
     [{daCode:'DA-0001',kapacitas:70,reviewed:true,unsafe:true}],
+    [Object.create({daCode:'DA-0001',kapacitas:70,reviewed:true})],
     [{daCode:'DA-9999',kapacitas:70,reviewed:true}],
     [{daCode:'DA-0003',kapacitas:70,reviewed:true}],
     [{daCode:'DA-0001',kapacitas:70,reviewed:true},
