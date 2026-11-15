@@ -4,6 +4,7 @@ on:
     paths:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-sealed-flag-direct-sdk-emulator.mjs'
+      - 'staging/imile-management/fleet/v1-sealed-auxiliary-array-rules.mjs'
       - '.github/workflows/imile-v1-sealed-flag-hardstop.yml'
 permissions:
   contents: read
@@ -27,6 +28,6 @@ jobs:
           npx --yes firebase-tools@15.34.2 emulators:exec \
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.staging-emulator.json \
-            "node staging/imile-management/fleet/v1-sealed-flag-direct-sdk-emulator.mjs"
+            "node staging/imile-management/fleet/v1-sealed-flag-direct-sdk-emulator.mjs && node staging/imile-management/fleet/v1-sealed-auxiliary-array-rules.mjs"
       - name: Synthetic QA no deploy
         run: echo 'No production writes or main merge; this is not GO.'
