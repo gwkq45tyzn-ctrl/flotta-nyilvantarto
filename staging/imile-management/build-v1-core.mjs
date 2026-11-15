@@ -116,6 +116,13 @@ try{
   // Transform only the candidate's unified hub, NOT the repository source.
   const hub=join(target,'staging/imile-management/index.html');
   let html=readFileSync(hub,'utf8');
+  // The copied QA hub must never advertise paused reporting modules.
+  // Replace ONLY the release-scope notice in the emitted candidate;
+  // leave the original repository staging hub untouched.
+  const fullNotice='Itt már egy közös kódbázisban található az eredeti Flotta, a fejlett DepóKapacitás és az In-Hub/OFD riportkészítő.';
+  if(!html.includes(fullNotice))throw Error('Staging scope notice changed: re-review');
+  html=html.replace(fullNotice,
+    'Ez az ellenőrző csomag kizárólag az eredeti Flotta Nyilvántartót és a DepóKapacitást tartalmazza. Az In-Hub, OFD és Excel-riportok későbbi fejlesztések.');
   const reports=/<article class="card module reports">[\s\S]*?<\/article>/;
   if(!reports.test(html))throw Error('Report module scope anchor changed');
   html=html.replace(reports,'<!-- OFD + In-Hub excluded from V1; V1.1 only -->');
