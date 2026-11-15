@@ -74,6 +74,24 @@ try{
   assert.deepEqual(afterContact.vehicles,base().vehicles);
   console.log('PASS DENY [E+SDK]: direct write cannot replace the sealed contacts array');
 
+  await assert.rejects(()=>updateDoc(fleetRef,{
+    revision:2,
+    fuelCards:[{...base().fuelCards[0],history:[{note:'FORGED'}],extra:{pin:'stolen'}}]
+  }),err=>err.code==='permission-denied');
+  const afterHistory=(await getDoc(fleetRef)).data();
+  assert.equal(afterHistory.revision,1);
+  assert.deepEqual(afterHistory.fuelCards[0].history,fuelHistory);
+  assert.equal(afterHistory.fuelCards[0].extra.pin,'keep');
+  assert.equal(afterHistory.fuelCards[0].number,'OLD-1');
+  console.log('PASS DENY [E+SDK]: rich fuel history and extra cannot replace the sealed original');
+
+  await assert.rejects(()=>updateDoc(fleetRef,{
+    revision:2,
+    contacts:[{...base().contacts[0],extra:{keep:false}}]
+  }),err=>err.code==='permission-denied');
+  assert.deepEqual((await getDoc(fleetRef)).data().contacts[0].extra,contactExtra);
+  console.log('PASS DENY [E+SDK]: rich contact extra cannot replace the sealed original');
+
   await updateDoc(fleetRef,{revision:2,updatedBy:uid});
   const meta=(await getDoc(fleetRef)).data();
   assert.equal(meta.revision,2);
