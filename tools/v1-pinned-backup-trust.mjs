@@ -7,6 +7,7 @@
 import {preflight,buildPlan,sha256,detectPartial,restoreDrill} from './v1-migration-dryrun.mjs';
 import {createMigrationManifest,canonicalStringify} from '../features/migration-manifest.mjs';
 import {checkSizeGate} from './v1-firestore-size-gate.mjs';
+import {assessFleetDepotOperationalReadiness} from './v1-operational-readiness.mjs';
 
 const hex64=v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
@@ -42,6 +43,15 @@ export function verifyPinnedImportSource({
   // Ensure backup's array counts really correspond to the exact raw source.
   if(Object.entries(pre.counts).some(([k,n])=>backup.counts?.[k]!==n))
     return deny('BACKUP_COUNT_DRIFT');
+  // A valid four-array backup is not necessarily a usable Depot source.
+  // Importing active couriers without integer kapacitas makes every booking
+  // fail after seal; never fill capacities by guessing or by client mirrors.
+  const operational=assessFleetDepotOperationalReadiness(source);
+  if(!operational.ready)
+    return deny('PHASE1_OPERATIONAL_READINESS_DENIED',{
+      reasons:operational.reasons,counts:operational.counts,
+      warnings:operational.warnings
+    });
   let manifest,plan;
   try{
     manifest=createMigrationManifest(source);
