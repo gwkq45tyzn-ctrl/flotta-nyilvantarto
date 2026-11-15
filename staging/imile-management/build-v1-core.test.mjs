@@ -85,6 +85,22 @@ test('core builder rejects a root-relative Fleet script that was not packaged',(
   }
 });
 
+test('core builder rejects a CSS url() that is not in the package',()=>{
+  const cssPath=join(root,'depokapacitas/style.css');
+  const original=readFileSync(cssPath);
+  assert.equal(existsSync(dest),false,'Never overwrite any existing QA artifact');
+  try{
+    writeFileSync(cssPath,Buffer.concat([original,Buffer.from('\n.probe{background:url("./missing-core-font.woff")}\n')]));
+    const result=spawnSync(process.execPath,[build],{cwd:root,encoding:'utf8',timeout:25000});
+    assert.notEqual(result.status,0,'A missing local CSS asset must fail the core build');
+    assert.match(result.stderr||'',/missing-core-font\.woff/);
+  }finally{
+    writeFileSync(cssPath,original);
+    rmSync(dest,{recursive:true,force:true});
+    assert.deepEqual(readFileSync(cssPath),original,'Depot CSS must be restored byte-for-byte');
+  }
+});
+
 test('builder never publishes, imports or alters real Firebase/App Script',()=>{
   const src=readFileSync(build,'utf8');
   assert.doesNotMatch(src,/firebase-tools|action-hosting-deploy|hosting:channel:deploy|firebase\s+deploy\s+--only|GoogleAuth|setDoc\s*\(|writeBatch\s*\(|UrlFetchApp|SpreadsheetApp/);

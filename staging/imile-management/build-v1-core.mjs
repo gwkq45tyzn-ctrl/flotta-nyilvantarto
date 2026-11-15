@@ -69,6 +69,12 @@ function references(source,contents){
     const assets=/<(?:script|link)\b[^>]*?\b(?:src|href)=['"]([^'"]+)['"][^>]*>/gi;
     for(const hit of contents.matchAll(assets))out.push(hit[1]);
   }
+  if(source.endsWith('.css')){
+    const urls=/url\(\s*['"]?([^'")\s]+)['"]?\s*\)/g;
+    const imports=/@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g;
+    for(const re of [urls,imports])
+      for(const hit of contents.matchAll(re))out.push(hit[1]);
+  }
   return out;
 }
 if(existsSync(target))throw Error('Candidate output already exists; refuse overwrite: '+target);
@@ -173,8 +179,9 @@ try{
   writeFileSync(depot,depotHtml);
 
   // Validate the actual POST-rewrite package, not just the source dependency
-  // queue. Follow local static ESM references, HTML script/stylesheet assets
-  // AND local page links, so missing runtime routes fail the build.
+  // queue. Follow local static ESM references, HTML script/stylesheet assets,
+  // CSS url()/import and local page links, so a missing runtime asset fails
+  // the build.
   for(const file of included.keys()){
     const source=readFileSync(join(target,file),'utf8');
     const refs=references(file,source);
