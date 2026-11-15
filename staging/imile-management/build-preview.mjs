@@ -63,6 +63,7 @@ const allowed=[
   'depokapacitas/keyed-live-master.mjs',
   'depokapacitas/keyed-booking-capacity.mjs',
   'depokapacitas/canonical-booking-transaction.mjs',
+  'depokapacitas/canonical-booking-release.mjs',
   'depokapacitas/canonical-booking-gate.mjs',
   'depokapacitas/canonical-source-health.mjs',
   'features/fleet-depo-canonical-transition.mjs',
