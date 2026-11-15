@@ -93,3 +93,33 @@ test('oversized invalid source and unsupported nested values never obtain author
   const raw=source();raw.extension.bad=undefined;
   assert.throws(()=>simulateBackup(raw),/Non-JSON value in source: undefined/);
 });
+
+test('trusted raw source with missing active capacity is not ready for Depot bookings',()=>{
+  const raw=source();delete raw.drivers[0].kapacitas;
+  const result=validate(raw);
+  assert.equal(result.ok,false);
+  assert.equal(result.reason,'PHASE1_OPERATIONAL_READINESS_DENIED');
+  assert.deepEqual(result.details.reasons,['ACTIVE_DRIVER_CAPACITY_UNSET_OR_INVALID']);
+  assert.equal(result.details.counts.activeWithoutCapacity,1);
+  assert.equal(result.authorizedForImport,false);
+  assert.ok(!JSON.stringify(result.details).includes('DA-0001'));
+});
+test('unknown inactive classification does not turn an unapproved courier into active',()=>{
+  const raw=source();raw.drivers[0].status='ismeretlen';
+  raw.drivers[1].status='ismeretlen';
+  const result=validate(raw);
+  assert.equal(result.ok,false);
+  assert.ok(result.details.reasons.includes('NO_ACTIVE_DRIVERS'));
+  assert.equal(result.details.counts.uncertainDriverStatuses,2);
+});
+test('source with more than 25 drivers is blocked by current canonical Rules window',()=>{
+  const raw=source();
+  for(let i=2;i<=25;i++)raw.drivers.push({
+    id:'synthetic-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
+    status:'inaktiv',history:[]
+  });
+  const result=validate(raw);
+  assert.equal(result.ok,false);
+  assert.ok(result.details.reasons.includes('PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'));
+  assert.equal(result.details.counts.drivers,26);
+});
