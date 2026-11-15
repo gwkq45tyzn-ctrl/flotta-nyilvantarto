@@ -51,8 +51,27 @@ export async function commitCanonicalDepotBooking({
       // Never create/overwrite them in a booking transaction.
       tx.get(refs.keyedDriver),tx.get(refs.keyedVehicle)
     ]);
-    if(oldBook.exists()||oldClaim.exists())
+    // The vehicle slot is the booking document. A driverClaims row whose
+    // booking document is already gone is not occupancy: it has no cancel
+    // button and would otherwise block that driver for the whole day.
+    if(oldBook.exists())
       throw Error('BOOKING_BLOCKED: already_occupied');
+    let staleClaim=false;
+    if(oldClaim.exists()){
+      const claim=oldClaim.data()||{};
+      const samePair=claim.bookingId===bookingId&&claim.date===date&&
+        claim.driverId===driverId;
+      if(claim.bookingId===bookingId){
+        if(!samePair)throw Error('BOOKING_BLOCKED: already_occupied');
+      }else{
+        if(typeof claim.bookingId!=='string'||claim.bookingId.length<1||
+           claim.bookingId.length>120)
+          throw Error('BOOKING_BLOCKED: already_occupied');
+        const other=await tx.get(sdk.doc(db,'bookings',claim.bookingId));
+        if(other.exists())throw Error('BOOKING_BLOCKED: already_occupied');
+        staleClaim=true;
+      }
+    }
     const check=assessCanonicalBookingMaster({
       fleet:fleet.exists()?fleet.data():null,
       approval:approval.exists()?approval.data():null,
@@ -102,7 +121,12 @@ export async function commitCanonicalDepotBooking({
        normVehicle(kv.rendszam)!==vehicleId)
       throw Error('BOOKING_BLOCKED: keyed_master_drift');
     tx.set(refs.booking,{date,driverId,vehicleId,district,status,capacity:rawCapacity,driverIndex,vehicleIndex});
-    tx.set(refs.driverClaim,{date,driverId,bookingId});
+    // A claim that already names this booking must stay untouched: Rules
+    // reject a no-op claim update. A claim naming a missing other booking
+    // is retargeted onto this booking; Rules allow that only while the
+    // previous booking document is already gone.
+    if(!oldClaim.exists()||staleClaim)
+      tx.set(refs.driverClaim,{date,driverId,bookingId});
     // Read-only identity-index proofs were verified above and by Rules.
     // Only write booking + date-scoped reverse claim, atomically.
     return {bookingId,driverKey,fleetRevision:check.fleetRevision};
