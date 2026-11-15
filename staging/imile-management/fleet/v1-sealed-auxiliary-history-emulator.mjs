@@ -127,7 +127,8 @@ try{
   await saved.submit();
   const archived=(await getDoc(doc(db,'flottaSharedState','current'))).data();
   const card=archived.fuelCards[0];
-  assert.equal(card.number,'NEW-1');
+  assert.equal(card.number,'OLD-1');
+  assert.equal(archived.revision,1);
   assert.deepEqual(card.history,[{note:'PRESERVE FUEL HISTORY'}]);
   assert.deepEqual(card.extra,{pin:'do-not-drop'});
   assert.equal(archived.drivers[0].kapacitas,50);
@@ -136,14 +137,15 @@ try{
   const keyed=(await getDoc(doc(db,'flottaDrivers','DA0001'))).data();
   assert.equal(keyed.kapacitas,50);
   assert.equal(keyed.history[0].note,'PRESERVE DRIVER HISTORY');
-  console.log('PASS [E+REAL BRIDGE]: sealed fuel-card field edit keeps history and does not rewrite the keyed driver');
+  console.log('PASS DENY [E+REAL BRIDGE]: sealed fuelCards array cannot be replaced; history stays and the keyed driver is not rewritten');
 
   await reset();
   const forged=fleet();
   forged.fuelCards=[formCard({history:[{note:'FORGED'}],extra:{pin:'stolen'}})];
   await runOriginalBridge(forged).submit();
   const afterForge=(await getDoc(doc(db,'flottaSharedState','current'))).data().fuelCards[0];
-  assert.equal(afterForge.number,'NEW-1');
+  assert.equal(afterForge.number,'OLD-1');
+  assert.equal((await getDoc(doc(db,'flottaSharedState','current'))).data().revision,1);
   assert.deepEqual(afterForge.history,[{note:'PRESERVE FUEL HISTORY'}]);
   assert.deepEqual(afterForge.extra,{pin:'do-not-drop'});
   console.log('PASS DENY [E+REAL BRIDGE]: a forged fuel-card history or extra cannot replace the sealed original');
