@@ -13,6 +13,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 import {doc,getDoc,setDoc,Timestamp} from 'firebase/firestore';
+import {qaAssetAllowed} from './v1-qa-asset-routes.mjs';
 
 const host='127.0.0.1',port=8128,projectId='demo-imile-qa';
 const origin='http://'+host+':'+port;
@@ -146,11 +147,10 @@ try{
 
   // Serve only public original HTML/modules locally, and never real Firebase
   // configuration, npm files, raw data exports, service credentials or Rules.
-  const allowed=/^\/(?:features|depokapacitas|staging\/imile-management)\/[A-Za-z0-9/_-]+\.(?:js|mjs|css)$/;
   server=createServer(async(req,res)=>{
     try{
       const pathname=new URL(req.url,origin).pathname;
-      if(pathname!=='/index.html'&&pathname!=='/depokapacitas/index.html'&&!allowed.test(pathname)){
+      if(!qaAssetAllowed(pathname)){
         res.writeHead(404);res.end('QA file not allowed');return;
       }
       if(artifactMode&&!artifactGate.files.includes(pathname.slice(1))){
