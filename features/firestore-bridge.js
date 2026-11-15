@@ -339,6 +339,34 @@
   }
 
 
+  // The original card/contact form replaces the whole row and omits rich
+  // history. After seal those omitted fields stay on the server copy.
+  // A draft that sends its own history or extra cannot replace them.
+  function mergeSealedAuxiliary(existing, draft) {
+    if (!Array.isArray(existing) || !Array.isArray(draft))
+      throw new Error('SEALED_AUXILIARY_ARRAY_INVALID');
+    const byId = new Map();
+    for (const row of existing) {
+      if (!row || typeof row !== 'object' || Array.isArray(row) ||
+          typeof row.id !== 'string' || !row.id || byId.has(row.id))
+        throw new Error('SEALED_AUXILIARY_ID_COLLISION');
+      byId.set(row.id, row);
+    }
+    const seen = new Set();
+    return draft.map(row => {
+      if (!row || typeof row !== 'object' || Array.isArray(row) ||
+          typeof row.id !== 'string' || !row.id || seen.has(row.id))
+        throw new Error('SEALED_AUXILIARY_ID_MISSING');
+      seen.add(row.id);
+      const previous = byId.get(row.id);
+      if (!previous) return row;
+      const merged = {...previous, ...row};
+      if ('history' in previous) merged.history = previous.history;
+      if ('extra' in previous) merged.extra = previous.extra;
+      return merged;
+    });
+  }
+
   function projectStrictMasters(draft) {
     const plate = s => String(s || '').replace(/[\s-]/g, '').toUpperCase();
     const code = s => String(s || '').trim().toUpperCase();
@@ -491,6 +519,10 @@
           }
           payload.drivers = existing.drivers;
           payload.vehicles = existing.vehicles;
+          payload.fuelCards = mergeSealedAuxiliary(
+            existing.fuelCards, draft.fuelCards || []);
+          payload.contacts = mergeSealedAuxiliary(
+            existing.contacts, draft.contacts || []);
         }
         tx.set(ref, payload);
         for (const item of keyedWrites)
