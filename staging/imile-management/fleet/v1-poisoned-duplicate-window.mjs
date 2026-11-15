@@ -5,13 +5,15 @@
  * the ordinary authenticated SDK. The original probe file is not edited.
  *
  * Positive: unique 12/14 archive ALLOW, including a non-zero index and a
- * hyphenated DA. Negative: case-folded driver duplicates already inside the
- * sealed archive DENY at index zero, including a non-adjacent row and the
- * last slot of the 20-row window, and a padded alias such as "  da0001  ".
- * A 21-row unique archive DENY because the window cannot prove it.
- * A unique 20-driver fleet still books. Twenty-five does not fit.
- * Plate separator-folding is outside this budget: one claim document cannot
- * see the second array row.
+ * hyphenated DA. Unique 17, 20, 21 and 25 driver archives ALLOW, including
+ * a driver selected from the high half of the 25-row window.
+ * Negative: case-folded driver duplicates already inside the sealed archive
+ * DENY at index zero, including a non-adjacent row, the last slot of the
+ * 20-row window, and a padded alias such as "  da0001  ". A 25-row archive
+ * still DENIES a duplicate in the low half and in the high half, from either
+ * selected index. A 26-row unique archive DENY because the window cannot
+ * prove it. Plate separator-folding is outside this budget: one claim
+ * document cannot see the second array row.
  * Run only under firebase emulators:exec --only firestore.
  */
 import assert from 'node:assert/strict';
@@ -64,7 +66,11 @@ async function main(){
   const raw=await readFile(new URL('../../../depokapacitas/firestore-v1-restricted.rules',import.meta.url),'utf8');
   assert.match(raw,/REPLACE_WITH_REAL_SHARED_UID/);
   assert.match(raw,/function driversNotDup/);
+  assert.match(raw,/function driversNotDupHigh/);
   assert.match(raw,/function bookingCreateAllowed/);
+  assert.match(raw,/driversNotDup\(fleet\.drivers, booking\.driverId, booking\.driverIndex\)/);
+  assert.match(raw,/driversNotDupHigh\(fleet\.drivers, data\.driverId, data\.driverIndex\)/);
+  assert.match(raw,/rows\[24\]\.daCode\.replace\('\[\[:space:\]\]', ''\)\.upper\(\)/);
   const env=await initializeTestEnvironment({
     projectId,firestore:{host:'127.0.0.1',port:8787,
       rules:raw.replaceAll('REPLACE_WITH_REAL_SHARED_UID',uid)}
@@ -209,13 +215,74 @@ async function main(){
     assert.equal((await getDoc(doc(client,'bookings','2099-03-12__ABC001'))).exists(),true);
     console.log('PASS ALLOW [E+SDK]: unique 20-driver archive at the proof-window limit still books');
 
-    const over=fleet(21,1);
-    await seed(over.drivers,over.vehicles,{
+    const seventeen=fleet(17,1);
+    await seed(seventeen.drivers,seventeen.vehicles,slotsFor(seventeen.drivers,seventeen.vehicles));
+    await book('2099-03-16','DA0017','ABC001',16,0,80);
+    assert.equal((await getDoc(doc(client,'bookings','2099-03-16__ABC001'))).data().driverIndex,16);
+    console.log('PASS ALLOW [E+SDK]: unique 17-driver archive books the last row inside the former fail-closed band');
+
+    const twentyOne=fleet(21,1);
+    await seed(twentyOne.drivers,twentyOne.vehicles,slotsFor(twentyOne.drivers,twentyOne.vehicles));
+    await book('2099-03-10','DA0021','ABC001',20,0,80);
+    assert.equal((await getDoc(doc(client,'bookings','2099-03-10__ABC001'))).data().driverId,'DA0021');
+    console.log('PASS ALLOW [E+SDK]: unique 21-driver archive books the first row of the high half');
+
+    const twentyFive=fleet(25,1);
+    await seed(twentyFive.drivers,twentyFive.vehicles,slotsFor(twentyFive.drivers,twentyFive.vehicles));
+    await book('2099-03-17','DA0001','ABC001',0,0,80);
+    await book('2099-03-18','DA0025','ABC001',24,0,80);
+    assert.equal((await getDoc(doc(client,'bookings','2099-03-18__ABC001'))).data().driverIndex,24);
+    console.log('PASS ALLOW [E+SDK]: unique 25-driver archive books index zero and the last proof-window row');
+
+    const lowPoison=fleet(25,1);
+    lowPoison.drivers[12]=driver('da0001',500);
+    await seed(lowPoison.drivers,lowPoison.vehicles,{
       driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
       vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
     });
-    await mustDeny('unique archive longer than the 20-row proof window fails closed',
-      ()=>book('2099-03-10','DA0001','ABC001',0,0,80));
+    await mustDeny('privileged poison at driver index 12 of a 25-row archive denies index-zero booking',
+      ()=>book('2099-03-19','DA0001','ABC001',0,0,80));
+
+    const highPoison=fleet(25,1);
+    highPoison.drivers[24]=driver('da0001',500);
+    await seed(highPoison.drivers,highPoison.vehicles,{
+      driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged poison in the last slot of the 25-row window denies index-zero booking',
+      ()=>book('2099-03-20','DA0001','ABC001',0,0,80));
+
+    const highPad=fleet(25,1);
+    highPad.drivers[24]=driver('  da0001  ',500);
+    await seed(highPad.drivers,highPad.vehicles,{
+      driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged padded duplicate in the 25-row high half denies index-zero booking',
+      ()=>book('2099-03-21','DA0001','ABC001',0,0,80));
+
+    const crossLow=fleet(25,1);
+    crossLow.drivers[17]=driver('da0025',500);
+    await seed(crossLow.drivers,crossLow.vehicles,{
+      driverSlots:[{id:'DA0025',daCode:'DA0025',capacity:80,sourceIndex:24}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged poison in the low half denies a booking whose selected index is in the high half',
+      ()=>book('2099-03-22','DA0025','ABC001',24,0,80));
+
+    const crossHigh=fleet(25,1);
+    crossHigh.drivers[24]=driver('da0018',500);
+    await seed(crossHigh.drivers,crossHigh.vehicles,{
+      driverSlots:[{id:'DA0018',daCode:'DA0018',capacity:80,sourceIndex:17}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('privileged poison in the high half denies a booking whose selected index is in the low half',
+      ()=>book('2099-03-23','DA0018','ABC001',17,0,80));
+
+    const over=fleet(26,1);
+    await seed(over.drivers,over.vehicles,slotsFor(over.drivers,over.vehicles));
+    await mustDeny('unique archive longer than the 25-row proof window fails closed',
+      ()=>book('2099-03-24','DA0001','ABC001',0,0,80));
 
     const clean=fleet(1,1);
     await seed(clean.drivers,clean.vehicles,slotsFor(clean.drivers,clean.vehicles));
