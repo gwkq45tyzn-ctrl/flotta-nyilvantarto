@@ -44,7 +44,7 @@ const deny=(v,code)=>{
 };
 
 test('fully reviewed sanitized SELF-CLAIM is local completeness ONLY, never true deploy evidence',()=>{
-  const f=fixture();
+  const f=fixture(),original=structuredClone(f);
   const r=assess(f);
   assert.deepEqual(r.reasons,[]);
   assert.equal(r.locallyComplete,true);
@@ -59,8 +59,7 @@ test('fully reviewed sanitized SELF-CLAIM is local completeness ONLY, never true
   assert.equal(r.readOnly,true);
   assert.equal(JSON.stringify(r).includes('PRIVATE_CANARY'),false);
   assert.equal(JSON.stringify(r).includes('fleet-sheet-1'),false);
-  assert.equal(JSON.stringify(f),JSON.stringify(fixture()).replace(
-    fixture().capturedAt,f.capturedAt)); // no mutation (timestamp excepted)
+  assert.deepEqual(f,original,'Audit cannot mutate owner inventory');
 });
 test('missing or owner-unreviewed inventory hardstops; empty list is not evidence',()=>{
   deny(null,'MANIFEST_MISSING_OR_INVALID');
