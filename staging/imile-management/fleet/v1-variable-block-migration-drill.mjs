@@ -938,9 +938,10 @@ async function main(){
       sourceSha256:fourFortyPrepared.sourceSha256,
       firestoreEncodedSizeVerified:false,
       productionClosingTrust:false,
-      boundedReadbackIsAtomic:true,
-      largePrefixIsolationRequired:true,
-      locallyClosed:false
+      smallPrefixSameCasVerified:true,
+      oversizedPrefixImportRejected:true,
+      oversizedPrefixClosed:false,
+      largePrefixIsolationRequired:true
     });
     summary.result='PASS_SYNTHETIC_EMULATOR_ONLY';
     summary.productionRecordCountHardcoded=false;
