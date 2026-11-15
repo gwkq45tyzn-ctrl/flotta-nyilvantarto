@@ -14,10 +14,10 @@
 | `flotta-nyilvantarto-elesitesre.html:1152-1153` and `:1212-1246` | Second full Fleet HTML copy with the same `DEFAULT_BACKEND_URL` pattern and `pushRemote` POST | Same writer shape, different file; deployment still UNKNOWN |
 | `flotta-bejelentkezes-v18.html:1103` | Alternate HTML sets `DEFAULT_BACKEND_URL` to an empty string | Not a baked-in endpoint |
 | `flotta-bejelentkezes-v18.html:1141-1145` and `:1229-1254` | `fleetPost` plus `pushRemote` still POST `{action:'save'}` when a token and backend URL exist | Separate legacy build; repo presence is not deployment |
-| `features/firestore-bridge.js:547-561` | `gateOldSync()` replaces `window.pushRemote` and `window.pullRemote` with no-ops | Browser-local only. Does not disable a deployed page or a server trigger |
-| `features/firestore-bridge.js:741` | Called after a successful shared-account login | Auth path |
-| `features/firestore-bridge.js:785` | Called when a restored session still has a valid member profile | Session path |
-| `features/firestore-bridge.js:834-841` | `boot` calls `gateOldSync()` as soon as `save` exists, before login | Earlier inventory missed this pre-auth gate. It still cannot stop a page that never loads the bridge |
+| `features/firestore-bridge.js:579-594` | `gateOldSync()` replaces `window.pushRemote` and `window.pullRemote` with no-ops | Browser-local only. Does not disable a deployed page or a server trigger |
+| `features/firestore-bridge.js:773` | Called after a successful shared-account login | Auth path |
+| `features/firestore-bridge.js:817` | Called when a restored session still has a valid member profile | Session path |
+| `features/firestore-bridge.js:866-873` | `boot` calls `gateOldSync()` as soon as `save` exists, before login | Earlier inventory missed this pre-auth gate. It still cannot stop a page that never loads the bridge |
 | No `doGet` / `doPost` in repository `.gs` files | The Fleet web app that would receive `action:'save'` is not in this repo | Server behavior of the historical `/exec` endpoint is UNKNOWN |
 | `depokapacitas/google-sync/Code.gs:13-20` | Separate `syncAttendance` reads a named Sheet under a script lock | **Attendance**, not the Fleet `pushRemote` path |
 | `depokapacitas/google-sync/Code.gs:65-80` | `UrlFetchApp.fetch` commits Firestore REST `attendance/{id}` in batches of 200 | **Attendance writer in source.** `flottaSharedState` is not written here. Project id in source is still a placeholder |
