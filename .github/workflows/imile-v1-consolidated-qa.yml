@@ -46,6 +46,7 @@ jobs:
             tools/v1-migration-acceptance.test.mjs \
             tools/v1-pinned-backup-trust.test.mjs \
             tools/v1-operational-readiness.test.mjs \
+            tools/v1-owner-readiness-cli.test.mjs \
             tools/v1-capacity-remediation.test.mjs \
             tools/v1-trusted-importer-attestation.test.mjs \
             tools/v1-firestore-size-gate.test.mjs \
