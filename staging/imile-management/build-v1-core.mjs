@@ -41,8 +41,14 @@ const deny=p=>/(^|\/)(?:reports|qa|attendance|courier|photo|node_modules)(?:\/|$
   || /(^|\/)fleet\/(?:index\.html|operations(?:\.html|\.css|-app\.mjs|-store\.mjs)|master(?:-data|-editor)?\.mjs|app\.mjs|availability\.mjs)/i.test(p);
 const queue=[...seeds],included=new Map();
 function safePath(source,reference){
-  if(!reference.startsWith('.')) return null;  // CDN or bare import
-  const absolute=resolve(root,dirname(source),reference.split(/[?#]/)[0]);
+  if(!reference || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference) || reference.includes('${'))
+    return null;
+  const bare=reference.split(/[?#]/)[0];
+  // index.html loads Fleet scripts as "features/....js", not "./features/...".
+  // A bare package import such as "firebase/app" has no packaged extension.
+  const packaged=bare.startsWith('.') || /\.(?:html|js|mjs|css|json)$/i.test(bare);
+  if(!packaged) return null;
+  const absolute=resolve(root,dirname(source),bare);
   if(absolute!==root&&!absolute.startsWith(root+sep))
     throw Error('Source traversal forbidden: '+reference);
   const result=relative(root,absolute).replaceAll('\\','/');
