@@ -426,7 +426,7 @@ class VariableBlockSession{
           const snap=snapshots[i];
           const expected=expectedTargets.get(refs[i].path);
           if(!snap.exists()||sha256(snap.data())!==sha256(expected))
-            throw Error('ROLLBACK_TARGET_MISMATCH');
+            throw Error('ROLLBACK_TARGET_CHANGED');
         }
         for(const ref of refs)tx.delete(ref);
         if(finished)tx.set(this.journalRef,this.journalBody(0));
