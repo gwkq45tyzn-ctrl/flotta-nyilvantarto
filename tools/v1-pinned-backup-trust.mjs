@@ -81,6 +81,7 @@ export function verifyPinnedImportSource({
   return {
     ok:true,sourceSha256:trustedPinnedSha,expectedRevision,
     counts:pre.counts,manifest,plan,
+    operationalReadiness:operational,
     projectedDocumentCount:Object.keys(projected).length,
     firestoreAdvisory:size,
     proofScope:'LOCAL_CONTENT_INTEGRITY_ONLY',
