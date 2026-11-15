@@ -20,9 +20,11 @@ const email='imilemanagement@imile-management-staging.firebaseapp.com';
 const password='QaOnly'+randomBytes(16).toString('hex')+'#';
 const originalRoot=new URL('../../../',import.meta.url);
 const artifactMode=process.env.IMILE_CORE_ARTIFACT==='1';
-// In artifact mode every browser-served HTML/JS/CSS file comes from the
-// ACTUAL byte-hashed, no-release output of build-v1-core.mjs, not repository
-// sources. Rules/test fixtures remain separate and NEVER packaged.
+// Artifact mode serves byte-identical bundled files EXCEPT three explicitly
+// identified Firebase modules, which are transformed in memory to target LOCAL
+// emulators. Verify the actual response bytes separately; this does NOT test
+// the production Firebase configuration or its real IAM/trust boundary.
+// Rules/test fixtures remain separate and NEVER packaged.
 const root=artifactMode
   ?new URL('../../../candidate-imile-v1-core/',import.meta.url)
   :originalRoot;
@@ -107,6 +109,13 @@ fleetData.migrationSourceSha256=sourceSha;
 
 let env,server,browser;
 const errors=[],blockedCloud=[],servedLocalAssets=new Set();
+const emulatorInjectedPaths=new Set([
+  '/features/firestore-bridge.js',
+  '/depokapacitas/app.js',
+  '/depokapacitas/firebase-config.js'
+]);
+const servedInjectedHashes=new Map();
+const servedUnmodifiedHashes=new Map();
 try{
   const signup=await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key',{
     method:'POST',headers:{'Content-Type':'application/json'},
@@ -153,6 +162,24 @@ try{
       else if(pathname==='/depokapacitas/app.js')source=localDepotApp;
       else if(pathname==='/depokapacitas/firebase-config.js')source=localDepotConfig;
       else source=await readFile(new URL('.'+pathname,root),'utf8');
+      if(artifactMode){
+        const relative=pathname.slice(1);
+        const servedDigest=createHash('sha256').update(Buffer.from(source,'utf8')).digest('hex');
+        const bundledDigest=artifactGate.fileSha256[relative];
+        assert.ok(bundledDigest,'Served path has no bundled hash: '+pathname);
+        if(emulatorInjectedPaths.has(pathname)){
+          const bundled=await readFile(new URL('.'+pathname,root),'utf8');
+          assert.notEqual(servedDigest,bundledDigest,
+            'Emulator-injected response unexpectedly equals unmodified source: '+pathname);
+          assert.notEqual(source,bundled,
+            'Emulator module unexpectedly served without explicit local injection: '+pathname);
+          servedInjectedHashes.set(pathname,servedDigest);
+        }else{
+          assert.equal(servedDigest,bundledDigest,
+            'Browser response differs from SHA-verified emitted artifact: '+pathname);
+          servedUnmodifiedHashes.set(pathname,servedDigest);
+        }
+      }
       const type=pathname.endsWith('.html')?'text/html':
         pathname.endsWith('.css')?'text/css':'text/javascript';
       res.writeHead(200,{'Content-Type':type+'; charset=utf-8',
@@ -500,7 +527,13 @@ try{
     'Deferred report or prototype UI route was served from the QA artifact');
     assert.ok(servedLocalAssets.has(prototypePrefix+'operations-data.mjs'),
       'Required pure Fleet alert schema not served to the actual Depot browser');
-    console.log('PASS [B+E]: BYTE-HASHED V1 QA artifact served BOTH original Flotta + Depot UIs, with emulator Auth, post-seal live keyed writes, 80→70 booking, offline/revoked denial; NOT production');
+    assert.deepEqual([...servedInjectedHashes.keys()].sort(),
+      [...emulatorInjectedPaths].sort(),
+      'All and only the three explicitly declared Firebase modules must be emulator-injected');
+    assert.ok(servedUnmodifiedHashes.size>0,
+      'At least one browser asset must be served byte-identical to the hashed artifact');
+    console.log('PASS [B+E]: emitted Fleet+Depot artifact file hashes verified; '+servedUnmodifiedHashes.size+
+      ' browser-served assets match emitted bytes; exactly 3 Firebase modules were explicitly emulator-injected and response-hashed (NOT byte-identical to emitted artifact); authenticated 2-browser local-emulator Fleet/Depot E2E, 80→70 booking, offline/revoked denial. NOT production config/IAM proof.');
   }
 }finally{
   if(browser)await browser.close();
