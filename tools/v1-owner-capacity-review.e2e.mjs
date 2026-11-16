@@ -126,6 +126,20 @@ try{
   assert.equal(await page.locator('#verificationPanel').isHidden(),true);
   assert.equal(await page.locator('#exportButton').isEnabled(),true);
 
+  // Owner UI must accept precisely 30 driver rows, but NOT the 31st.
+  const thirty=source();
+  for(let i=4;i<30;i++)thirty.drivers.push({
+    id:'driver-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
+    status:'inaktiv'
+  });
+  await load(thirty);
+  assert.equal(await page.locator('#reviewPanel').isVisible(),true,
+    '30-driver source must be a permitted private review candidate');
+  assert.equal(await page.locator('tbody tr').count(),2);
+  assert.equal(await page.locator('#exportButton').isDisabled(),true,
+    'each active capacity still requires explicit review');
+  console.log('PASS ALLOW [REAL CHROMIUM]: 30-driver source renders local reviews with no default authorization');
+
   const badCases=[
     ['duplicate normalized DA',()=>{const x=source();x.drivers[1].daCode=' da0001 ';return x;}],
     ['duplicate normalized plate',()=>{const x=source();x.vehicles.push({id:'car2',rendszam:'abc 123',status:'aktiv'});return x;}],
