@@ -479,14 +479,14 @@ service cloud.firestore {
     // Rules have no loop and each allow is capped at 1000 evaluated
     // expressions. One allow cannot scan 25 whitespace-folded rows without
     // also denying a clean booking. The claim allow scans rows 0-19. The
-    // booking allow scans rows 20-24. Both run in the same client transaction
-    // and each refuses a list longer than 25, so a duplicate in either half
-    // still denies. A unique list of 25 still allows a booking. A longer list
+    // booking allow scans rows 20-29. Both run in the same client transaction
+    // and each refuses a list longer than 30, so a duplicate in either half
+    // still denies. A unique list of 30 requires an exact emulator proof. A longer list
     // fails closed. The selected row must own the booked DA. The claim date
     // is the booking date, and that booking still passes validDay. One
     // vehicle claim cannot reveal a second separator-folded plate.
     function driversNotDup(rows, id, index) {
-      return rows is list && rows.size() >= 1 && rows.size() <= 25
+      return rows is list && rows.size() >= 1 && rows.size() <= 30
         && (0 == index || !(rows[0].daCode is string && rows[0].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 1 || 1 == index || !(rows[1].daCode is string && rows[1].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 2 || 2 == index || !(rows[2].daCode is string && rows[2].daCode.replace('[[:space:]]', '').upper() == id))
@@ -509,12 +509,17 @@ service cloud.firestore {
         && (rows.size() <= 19 || 19 == index || !(rows[19].daCode is string && rows[19].daCode.replace('[[:space:]]', '').upper() == id));
     }
     function driversNotDupHigh(rows, id, index) {
-      return rows is list && rows.size() >= 1 && rows.size() <= 25
+      return rows is list && rows.size() >= 1 && rows.size() <= 30
         && (rows.size() <= 20 || 20 == index || !(rows[20].daCode is string && rows[20].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 21 || 21 == index || !(rows[21].daCode is string && rows[21].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 22 || 22 == index || !(rows[22].daCode is string && rows[22].daCode.replace('[[:space:]]', '').upper() == id))
         && (rows.size() <= 23 || 23 == index || !(rows[23].daCode is string && rows[23].daCode.replace('[[:space:]]', '').upper() == id))
-        && (rows.size() <= 24 || 24 == index || !(rows[24].daCode is string && rows[24].daCode.replace('[[:space:]]', '').upper() == id));
+        && (rows.size() <= 24 || 24 == index || !(rows[24].daCode is string && rows[24].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 25 || 25 == index || !(rows[25].daCode is string && rows[25].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 26 || 26 == index || !(rows[26].daCode is string && rows[26].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 27 || 27 == index || !(rows[27].daCode is string && rows[27].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 28 || 28 == index || !(rows[28].daCode is string && rows[28].daCode.replace('[[:space:]]', '').upper() == id))
+        && (rows.size() <= 29 || 29 == index || !(rows[29].daCode is string && rows[29].daCode.replace('[[:space:]]', '').upper() == id));
     }
     function claimSourceIsUnique(bookingId, driverId, claimDate) {
       let booking = getAfter(/databases/$(database)/documents/bookings/$(bookingId)).data;
