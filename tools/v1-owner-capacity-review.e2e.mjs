@@ -110,6 +110,9 @@ try{
   assert.equal(summary.authorizedForImport,false);
   assert.equal(summary.productionIamVerified,false);
   assert.equal(summary.newIndependentBackupRequired,true);
+  assert.equal(summary.migrationOwnedReadDocuments,11);
+  assert.equal(summary.migrationAtomicReadLimit,120);
+  assert.equal(summary.migrationWithinAtomicReadBound,true);
   assert.equal(summary.savedCandidateRoundtripVerified,true);
   assert.equal(summary.originalLocalSha256,sha256(source()));
   assert.equal(summary.candidateLocalSha256,sha256(candidate));
@@ -139,6 +142,21 @@ try{
   assert.equal(await page.locator('#exportButton').isDisabled(),true,
     'each active capacity still requires explicit review');
   console.log('PASS ALLOW [REAL CHROMIUM]: 30-driver source renders local reviews with no default authorization');
+
+  const oversized=structuredClone(thirty);
+  for(let i=1;i<27;i++)oversized.vehicles.push({
+    id:'over-limit-vehicle-'+i,
+    rendszam:'TST-'+String(i).padStart(4,'0'),
+    status:'aktiv',history:[]
+  });
+  await load(oversized);
+  assert.equal(await page.locator('#reviewPanel').isVisible(),true,
+    'the private source must remain reviewable despite denied importer admission');
+  assert.match(await page.locator('#message').innerText(),/120 dokumentumos/);
+  assert.match(await page.locator('#otherRows').innerText(),/122 dokumentumot/);
+  assert.match(await page.locator('#numbers').innerText(),/122\/120/);
+  assert.equal(await page.locator('#exportButton').isDisabled(),true);
+  console.log('PASS DENY [REAL CHROMIUM]: 30 drivers + 27 cars = 122 owned docs; local review allowed, privileged import unequivocally blocked');
 
   const badCases=[
     ['duplicate normalized DA',()=>{const x=source();x.drivers[1].daCode=' da0001 ';return x;}],
