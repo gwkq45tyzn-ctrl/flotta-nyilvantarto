@@ -103,14 +103,15 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   const isRecord=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
   const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
   let original=null,reviewRows=[],savedCandidate=null,savedSummary=null;
-  let candidateVersion=0;
+  let candidateVersion=0,verificationVersion=0;
 
   function notice(message,error=false){
     nodes.message.textContent=message;
     nodes.message.className='message'+(error?' error':'');
   }
   function reset(message='Válassz egy teljes Flotta JSON-exportot.',error=false){
-    candidateVersion++;original=null;reviewRows=[];savedCandidate=null;savedSummary=null;
+    candidateVersion++;verificationVersion++;
+    original=null;reviewRows=[];savedCandidate=null;savedSummary=null;
     nodes.rows.replaceChildren();nodes.numbers.replaceChildren();
     nodes.panel.hidden=true;nodes.numbers.hidden=true;nodes.other.hidden=true;
     nodes.checkPanel.hidden=true;nodes.checkFile.value='';
@@ -225,7 +226,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     updated();
   }
   function updated(){
-    candidateVersion++;savedCandidate=null;savedSummary=null;
+    candidateVersion++;verificationVersion++;savedCandidate=null;savedSummary=null;
     nodes.checkPanel.hidden=true;nodes.checkFile.value='';
     nodes.summary.disabled=true;
     const checked=reviewRows.filter(r=>r.checkbox.checked).length;
@@ -270,16 +271,19 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   }
   nodes.file.addEventListener('change',async()=>{
     reset('Helyi fájl ellenőrzése…');
+    const version=candidateVersion;
     const file=nodes.file.files&&nodes.file.files[0];
     if(!file){reset();return;}
     if(file.size<1||file.size>MAX_FILE_BYTES){reset('Elutasítva: üres vagy túl nagy fájl.',true);return;}
     try{
       const source=JSON.parse(await file.text());
+      if(version!==candidateVersion)return; // another source was chosen
       const details=normalizedSource(source);
       canonicalBytes(source); // same conservative budget as existing local preflight
       original=source;render(source,details);
       notice('A négytömbös forrás helyben beolvasva. Éles import továbbra is tiltva.');
     }catch{
+      if(version!==candidateVersion)return;
       reset('A helyi fájl elutasítva: hiányzó vagy hibás adatok, duplikált azonosítók, '+
         'lezárt forrás, 25-nél több futár, vagy érvénytelen JSON. '+
         'Semmit nem írtunk és nem küldtünk el.',true);
@@ -287,9 +291,12 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   });
   nodes.export.addEventListener('click',async()=>{
     if(nodes.export.disabled)return;
+    const version=candidateVersion,sourceRef=original;
     try{
       const prepared=await prepare();
-      candidateVersion++;
+      if(version!==candidateVersion||sourceRef!==original||
+         nodes.export.disabled)return; // review changed during async digest
+      candidateVersion++;verificationVersion++;
       savedCandidate=prepared.candidate;
       savedSummary={...prepared.summary,savedCandidateRoundtripVerified:false};
       download('imile-flotta-kapacitas-ellenorzott.json',
@@ -301,14 +308,17 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       notice('A teljes Flotta-fájl helyben elkészült. '+
         'Az ellenőrzési összesítő előtt olvasd vissza a letöltött fájlt.');
     }catch{
-      candidateVersion++;savedCandidate=null;savedSummary=null;
+      if(version!==candidateVersion)return;
+      candidateVersion++;verificationVersion++;
+      savedCandidate=null;savedSummary=null;
       nodes.checkPanel.hidden=true;nodes.checkFile.value='';
       nodes.summary.disabled=true;
       notice('A helyi export biztonsági ellenőrzése nem sikerült. Nincs éles adatmozgás.',true);
     }
   });
   nodes.checkFile.addEventListener('change',async()=>{
-    const version=candidateVersion,expectedCandidate=savedCandidate;
+    const version=candidateVersion,checkVersion=++verificationVersion;
+    const expectedCandidate=savedCandidate;
     const expectedSummary=savedSummary;
     nodes.summary.disabled=true;
     if(expectedSummary)expectedSummary.savedCandidateRoundtripVerified=false;
@@ -327,15 +337,16 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       const actualSha=await digest(actualCanonical);
       if(actualSha!==expectedSummary.candidateLocalSha256)
         throw Error('SAVED_HASH_MISMATCH');
-      if(version!==candidateVersion||expectedCandidate!==savedCandidate||
-         expectedSummary!==savedSummary)return; // stale file selection
+      if(version!==candidateVersion||checkVersion!==verificationVersion||
+         expectedCandidate!==savedCandidate||expectedSummary!==savedSummary)
+        return; // stale file selection
       savedSummary.savedCandidateRoundtripVerified=true;
       nodes.summary.disabled=false;
       nodes.checkStatus.textContent='SIKERES: a lementett JSON minden mezője és SHA-256 értéke egyezik.';
       nodes.checkStatus.className='message';
     }catch{
-      if(version!==candidateVersion||expectedCandidate!==savedCandidate||
-         expectedSummary!==savedSummary)return;
+      if(version!==candidateVersion||checkVersion!==verificationVersion||
+         expectedCandidate!==savedCandidate||expectedSummary!==savedSummary)return;
       nodes.checkStatus.textContent='ELUTASÍTVA: a mentett fájl nem egyezik. Az összesítő nem készíthető el.';
       nodes.checkStatus.className='message error';
     }
