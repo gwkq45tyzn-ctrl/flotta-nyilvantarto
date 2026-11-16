@@ -115,14 +115,27 @@ test('unknown inactive classification does not turn an unapproved courier into a
   assert.ok(result.details.reasons.includes('NO_ACTIVE_DRIVERS'));
   assert.equal(result.details.counts.uncertainDriverStatuses,2);
 });
-test('source with more than 25 drivers is blocked by current canonical Rules window',()=>{
+test('exactly 30 signed-offline driver rows pass local source integrity, never authorize import',()=>{
   const raw=source();
-  for(let i=2;i<=25;i++)raw.drivers.push({
+  for(let i=2;i<30;i++)raw.drivers.push({
+    id:'synthetic-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
+    status:'inaktiv',history:[]
+  });
+  const r=validate(raw);
+  assert.equal(r.ok,true,r.reason);
+  assert.equal(r.operationalReadiness.ready,true);
+  assert.equal(r.counts.drivers,30);
+  assert.equal(r.authorizedForImport,false);
+  assert.equal(r.trustedExternalProvenanceVerified,false);
+});
+test('source with more than 30 drivers is blocked by current canonical Rules window',()=>{
+  const raw=source();
+  for(let i=2;i<=30;i++)raw.drivers.push({
     id:'synthetic-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
     status:'inaktiv',history:[]
   });
   const result=validate(raw);
   assert.equal(result.ok,false);
   assert.ok(result.details.reasons.includes('PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'));
-  assert.equal(result.details.counts.drivers,26);
+  assert.equal(result.details.counts.drivers,31);
 });

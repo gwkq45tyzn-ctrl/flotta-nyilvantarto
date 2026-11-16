@@ -11,7 +11,7 @@ const source=()=>({
   vehicles:[{id:'synthetic-v1',rendszam:'ABC-123',status:'aktiv'}],
   fuelCards:[],contacts:[]
 });
-test('active capacity and current 25-DA Rules window pass local operational preflight only',()=>{
+test('active capacity and current 30-DA Rules window pass local operational preflight only',()=>{
   const r=assess(source());
   assert.equal(r.ready,true);
   assert.equal(r.counts.activeDrivers,1);
@@ -42,17 +42,20 @@ test('uncertain and inactive drivers cannot be booked by misclassification',()=>
   assert.ok(r.warnings.includes('DRIVER_STATUS_NEEDS_OWNER_REVIEW'));
   assert.equal(r.counts.uncertainDriverStatuses,1);
 });
-test('26 or more rows fail for the actual current Rules window even if only one is active',()=>{
+test('31 or more rows fail for the actual current Rules window even if only one is active',()=>{
   const s=source();
   while(s.drivers.length<=MAX_PHASE1_DRIVER_ROWS){
     s.drivers.push({id:'synthetic-'+s.drivers.length,daCode:'DA'+s.drivers.length,
       status:'inaktiv'});
   }
-  assert.equal(s.drivers.length,26);
+  assert.equal(s.drivers.length,31);
   assert.equal(assess(s).ready,false);
   assert.ok(assess(s).reasons.includes('PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'));
   s.drivers.length=MAX_PHASE1_DRIVER_ROWS;
+  assert.equal(s.drivers.length,30);
   assert.equal(assess(s).ready,true);
+  assert.equal(assess(s).counts.drivers,30);
+  assert.equal(assess(s).authorizedForImport,false);
 });
 test('no operationally usable vehicles or missing source arrays blocks readiness',()=>{
   const s=source();s.vehicles[0].status='szerviz';

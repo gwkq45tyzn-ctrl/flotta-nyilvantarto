@@ -36,7 +36,7 @@ test('never auto-applies 70 and requires explicit review for every active courie
   assert.match(script[1],/checkbox\.type='checkbox'/);
   assert.match(script[1],/r\.checkbox\.checked/);
   assert.match(script[1],/cap\(Number\(r\.number\.value\)\)/);
-  assert.match(script[1],/MAX_DRIVERS=25/);
+  assert.match(script[1],/MAX_DRIVERS=30/);
   assert.match(script[1],/L E Z Á R T|LEZÁRT_VAGY_IMPORTÁLT_FORRÁS/);
   assert.match(script[1],/this\.chunks|TÚL_NAGY_ADATÁLLOMÁNY|MAX_CANONICAL_BYTES/);
 });

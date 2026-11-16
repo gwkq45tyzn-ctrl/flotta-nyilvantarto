@@ -87,7 +87,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
 <script>
 (() => {
   'use strict';
-  const MAX_FILE_BYTES=1200000,MAX_CANONICAL_BYTES=800*1024,MAX_DRIVERS=25;
+  const MAX_FILE_BYTES=1200000,MAX_CANONICAL_BYTES=800*1024,MAX_DRIVERS=30;
   const $=id=>document.getElementById(id);
   const nodes={file:$('sourceFile'),message:$('message'),numbers:$('numbers'),
     other:$('otherRows'),panel:$('reviewPanel'),rows:$('driverRows'),
@@ -285,7 +285,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     }catch{
       if(version!==candidateVersion)return;
       reset('A helyi fájl elutasítva: hiányzó vagy hibás adatok, duplikált azonosítók, '+
-        'lezárt forrás, 25-nél több futár, vagy érvénytelen JSON. '+
+        'lezárt forrás, 30-nál több futár, vagy érvénytelen JSON. '+
         'Semmit nem írtunk és nem küldtünk el.',true);
     }
   });

@@ -126,6 +126,20 @@ try{
   assert.equal(await page.locator('#verificationPanel').isHidden(),true);
   assert.equal(await page.locator('#exportButton').isEnabled(),true);
 
+  // Owner UI must accept precisely 30 driver rows, but NOT the 31st.
+  const thirty=source();
+  for(let i=4;i<30;i++)thirty.drivers.push({
+    id:'driver-extra-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),
+    status:'inaktiv'
+  });
+  await load(thirty);
+  assert.equal(await page.locator('#reviewPanel').isVisible(),true,
+    '30-driver source must be a permitted private review candidate');
+  assert.equal(await page.locator('tbody tr').count(),2);
+  assert.equal(await page.locator('#exportButton').isDisabled(),true,
+    'each active capacity still requires explicit review');
+  console.log('PASS ALLOW [REAL CHROMIUM]: 30-driver source renders local reviews with no default authorization');
+
   const badCases=[
     ['duplicate normalized DA',()=>{const x=source();x.drivers[1].daCode=' da0001 ';return x;}],
     ['duplicate normalized plate',()=>{const x=source();x.vehicles.push({id:'car2',rendszam:'abc 123',status:'aktiv'});return x;}],
@@ -135,7 +149,7 @@ try{
     ['invalid history',()=>{const x=source();x.fuelCards[0].history='altered';return x;}],
     ['too many drivers',()=>{
       const x=source();
-      for(let i=4;i<26;i++)x.drivers.push({
+      for(let i=4;i<31;i++)x.drivers.push({
         id:'driver-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),status:'inaktiv'
       });
       return x;
@@ -154,7 +168,7 @@ try{
     assert.match(await page.locator('#message').innerText(),/elutasítva/i);
   }
   assert.deepEqual(network,[],'hostile inputs must not cause network calls');
-  console.log('PASS DENY [REAL CHROMIUM]: duplicate DA/plate, sealed/migrated, no active car, 25+ drivers, invalid history/JSON, reserved field; zero HTTP');
+  console.log('PASS DENY [REAL CHROMIUM]: duplicate DA/plate, sealed/migrated, no active car, 30+ drivers, invalid history/JSON, reserved field; zero HTTP');
 }finally{
   await browser.close();
 }

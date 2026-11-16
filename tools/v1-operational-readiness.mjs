@@ -6,7 +6,7 @@
  * Privacy: no names, phone numbers, DA codes or plates in the result.
  * This does not inspect live Firebase, grant IAM rights, seal or deploy.
  */
-export const MAX_PHASE1_DRIVER_ROWS=25; // exact current Rules scan limit
+export const MAX_PHASE1_DRIVER_ROWS=30; // proven current 20+10 split on original Rules; no production IAM GO
 const active=s=>typeof s==='string'&&['aktiv','aktív'].includes(s.trim().toLowerCase());
 const unknown=s=>typeof s!=='string'||![
   'aktiv','aktív','inaktiv','inaktív'
