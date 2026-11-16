@@ -135,7 +135,7 @@ try{
     ['invalid history',()=>{const x=source();x.fuelCards[0].history='altered';return x;}],
     ['too many drivers',()=>{
       const x=source();
-      for(let i=4;i<26;i++)x.drivers.push({
+      for(let i=4;i<31;i++)x.drivers.push({
         id:'driver-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),status:'inaktiv'
       });
       return x;
@@ -154,7 +154,7 @@ try{
     assert.match(await page.locator('#message').innerText(),/elutasítva/i);
   }
   assert.deepEqual(network,[],'hostile inputs must not cause network calls');
-  console.log('PASS DENY [REAL CHROMIUM]: duplicate DA/plate, sealed/migrated, no active car, 25+ drivers, invalid history/JSON, reserved field; zero HTTP');
+  console.log('PASS DENY [REAL CHROMIUM]: duplicate DA/plate, sealed/migrated, no active car, 30+ drivers, invalid history/JSON, reserved field; zero HTTP');
 }finally{
   await browser.close();
 }
