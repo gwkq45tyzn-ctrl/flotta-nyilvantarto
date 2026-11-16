@@ -64,9 +64,9 @@ test('no arbitrary, duplicate, unreviewed, inactive or numerically invalid appro
     assert.equal('candidate' in res,false);
   }
 });
-test('25-driver source window stays enforced, review does not override canonical Rules',()=>{
+test('30-driver source window stays enforced, review does not override canonical Rules',()=>{
   const raw=source();
-  for(let i=4;i<26;i++)raw.drivers.push({id:'driver-extra-'+i,
+  for(let i=4;i<31;i++)raw.drivers.push({id:'driver-extra-'+i,
     daCode:'DA'+String(i).padStart(4,'0'),status:'inaktiv'});
   const res=prepare(raw,[{daCode:'DA-0001',kapacitas:70,reviewed:true}]);
   assert.equal(res.reason,'OPERATIONAL_READINESS_STILL_BLOCKED');
