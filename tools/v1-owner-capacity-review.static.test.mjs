@@ -40,6 +40,23 @@ test('never auto-applies 70 and requires explicit review for every active courie
   assert.match(script[1],/L E Z Á R T|LEZÁRT_VAGY_IMPORTÁLT_FORRÁS/);
   assert.match(script[1],/this\.chunks|TÚL_NAGY_ADATÁLLOMÁNY|MAX_CANONICAL_BYTES/);
 });
+test('candidate summary is unlocked ONLY after disk roundtrip full-content and SHA-256 equality',()=>{
+  assert.match(html,/id="savedFile"/);
+  assert.match(html,/id="verificationPanel"/);
+  assert.match(script[1],/const actualCanonical=canonicalBytes\(candidate\)/);
+  assert.match(script[1],/const expectedCanonical=canonicalBytes\(expectedCandidate\)/);
+  assert.match(script[1],/actualCanonical!==expectedCanonical/);
+  assert.match(script[1],/actualSha!==expectedSummary\.candidateLocalSha256/);
+  assert.match(script[1],/savedCandidateRoundtripVerified:true|savedCandidateRoundtripVerified=false/);
+  assert.match(script[1],/savedCandidateRoundtripVerified/);
+  assert.match(script[1],/candidateVersion\+\+/);
+  assert.match(script[1],/expectedSummary!==savedSummary/);
+  assert.match(script[1],/checkVersion!==verificationVersion/);
+  assert.match(script[1],/sourceRef!==original/);
+  assert.match(script[1],/version!==candidateVersion/);
+  assert.match(script[1],/nodes\.summary\.disabled=true/);
+  assert.match(script[1],/nodes\.summary\.disabled=false/);
+});
 test('review tool cannot itself authorize privileged production import',()=>{
   assert.match(script[1],/authorizedForImport:false/);
   assert.match(script[1],/productionIamVerified:false/);

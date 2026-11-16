@@ -86,6 +86,22 @@ try{
   assert.equal(candidate.drivers[0].history[0].note,'RICH_HISTORY_CANARY');
   assert.equal(candidate.contacts[0].secret,'LOCAL_PRIVATE_CONTACT_CANARY');
   assert.equal(JSON.stringify(source()),original,'original must never be mutated');
+  assert.equal(await page.locator('#verificationPanel').isVisible(),true);
+  assert.equal(await page.locator('#summaryButton').isDisabled(),true,
+    'a generated candidate is NOT yet proof of the saved file');
+  const altered=structuredClone(candidate);
+  altered.contacts[0].history.push({kind:'MALICIOUS_POST_DOWNLOAD_CHANGE'});
+  await page.locator('#savedFile').setInputFiles({
+    name:'modified-after-export.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify(altered))
+  });
+  await page.waitForFunction(()=>document.querySelector('#verifyStatus')
+    .textContent.includes('ELUTASÍTVA'));
+  assert.equal(await page.locator('#summaryButton').isDisabled(),true,
+    'tampered rich history cannot unlock the digest summary');
+  await page.locator('#savedFile').setInputFiles(await exported.path());
+  await page.waitForFunction(()=>!document.querySelector('#summaryButton').disabled);
+  assert.match(await page.locator('#verifyStatus').textContent(),/SIKERES/);
   const summaryPromise=page.waitForEvent('download');
   await page.locator('#summaryButton').click();
   const summaryDownload=await summaryPromise;
@@ -94,6 +110,7 @@ try{
   assert.equal(summary.authorizedForImport,false);
   assert.equal(summary.productionIamVerified,false);
   assert.equal(summary.newIndependentBackupRequired,true);
+  assert.equal(summary.savedCandidateRoundtripVerified,true);
   assert.equal(summary.originalLocalSha256,sha256(source()));
   assert.equal(summary.candidateLocalSha256,sha256(candidate));
   for(const secret of ['LOCAL_PRIVATE_NAME_CANARY','LOCAL_PRIVATE_PHONE_CANARY',
@@ -102,7 +119,12 @@ try{
     assert.equal(summaryText.includes(secret),false,'redacted summary cannot reveal '+secret);
   }
   assert.deepEqual(network,[],'File API review must never issue a network request');
-  console.log('PASS [REAL CHROMIUM]: offline rich four-array export, explicit per-DA review, exact shared-helper parity, signed SHA digest, redacted summary, zero HTTP');
+  console.log('PASS [REAL CHROMIUM]: offline rich four-array export, explicit per-DA review, saved-file SHA-256 re-read PASS, tampered rich history DENY, redacted summary, zero HTTP');
+  await one.fill('71');
+  assert.equal(await page.locator('#summaryButton').isDisabled(),true,
+    'changing a reviewed capacity invalidates the previous saved-file proof');
+  assert.equal(await page.locator('#verificationPanel').isHidden(),true);
+  assert.equal(await page.locator('#exportButton').isEnabled(),true);
 
   const badCases=[
     ['duplicate normalized DA',()=>{const x=source();x.drivers[1].daCode=' da0001 ';return x;}],

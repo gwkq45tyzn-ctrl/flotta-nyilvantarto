@@ -72,6 +72,14 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     <button id="exportButton" disabled>Új, teljes Flotta JSON mentése</button>
     <button id="summaryButton" class="secondary" disabled>Adatmentes ellenőrzési összesítő</button>
   </div>
+  <div id="verificationPanel" class="panel" hidden>
+    <h2>3. Ellenőrizd vissza a ténylegesen mentett fájlt</h2>
+    <p>A letöltés után válaszd ki ismét a <strong>kapacitás-ellenőrzött JSON-fájlt</strong>.
+      Csak teljes tartalmi és SHA-256-egyezés után engedélyezzük az adatmentes összesítőt.</p>
+    <label for="savedFile">Letöltött, új Flotta JSON-fájl</label>
+    <input id="savedFile" type="file" accept=".json,application/json">
+    <p id="verifyStatus" class="message" role="status" aria-live="polite">A mentett fájl visszaellenőrzése még hátravan.</p>
+  </div>
   <p class="warning small">Az elkészült fájl <strong>privát Flotta-adatokat</strong> tartalmaz. Csak a saját gépeden őrizd! Az eredeti mentés változatlan marad. Az új fájlról külön független biztonsági mentés, új SHA-ellenőrzés és tulajdonosi jóváhagyás szükséges.</p>
 </section>
 <footer>Ez kizárólag helyi adat-előkészítés. Nem igazolja a Firestore-méretet, a Firebase IAM-et, a régi Apps Script írók leállítását vagy az élesítés engedélyét. Az OFD, In-Hub és Excel-riportok nem részei ennek a segédeszköznek.</footer>
@@ -83,7 +91,8 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   const $=id=>document.getElementById(id);
   const nodes={file:$('sourceFile'),message:$('message'),numbers:$('numbers'),
     other:$('otherRows'),panel:$('reviewPanel'),rows:$('driverRows'),
-    status:$('reviewStatus'),export:$('exportButton'),summary:$('summaryButton')};
+    status:$('reviewStatus'),export:$('exportButton'),summary:$('summaryButton'),
+    checkPanel:$('verificationPanel'),checkFile:$('savedFile'),checkStatus:$('verifyStatus')};
   const active=s=>typeof s==='string'&&['aktiv','aktív'].includes(s.trim().toLowerCase());
   const inactive=s=>typeof s==='string'&&['inaktiv','inaktív'].includes(s.trim().toLowerCase());
   const cap=n=>Number.isSafeInteger(n)&&n>=1&&n<=10000;
@@ -94,15 +103,20 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   const isRecord=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
   const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
   let original=null,reviewRows=[],savedCandidate=null,savedSummary=null;
+  let candidateVersion=0,verificationVersion=0;
 
   function notice(message,error=false){
     nodes.message.textContent=message;
     nodes.message.className='message'+(error?' error':'');
   }
   function reset(message='Válassz egy teljes Flotta JSON-exportot.',error=false){
+    candidateVersion++;verificationVersion++;
     original=null;reviewRows=[];savedCandidate=null;savedSummary=null;
     nodes.rows.replaceChildren();nodes.numbers.replaceChildren();
     nodes.panel.hidden=true;nodes.numbers.hidden=true;nodes.other.hidden=true;
+    nodes.checkPanel.hidden=true;nodes.checkFile.value='';
+    nodes.checkStatus.textContent='A mentett fájl visszaellenőrzése még hátravan.';
+    nodes.checkStatus.className='message';
     nodes.export.disabled=true;nodes.summary.disabled=true;notice(message,error);
   }
   function normalizedSource(source){
@@ -212,7 +226,9 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     updated();
   }
   function updated(){
-    savedCandidate=null;savedSummary=null;nodes.summary.disabled=true;
+    candidateVersion++;verificationVersion++;savedCandidate=null;savedSummary=null;
+    nodes.checkPanel.hidden=true;nodes.checkFile.value='';
+    nodes.summary.disabled=true;
     const checked=reviewRows.filter(r=>r.checkbox.checked).length;
     const valid=reviewRows.every(r=>r.checkbox.checked&&/^[0-9]+$/.test(r.number.value)&&
       cap(Number(r.number.value)));
@@ -255,16 +271,19 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   }
   nodes.file.addEventListener('change',async()=>{
     reset('Helyi fájl ellenőrzése…');
+    const version=candidateVersion;
     const file=nodes.file.files&&nodes.file.files[0];
     if(!file){reset();return;}
     if(file.size<1||file.size>MAX_FILE_BYTES){reset('Elutasítva: üres vagy túl nagy fájl.',true);return;}
     try{
       const source=JSON.parse(await file.text());
+      if(version!==candidateVersion)return; // another source was chosen
       const details=normalizedSource(source);
       canonicalBytes(source); // same conservative budget as existing local preflight
       original=source;render(source,details);
       notice('A négytömbös forrás helyben beolvasva. Éles import továbbra is tiltva.');
     }catch{
+      if(version!==candidateVersion)return;
       reset('A helyi fájl elutasítva: hiányzó vagy hibás adatok, duplikált azonosítók, '+
         'lezárt forrás, 25-nél több futár, vagy érvénytelen JSON. '+
         'Semmit nem írtunk és nem küldtünk el.',true);
@@ -272,21 +291,69 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
   });
   nodes.export.addEventListener('click',async()=>{
     if(nodes.export.disabled)return;
+    const version=candidateVersion,sourceRef=original;
     try{
       const prepared=await prepare();
-      savedCandidate=prepared.candidate;savedSummary=prepared.summary;
+      if(version!==candidateVersion||sourceRef!==original||
+         nodes.export.disabled)return; // review changed during async digest
+      candidateVersion++;verificationVersion++;
+      savedCandidate=prepared.candidate;
+      savedSummary={...prepared.summary,savedCandidateRoundtripVerified:false};
       download('imile-flotta-kapacitas-ellenorzott.json',
         JSON.stringify(savedCandidate,null,2)+'\n','application/json');
-      nodes.summary.disabled=false;
-      notice('Az új, teljes Flotta-adatállomány helyben elkészült. '+
-        'Független mentés és új forrás-SHA rögzítése szükséges.');
+      nodes.checkPanel.hidden=false;nodes.checkFile.value='';
+      nodes.checkStatus.textContent='Válaszd ki a ténylegesen letöltött új JSON-fájlt.';
+      nodes.checkStatus.className='message';
+      nodes.summary.disabled=true;
+      notice('A teljes Flotta-fájl helyben elkészült. '+
+        'Az ellenőrzési összesítő előtt olvasd vissza a letöltött fájlt.');
     }catch{
-      savedCandidate=null;savedSummary=null;nodes.summary.disabled=true;
+      if(version!==candidateVersion)return;
+      candidateVersion++;verificationVersion++;
+      savedCandidate=null;savedSummary=null;
+      nodes.checkPanel.hidden=true;nodes.checkFile.value='';
+      nodes.summary.disabled=true;
       notice('A helyi export biztonsági ellenőrzése nem sikerült. Nincs éles adatmozgás.',true);
     }
   });
+  nodes.checkFile.addEventListener('change',async()=>{
+    const version=candidateVersion,checkVersion=++verificationVersion;
+    const expectedCandidate=savedCandidate;
+    const expectedSummary=savedSummary;
+    nodes.summary.disabled=true;
+    if(expectedSummary)expectedSummary.savedCandidateRoundtripVerified=false;
+    const file=nodes.checkFile.files&&nodes.checkFile.files[0];
+    if(!file||!expectedCandidate||!expectedSummary)return;
+    nodes.checkStatus.textContent='A mentett fájl tartalmi ellenőrzése folyamatban…';
+    nodes.checkStatus.className='message';
+    try{
+      if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('SAVED_FILE_SIZE_INVALID');
+      const candidate=JSON.parse(await file.text());
+      // Reject changes in any driver, vehicle, card, contact, history,
+      // metadata or unknown nested property—not only courier capacity.
+      const actualCanonical=canonicalBytes(candidate);
+      const expectedCanonical=canonicalBytes(expectedCandidate);
+      if(actualCanonical!==expectedCanonical)throw Error('SAVED_CONTENT_MISMATCH');
+      const actualSha=await digest(actualCanonical);
+      if(actualSha!==expectedSummary.candidateLocalSha256)
+        throw Error('SAVED_HASH_MISMATCH');
+      if(version!==candidateVersion||checkVersion!==verificationVersion||
+         expectedCandidate!==savedCandidate||expectedSummary!==savedSummary)
+        return; // stale file selection
+      savedSummary.savedCandidateRoundtripVerified=true;
+      nodes.summary.disabled=false;
+      nodes.checkStatus.textContent='SIKERES: a lementett JSON minden mezője és SHA-256 értéke egyezik.';
+      nodes.checkStatus.className='message';
+    }catch{
+      if(version!==candidateVersion||checkVersion!==verificationVersion||
+         expectedCandidate!==savedCandidate||expectedSummary!==savedSummary)return;
+      nodes.checkStatus.textContent='ELUTASÍTVA: a mentett fájl nem egyezik. Az összesítő nem készíthető el.';
+      nodes.checkStatus.className='message error';
+    }
+  });
   nodes.summary.addEventListener('click',()=>{
-    if(!savedCandidate||!savedSummary||nodes.summary.disabled)return;
+    if(!savedCandidate||!savedSummary||!savedSummary.savedCandidateRoundtripVerified||
+       nodes.summary.disabled)return;
     download('imile-flotta-ellenorzes-osszesito.json',
       JSON.stringify(savedSummary,null,2)+'\n','application/json');
   });
