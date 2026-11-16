@@ -74,7 +74,10 @@ function centralTaskList(limit=null){
     missing.length?'<p class="inline-note">A közös Flotta adatai még töltődnek: '+esc(missing.join(', '))+'.</p>':'';
   const entries=collectFleetAlerts({
     today:todayAtDepot(),vehicles:get('vehicles'),drivers:get('drivers'),
-    fleetRecords:get('fleetRecords'),fleetAssignments:get('fleetAssignments'),
+    fleetRecords:get('fleetRecords'),
+    trustedKeyedVehicles:state.canonicalMaster?.trusted===true&&
+      state.canonicalMaster?.liveVerified===true?state.canonicalMaster.vehicles:[],
+    fleetAssignments:get('fleetAssignments'),
     bookings:get('bookings')
   });
   const visible=limit===null?entries:entries.slice(0,limit);
