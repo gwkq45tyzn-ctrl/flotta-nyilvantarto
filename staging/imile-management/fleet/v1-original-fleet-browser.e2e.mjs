@@ -124,6 +124,36 @@ try{
   }
   console.log('PASS [B+E]: REAL original Fleet HTML rejects stale legacy session and unlocks after server-verified Auth');
   await page.waitForTimeout(800);
+  // Real Chromium DOM test of the ORIGINAL Fleet renderAlerts, not a copied
+  // algorithm. Synthetic rows are transient: no save(), SDK writes or imports.
+  const mileageUi=await page.evaluate(()=>{
+    const originalVehicles=vehicles,originalSnapshot=JSON.stringify(snapshot());
+    const samples=[];
+    try{
+      for(const [km,due] of [[37891,37500],[37500,38000],[39000,40001],[100000,0]]){
+        vehicles=[{id:'synthetic-mileage',rendszam:'QA-KM-001',status:'aktiv',
+          km,kovetkezoSzervizKm:due,history:[{type:'qa',note:'preserved'}]}];
+        renderAlerts();
+        const el=document.getElementById('alerts');
+        samples.push({km,due,text:el.textContent,
+          overdue:!!el.querySelector('.badge.overdue'),
+          soon:!!el.querySelector('.badge.soon')});
+      }
+    }finally{
+      vehicles=originalVehicles;
+      renderAlerts();
+    }
+    return {samples,unchanged:originalSnapshot===JSON.stringify(snapshot())};
+  });
+  assert.equal(mileageUi.unchanged,true,'Original rich Fleet data must not mutate in alert rendering');
+  assert.match(mileageUi.samples[0].text,/391 km-rel túllépte/);
+  assert.match(mileageUi.samples[0].text,/Aktuális: 37891 km · Határ: 37500 km/);
+  assert.equal(mileageUi.samples[0].overdue,true,'Overdue alert badge visible in real original DOM');
+  assert.match(mileageUi.samples[1].text,/500 km múlva esedékes/);
+  assert.equal(mileageUi.samples[1].soon,true,'500-km warning badge visible');
+  assert.doesNotMatch(mileageUi.samples[2].text,/Kötelező olajcsere/);
+  assert.doesNotMatch(mileageUi.samples[3].text,/Kötelező olajcsere/);
+  console.log('PASS [B+E]: REAL original Fleet Chromium DOM displays overdue/near service km alerts; no bogus unconfigured alert or source mutation');
   const after=await page.evaluate(()=>localStorage.getItem('flotta_nyilvantarto_v16'));
   assert.equal(after,before,'Pre-import legacy Fleet snapshot must remain unchanged');
   await page.evaluate(()=>window.save());
