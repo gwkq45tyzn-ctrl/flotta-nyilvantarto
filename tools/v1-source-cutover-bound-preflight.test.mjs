@@ -164,9 +164,26 @@ test('read-only CLI locally matching JSON yields 0, still blocked production',()
 });
 test('malformed files and bad arguments fail closed without printing private paths',()=>{
   const s=fleet(),m=inventory(s);
-  const bad=localRun(s,'{invalid-json');
-  assert.equal(bad.status,1);
-  assert.deepEqual(JSON.parse(bad.stdout).reasons,['LEGACY_PRIVATE_FILE_UNREADABLE_OR_INVALID']);
+  // A JSON *string* is syntactically valid JSON but not a manifest:
+  // schema denial (exit 2) is correct, not a parsing error (exit 1).
+  const wrongShape=localRun(s,'{invalid-json');
+  assert.equal(wrongShape.status,2);
+  assert.ok(JSON.parse(wrongShape.stdout).reasons.includes(
+    'LEGACY_WRITER_LOCAL_INVENTORY_DENIED'));
+  // For an actually malformed JSON FILE, reject at the read boundary.
+  const badDir=mkdtempSync(join(tmpdir(),'imile-owner-invalid-json-'));
+  try{
+    const fleetPath=join(badDir,'fleet.json'),writerPath=join(badDir,'writer.json');
+    writeFileSync(fleetPath,JSON.stringify(s),{mode:0o600});
+    writeFileSync(writerPath,'{bad json PRIVATE_SCRIPT_REF_CANARY',{mode:0o600});
+    const invalid=spawnSync(process.execPath,[
+      cli,'--fleet',fleetPath,'--legacy-writers',writerPath,'--json'
+    ],{encoding:'utf8',timeout:10000,cwd:resolve('.')});
+    assert.equal(invalid.status,1);
+    assert.deepEqual(JSON.parse(invalid.stdout).reasons,
+      ['LEGACY_PRIVATE_FILE_UNREADABLE_OR_INVALID']);
+    assertRedacted(invalid.stdout+invalid.stderr);
+  }finally{rmSync(badDir,{recursive:true,force:true});}
   const missing=spawnSync(process.execPath,[cli,'--fleet','/PRIVATE_FILE_PATH_CANARY','--legacy-writers','/also-private','--json'],{
     encoding:'utf8',timeout:10000,cwd:resolve('.')
   });
