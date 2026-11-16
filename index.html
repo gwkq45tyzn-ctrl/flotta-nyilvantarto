@@ -2601,31 +2601,77 @@
     }
 
     function importData(e) {
-      const file = e.target.files[0];
+      const input = e?.target;
+      const file = input?.files?.[0];
       if (!file) return;
+      input.value = '';
       const reader = new FileReader();
       reader.onload = () => {
         try {
+          // Never mutate any live Fleet array until the operator approves a
+          // complete, structurally valid four-block original Fleet backup.
+          // A vehicles-only JSON would silently destroy drivers, cards and
+          // contacts; a cancelled import must leave even in-memory data intact.
           const imported = JSON.parse(reader.result);
-          if (imported.vehicles) {
+          const blocks = ['vehicles','fuelCards','drivers','contacts'];
+          if (!imported || typeof imported !== 'object' || Array.isArray(imported) ||
+              blocks.some(key => !Object.prototype.hasOwnProperty.call(imported,key) ||
+                !Array.isArray(imported[key])))
+            throw new Error('Csak teljes Flotta JSON-mentés importálható (járművek, kártyák, futárok, kapcsolatok).');
+          if (Object.prototype.hasOwnProperty.call(imported,'sealed') ||
+              Object.prototype.hasOwnProperty.call(imported,'migrationSourceSha256'))
+            throw new Error('Migrációs vagy már lezárt forrás közvetlen importja nem engedélyezett.');
+          if (!imported.vehicles.length || !imported.drivers.length)
+            throw new Error('Üres jármű- vagy futártörzs nem írhatja felül a meglévő adatokat.');
+          for (const key of blocks) {
+            for (const item of imported[key]) {
+              if (!item || typeof item !== 'object' || Array.isArray(item) ||
+                  ('history' in item && !Array.isArray(item.history)))
+                throw new Error('Sérült vagy hiányos Flotta-adatrekord: ' + key);
+            }
+          }
+          const checkUnique = (key,idField,normalizer) => {
+            const internal = new Set(),canonical = new Set();
+            for (const row of imported[key]) {
+              const id = row.id;
+              const identity = normalizer(row[idField]);
+              if (typeof id !== 'string' || !id.trim() || !identity ||
+                  internal.has(id) || canonical.has(identity) ||
+                  Object.prototype.hasOwnProperty.call(row,'sourceIndex'))
+                throw new Error('Ütköző vagy érvénytelen azonosító a Flotta-mentésben: ' + key);
+              internal.add(id);
+              canonical.add(identity);
+            }
+          };
+          checkUnique('drivers','daCode',value =>
+            typeof value === 'string' && /^[A-Za-z0-9_-]{4,40}$/.test(value.trim())
+              ? value.trim().toUpperCase() : '');
+          checkUnique('vehicles','rendszam',value =>
+            typeof value === 'string' && /^[A-Za-z0-9 -]{4,40}$/.test(value)
+              ? value.replace(/[ -]/g,'').toUpperCase() : '');
+          if (!confirm('A teljes Flotta-mentés mind a négy adattömbjét visszatöltöd? A jelenlegi adatok felülíródnak.')) return;
+          const original = {vehicles,fuelCards,drivers,contacts};
+          try {
             vehicles = imported.vehicles;
-            fuelCards = imported.fuelCards || [];
-            drivers = imported.drivers || [];
-          } else if (Array.isArray(imported)) {
-            vehicles = imported;
-            fuelCards = [];
-            drivers = [];
-          } else throw new Error('Ismeretlen formátum');
-          if (!confirm('Importálod az adatokat? A jelenlegi adatok felülíródnak.')) return;
-          save();
-          refresh();
-          alert('Sikeres import!');
+            fuelCards = imported.fuelCards;
+            drivers = imported.drivers;
+            contacts = imported.contacts;
+            save();
+            refresh();
+            alert('A teljes négytömbös Flotta-mentés betöltve.');
+          } catch (_) {
+            vehicles = original.vehicles;
+            fuelCards = original.fuelCards;
+            drivers = original.drivers;
+            contacts = original.contacts;
+            throw new Error('A visszatöltés nem fejeződött be. Ellenőrizd a mentés állapotát.');
+          }
         } catch (err) {
-          alert('Hibás fájl: ' + err.message);
+          alert('Importálás elutasítva: ' + err.message);
         }
       };
+      reader.onerror = () => alert('A JSON-mentés nem olvasható.');
       reader.readAsText(file);
-      e.target.value = '';
     }
 
     // Init: never fetch fleet data before a login session exists.
