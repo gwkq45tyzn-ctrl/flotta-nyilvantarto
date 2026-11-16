@@ -72,6 +72,16 @@ test('30-driver source window stays enforced, review does not override canonical
   assert.equal(res.reason,'OPERATIONAL_READINESS_STILL_BLOCKED');
   assert.equal(res.authorizedForImport,false);
 });
+test('exactly 30 driver rows can be privately reviewed without enabling import or seal',()=>{
+  const raw=source();
+  for(let i=4;i<30;i++)raw.drivers.push({id:'driver-extra-'+i,
+    daCode:'DA'+String(i).padStart(4,'0'),status:'inaktiv'});
+  const res=prepare(raw,[{daCode:'DA-0001',kapacitas:70,reviewed:true}]);
+  assert.equal(res.ok,true,res.reason);
+  assert.equal(res.candidate.drivers.length,30);
+  assert.equal(res.candidate.drivers[0].kapacitas,70);
+  assert.equal(res.authorizedForImport,false);
+});
 test('already approved capacity may be explicitly revised but cannot cause seal or approval',()=>{
   const raw=source();raw.drivers[0].kapacitas=80;
   const res=prepare(raw,[{daCode:'DA-0001',kapacitas:70,reviewed:true}]);
