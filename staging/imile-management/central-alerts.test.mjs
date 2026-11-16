@@ -40,4 +40,52 @@ assert.throws(()=>collectFleetAlerts({today:'2026-11-32'}),/Érvénytelen/);
 // The aggregator must remain read-only and must not mutate its input.
 assert.equal(vehicles[0].status,'Elérhető');
 assert.equal(fleetRecords[0].data.nextServiceDate,'2026-11-02');
+// Owner-reported P1: an overdue mandatory oil/service kilometer threshold
+// must be surfaced even when no service date is configured.
+const kmVehicle={id:'KM001',plate:'KM-001',status:'Elérhető'};
+const kmRecord=(mileage,nextServiceMileage)=>({
+  id:'vehicle__KM001',kind:'vehicle',
+  data:{vehicleId:'KM001',mileage,nextServiceMileage}
+});
+const kmAlerts=(mileage,nextServiceMileage)=>
+  collectFleetAlerts({today,vehicles:[kmVehicle],
+    fleetRecords:[kmRecord(mileage,nextServiceMileage)]});
+const overdue=kmAlerts(37891,37500);
+assert.equal(overdue.length,1);
+assert.equal(overdue[0].id,'fleet-service-mileage:vehicle__KM001');
+assert.equal(overdue[0].level,'urgent');
+assert.equal(overdue[0].remainingKm,-391);
+assert.match(overdue[0].title,/kötelező olajcsere \/ szerviz \(km\)/);
+assert.match(overdue[0].detail,/391 km-rel túllépte/);
+assert.match(overdue[0].detail,/37891 km; határ: 37500 km/);
+assert.equal(overdue[0].vehicleId,'KM001');
+assert.equal(overdue[0].dueDate,today);
+assert.equal(overdue[0].type,'service');
+assert.equal(overdue[0].source,'Flotta');
+assert.equal(overdue[0].actionUrl,'../staging/imile-management/fleet/operations.html');
+const atLimit=kmAlerts(38000,38000);
+assert.equal(atLimit.length,1);
+assert.equal(atLimit[0].level,'urgent');
+assert.match(atLimit[0].detail,/Elérte a kötelező/);
+const warning=kmAlerts(37500,38000);
+assert.equal(warning.length,1);
+assert.equal(warning[0].level,'warning');
+assert.equal(warning[0].remainingKm,500);
+const upcoming=kmAlerts(39000,40000);
+assert.equal(upcoming.length,1);
+assert.equal(upcoming[0].level,'upcoming');
+assert.equal(upcoming[0].remainingKm,1000);
+// The default 0 means no configured due mileage; a bad field must not
+// generate spurious alerts or display the full source.
+assert.deepEqual(kmAlerts(39000,40001),[]);
+for(const bad of [[100000,0],[-1,38000],['39000',40000],
+    [39000,'40000'],[NaN,40000],[Infinity,40000],
+    [39000,-1],[39000,1.5]]){
+  assert.deepEqual(kmAlerts(...bad),[]);
+}
+const originalKmRecord=kmRecord(37891,37500);
+const originalKmSnapshot=JSON.stringify(originalKmRecord);
+collectFleetAlerts({today,vehicles:[kmVehicle],fleetRecords:[originalKmRecord]});
+assert.equal(JSON.stringify(originalKmRecord),originalKmSnapshot);
+console.log('PASS: overdue/equal/near service-odometer alerts, unconfigured and malformed km denial, no mutation');
 console.log('PASS: shared Fleet expiry/service/license/card/unavailability and same-day booking conflicts');

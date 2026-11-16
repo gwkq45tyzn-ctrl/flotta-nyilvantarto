@@ -23,6 +23,39 @@ export function collectFleetAlerts({
   const rows=safeArray(fleetRecords).filter(x=>x&&x.data&&schemas[x.kind]);
   const knownVehicles=new Map(safeArray(vehicles).map(x=>[norm(x.plate||x.id),x]));
   const knownDrivers=new Map(safeArray(drivers).map(x=>[norm(x.daCode||x.id),x]));
+  // V1 operational alert: nextServiceMileage is the Fleet's mandatory
+  // service/oil-change odometer threshold. Date-only expiryWarnings() does
+  // NOT inspect this field, so cars already past their required service
+  // mileage could remain invisible in the warning dashboard.
+  //
+  // Use the canonical fleetRecords vehicle mileage only—not a stale/mutable
+  // Depot vehicle mirror or the last service event. Never treat the default
+  // 0 km as a configured due threshold. All numbers must be safe integers.
+  const SERVICE_KM_WARNING_WINDOW=1000;
+  for(const row of rows.filter(x=>x.kind==='vehicle')){
+    const vid=recordVehicleId(row);
+    const current=row.data.mileage,due=row.data.nextServiceMileage;
+    if(!vid||!Number.isSafeInteger(current)||current<0||
+       !Number.isSafeInteger(due)||due<=0)continue;
+    const remaining=due-current;
+    if(remaining>SERVICE_KM_WARNING_WINDOW)continue;
+    const vehicle=knownVehicles.get(vid);
+    const detail=remaining<0
+      ?'A kötelező szerviz/olajcsere kilométer-határát '+(-remaining)+
+        ' km-rel túllépte.'
+      :remaining===0
+        ?'Elérte a kötelező szerviz/olajcsere kilométer-határát.'
+        :'A következő kötelező szerviz/olajcsere '+remaining+' km múlva esedékes.';
+    add(alerts,{
+      id:'fleet-service-mileage:'+String(row.id),
+      type:'service',
+      level:remaining<=0?'urgent':remaining<=500?'warning':'upcoming',
+      title:(vehicle?.plate||vid)+' – kötelező olajcsere / szerviz (km)',
+      detail:detail+' Aktuális: '+current+' km; határ: '+due+' km.',
+      dueDate:today,days:0,vehicleId:vid,
+      currentMileage:current,serviceMileage:due,remainingKm:remaining
+    });
+  }
   const serviceDates=new Set();
   for(const row of rows.filter(x=>x.kind==='service')){
     const vid=recordVehicleId(row),day=row.data.date;
