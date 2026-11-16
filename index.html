@@ -1678,6 +1678,20 @@
           }
         });
 
+        // Kötelező szerviz / olajcsere kilométer szerint az EREDETI Flottában.
+        // Az aktuális km-ből nem következtethető ki naptári esedékesség.
+        // A 0 / hiányzó / hibás km-határ nem beállított szerviz.
+        const currentKm=v.km,serviceDueKm=v.kovetkezoSzervizKm;
+        if(Number.isSafeInteger(currentKm)&&currentKm>=0&&
+           Number.isSafeInteger(serviceDueKm)&&serviceDueKm>0){
+          const remainingKm=serviceDueKm-currentKm;
+          if(remainingKm<=1000){
+            items.push({type:'service-mileage',id:v.id,rendszam:v.rendszam,
+              currentKm,serviceDueKm,remainingKm,
+              priority:remainingKm<=0?-80:remainingKm<=500?15:45});
+          }
+        }
+
         // Szerviz azonnal feladatot jelent; operációra váltva megszűnik.
         if(v.status==='szerviz'||(v.status==='leallitott'&&v.statusSince)){
           const daysSince=v.statusSince?Math.max(0,-(daysUntil(v.statusSince)||0)):0;
@@ -1750,6 +1764,22 @@
             <div class="actions" style="display:flex;gap:0.4rem;">
               ${alertStatusSelect(i.id,alertIndex)}
             <button onclick="openStatusModal('${i.id}')">${t('edit')}</button>
+            </div>
+          </div>`;
+        }
+        if(i.type==='service-mileage'){
+          const cls=i.remainingKm<=0?'overdue':i.remainingKm<=500?'soon':'ok-date';
+          const label=i.remainingKm<0
+            ?(-i.remainingKm)+' km-rel túllépte'
+            :i.remainingKm===0?'Elérte a kötelező km-határt'
+              :i.remainingKm+' km múlva esedékes';
+          return `<div class="alert-item">
+            <div style="flex:1;">
+              <strong>${i.rendszam}</strong> — Kötelező olajcsere / szerviz (km)
+              <span class="badge ${cls}">${label}</span>
+              <small style="display:block;color:#6b7280;margin-top:0.25rem;">
+                Aktuális: ${i.currentKm} km · Határ: ${i.serviceDueKm} km
+              </small>
             </div>
           </div>`;
         }
