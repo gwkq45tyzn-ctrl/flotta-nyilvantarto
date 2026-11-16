@@ -33,6 +33,18 @@ Kilépési állapot: **0** = helyi SDK-méretmérés sikeres; **1** = fájl/para
 | `productionSourceAttested:false` | A helyi exporthoz még nincs külön, jogosult személy által hitelesített aktuális mentés és SHA-pin. |
 | `authorizedForImport:false` | Mindig hamis: nincs sem éles import, sem kiadási jogosultság. |
 
+## A 120 dokumentumos atomi migrációs határ
+
+A 30 futárig kibővített, helyben tesztelt foglalási Rules **nem azonos** az importálható teljes flotta méretével. Az aktuális migráció nyolcas csomagokban ír minden futárhoz és járműhöz egy `master` és egy `claim` dokumentumot, plusz csomagonként egy `receipt` dokumentumot. A helyi lezárási ellenőrzés csak legfeljebb **120 ilyen dokumentum** egyetlen tranzakcióban történő visszaolvasására igazolt.
+
+Számítás: `2 × (futárok + járművek) + ceil((futárok + járművek) / 8)`.
+
+- 30 futár + 26 jármű = **56 pár, 119 dokumentum**: a *helyi atomi méretkorláton belül*, de **nem éles importengedély**.
+- 30 futár + 27 jármű = **57 pár, 122 dokumentum**: `PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED`, az importhoz **nincs biztonságos jelenlegi igazolás**.
+- 220 futár + 220 jármű = **440 pár, 935 dokumentum**: nem megengedett a jelenlegi megoldással.
+
+Ezt már a helyi tulajdonosi előellenőrzés és az offline HTML-felület is kijelzi. A futárkapacitásokat a nagyobb állományban is lehet **privát módon előkészíteni és elmenteni**, de az import és éles lezárás nem folytatható. Tilos a valódi állományt önkényesen szétbontani vagy futárokat törölni csak a határ megkerüléséért; ehhez külön tervezett, hitelesített importfolyamat és független jóváhagyás kell.
+
 ## Kötelező élesítési STOP
 
 A helyi mérés nem tudja hitelesíteni a valós Firebase IAM-et/privilegizált importert, a megváltoztathatatlan trust-rootot, a régi Apps Script telepítések és triggerek leállítását, a teljes forrás négy tömbjének tulajdonosi mentését vagy az éles, privát adatokat. A nagyobb migráció az elérhető 120 dokumentumos egytranzakciós ellenőrzési határ felett továbbra is **fail-closed**. A 30 futár feletti Rules-korlát önmagában szintén blokkol.

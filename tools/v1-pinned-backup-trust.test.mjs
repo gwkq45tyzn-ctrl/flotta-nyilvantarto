@@ -128,6 +128,23 @@ test('exactly 30 signed-offline driver rows pass local source integrity, never a
   assert.equal(r.authorizedForImport,false);
   assert.equal(r.trustedExternalProvenanceVerified,false);
 });
+test('genuinely pinned local source with 30 drivers + 27 cars fails 120-doc migration admission',()=>{
+  const raw=source();
+  for(let i=2;i<30;i++)raw.drivers.push({
+    id:'synthetic-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
+    status:'inaktiv',history:[]
+  });
+  for(let i=2;i<27;i++)raw.vehicles.push({
+    id:'synthetic-car-'+i,rendszam:'TST-'+String(i).padStart(4,'0'),
+    status:'aktiv',history:[]
+  });
+  const r=validate(raw);
+  assert.equal(r.ok,false);
+  assert.equal(r.reason,'PHASE1_OPERATIONAL_READINESS_DENIED');
+  assert.ok(r.details.reasons.includes('PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED'));
+  assert.equal(r.details.counts.ownedReadDocuments,122);
+  assert.equal(r.authorizedForImport,false);
+});
 test('source with more than 30 drivers is blocked by current canonical Rules window',()=>{
   const raw=source();
   for(let i=2;i<=30;i++)raw.drivers.push({

@@ -57,6 +57,14 @@ test('candidate summary is unlocked ONLY after disk roundtrip full-content and S
   assert.match(script[1],/nodes\.summary\.disabled=true/);
   assert.match(script[1],/nodes\.summary\.disabled=false/);
 });
+test('private GUI uses the same 8-pair receipt and 120-owned read admission bound, never imports',()=>{
+  assert.match(script[1],/MIGRATION_PAIR_CHUNK=8,MAX_ATOMIC_OWNED_READS=120/);
+  assert.match(script[1],/migrationOwnedReads=2\*keyedPairs/);
+  assert.match(script[1],/Math\.ceil\(keyedPairs\/MIGRATION_PAIR_CHUNK\)/);
+  assert.match(script[1],/migrationWithinAtomicBound/);
+  assert.match(script[1],/migrationWithinAtomicReadBound/);
+  assert.match(script[1],/az import TILOS|Az import TILOS|Éles import TILOS/);
+});
 test('review tool cannot itself authorize privileged production import',()=>{
   assert.match(script[1],/authorizedForImport:false/);
   assert.match(script[1],/productionIamVerified:false/);

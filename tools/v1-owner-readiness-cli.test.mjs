@@ -71,6 +71,29 @@ test('valid privately prepared source returns 0 but never authorizes import',()=
   assert.equal(r.authorizedForImport,false);
   assert.equal(r.readOnly,true);
 });
+test('private 30 drivers + 27 vehicles rejects 122/120 owned reads before import',()=>{
+  const data=source();
+  for(let i=0;i<6;i++)data.drivers[i].kapacitas=70;
+  for(let i=12;i<30;i++)data.drivers.push({
+    id:'synthetic-d-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),status:'inaktiv'
+  });
+  for(let i=14;i<27;i++)data.vehicles.push({
+    id:'synthetic-v-'+i,rendszam:'TST-'+String(i+1).padStart(4,'0'),
+    status:'aktiv'
+  });
+  const output=run(JSON.stringify(data),['--json']);
+  assert.equal(output.status,2,output.stderr);
+  const r=JSON.parse(output.stdout);
+  assert.equal(r.sourcePreflightOk,true);
+  assert.equal(r.operationallyReady,false);
+  assert.ok(r.reasons.includes('PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED'));
+  assert.equal(r.counts.drivers,30);
+  assert.equal(r.counts.vehicles,27);
+  assert.equal(r.counts.keyedPairs,57);
+  assert.equal(r.counts.ownedReadDocuments,122);
+  assert.equal(r.counts.withinAtomicReadBound,false);
+  assert.equal(r.authorizedForImport,false);
+});
 test('source JSON duplicates and reserved sourceIndex never appear in stdout',()=>{
   const data=source();
   data.drivers[11].daCode=data.drivers[0].daCode;

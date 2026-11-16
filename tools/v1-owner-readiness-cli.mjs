@@ -65,6 +65,10 @@ function report(result,json){
         '; hiányos aktív kapacitás: '+c.activeWithoutCapacity,
       'Járművek: '+c.vehicles+'; aktív: '+c.activeVehicles,
       'Tankolókártyák: '+c.fuelCards+'; kapcsolatok: '+c.contacts,
+      'Migrációs ellenőrzés: '+c.keyedPairs+' pár, '+
+        c.ownedReadDocuments+'/'+c.maxAtomicOwnedReadDocuments+
+        ' dokumentum; helyi migrációs korláton belül: '+
+        (c.withinAtomicReadBound?'IGEN':'NEM'),
       'Bizonytalan futárstátusz: '+c.uncertainDriverStatuses
     ]:[]),
     'Akadályok: '+(result.reasons.join(', ')||'nincs helyi adatminőségi akadály'),

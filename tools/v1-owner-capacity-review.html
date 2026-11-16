@@ -88,6 +88,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
 (() => {
   'use strict';
   const MAX_FILE_BYTES=1200000,MAX_CANONICAL_BYTES=800*1024,MAX_DRIVERS=30;
+  const MIGRATION_PAIR_CHUNK=8,MAX_ATOMIC_OWNED_READS=120;
   const $=id=>document.getElementById(id);
   const nodes={file:$('sourceFile'),message:$('message'),numbers:$('numbers'),
     other:$('otherRows'),panel:$('reviewPanel'),rows:$('driverRows'),
@@ -124,7 +125,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       .every(k=>Array.isArray(source[k])))throw Error('HIÁNYZÓ_NÉGY_TÖMB');
     if(source.sealed===true||own(source,'migrationSourceSha256'))
       throw Error('LEZÁRT_VAGY_IMPORTÁLT_FORRÁS');
-    if(source.drivers.length>MAX_DRIVERS)throw Error('TÖBB_MINT_25_FUTÁR');
+    if(source.drivers.length>MAX_DRIVERS)throw Error('TÖBB_MINT_30_FUTÁR');
     const idKeys=['drivers','vehicles'];
     for(const key of ['drivers','vehicles','fuelCards','contacts']){
       const ids=new Set();
@@ -156,7 +157,13 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       .filter(entry=>active(entry.row.status));
     if(!activeRows.length)throw Error('NINCS_AKTÍV_FUTÁR');
     if(!source.vehicles.some(v=>active(v.status)))throw Error('NINCS_AKTÍV_JÁRMŰ');
-    return {activeRows,
+    const keyedPairs=source.drivers.length+source.vehicles.length;
+    // Same calculation as the local synthetic close: 2 documents per
+    // master/claim pair, one immutable receipt for each chunk of eight.
+    const migrationOwnedReads=2*keyedPairs+
+      Math.ceil(keyedPairs/MIGRATION_PAIR_CHUNK);
+    return {activeRows,keyedPairs,migrationOwnedReads,
+      migrationWithinAtomicBound:migrationOwnedReads<=MAX_ATOMIC_OWNED_READS,
       inactive:source.drivers.filter(d=>inactive(d.status)).length,
       unknown:source.drivers.filter(d=>!active(d.status)&&!inactive(d.status)).length,
       missing:activeRows.filter(e=>!cap(e.row.kapacitas)).length};
@@ -195,10 +202,15 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     metric('Aktív jármű',source.vehicles.filter(v=>active(v.status)).length);
     metric('Tankolókártya',source.fuelCards.length);
     metric('Kapcsolat',source.contacts.length);
+    metric('Migrációs olvasás',details.migrationOwnedReads+'/120');
     nodes.numbers.hidden=false;nodes.other.hidden=false;
     nodes.other.textContent='Nem aktív futárok: '+details.inactive+
       '. Bizonytalan státuszú futárok: '+details.unknown+
-      '. Ezeket a segéd nem módosítja; a státuszuk tulajdonosi ellenőrzést igényelhet.';
+      '. Ezeket a segéd nem módosítja; a státuszuk tulajdonosi ellenőrzést igényelhet.'+
+      (details.migrationWithinAtomicBound?'':(' VIGYÁZAT: az összes '+details.keyedPairs+
+        ' futár- és járműrekord migrációja '+details.migrationOwnedReads+
+        ' dokumentumot igényel; a jelenlegi helyi 120-as tranzakciós '+
+        'biztonsági határt meghaladja. Az import TILOS, csak helyi előkészítés lehetséges.'));
     nodes.rows.replaceChildren();reviewRows=[];
     for(const entry of details.activeRows){
       const tr=document.createElement('tr');
@@ -261,6 +273,9 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
         vehicles:candidate.vehicles.length,fuelCards:candidate.fuelCards.length,
         contacts:candidate.contacts.length,uncertainStatusDrivers:details.unknown},
       reviewedActiveDrivers:reviewRows.length,
+      migrationOwnedReadDocuments:details.migrationOwnedReads,
+      migrationAtomicReadLimit:MAX_ATOMIC_OWNED_READS,
+      migrationWithinAtomicReadBound:details.migrationWithinAtomicBound,
       originalLocalSha256:await digest(before),
       candidateLocalSha256:await digest(after),
       authorizedForImport:false,productionIamVerified:false,
@@ -281,7 +296,11 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       const details=normalizedSource(source);
       canonicalBytes(source); // same conservative budget as existing local preflight
       original=source;render(source,details);
-      notice('A négytömbös forrás helyben beolvasva. Éles import továbbra is tiltva.');
+      notice(details.migrationWithinAtomicBound
+        ?'A négytömbös forrás helyben beolvasva. Éles import továbbra is tiltva.'
+        :'A forrás csak előkészíthető: a futárok és járművek együtt túllépik '+
+          'a jelenlegi helyi 120 dokumentumos migrációs biztonsági korlátot. '+
+          'Éles import TILOS.',!details.migrationWithinAtomicBound);
     }catch{
       if(version!==candidateVersion)return;
       reset('A helyi fájl elutasítva: hiányzó vagy hibás adatok, duplikált azonosítók, '+
