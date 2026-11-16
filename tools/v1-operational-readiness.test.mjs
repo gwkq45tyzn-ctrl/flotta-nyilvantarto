@@ -57,6 +57,29 @@ test('31 or more rows fail for the actual current Rules window even if only one 
   assert.equal(assess(s).counts.drivers,30);
   assert.equal(assess(s).authorizedForImport,false);
 });
+test('owned read admission is separate from 30-driver Rules: 56 pairs ALLOW, 57 DENY',()=>{
+  const s=source();
+  s.drivers=Array.from({length:30},(_,i)=>({
+    id:'driver-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),
+    status:i===0?'aktiv':'inaktiv',kapacitas:i===0?70:undefined
+  }));
+  s.vehicles=Array.from({length:26},(_,i)=>({
+    id:'vehicle-'+i,rendszam:'TST-'+String(i+1).padStart(4,'0'),
+    status:'aktiv'
+  }));
+  const safe=assess(s);
+  assert.equal(safe.ready,true,JSON.stringify(safe));
+  assert.equal(safe.counts.ownedReadDocuments,119);
+  assert.equal(safe.counts.receiptDocuments,7);
+  assert.equal(safe.counts.withinAtomicReadBound,true);
+  s.vehicles.push({id:'vehicle-27',rendszam:'TST-0027',status:'aktiv'});
+  const oversized=assess(s);
+  assert.equal(oversized.ready,false);
+  assert.deepEqual(oversized.reasons,['PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED']);
+  assert.equal(oversized.counts.ownedReadDocuments,122);
+  assert.equal(oversized.counts.withinAtomicReadBound,false);
+  assert.equal(oversized.authorizedForImport,false);
+});
 test('no operationally usable vehicles or missing source arrays blocks readiness',()=>{
   const s=source();s.vehicles[0].status='szerviz';
   assert.ok(assess(s).reasons.includes('NO_ACTIVE_VEHICLES'));
