@@ -154,6 +154,35 @@ try{
   assert.doesNotMatch(mileageUi.samples[2].text,/Kötelező olajcsere/);
   assert.doesNotMatch(mileageUi.samples[3].text,/Kötelező olajcsere/);
   console.log('PASS [B+E]: REAL original Fleet Chromium DOM displays overdue/near service km alerts; no bogus unconfigured alert or source mutation');
+  // Browser-level proof that the integrated bridge intercepts the ORIGINAL
+  // importData handler BEFORE FileReader can replace live source arrays.
+  // The import is synthetic, in-memory only; no cloud or local persistence.
+  const blockedImport=await page.evaluate(async()=>{
+    const before=JSON.stringify(snapshot()),oldPending=localStorage.getItem('flotta_pending_v16');
+    const fixture={vehicles:[{id:'qa-v',rendszam:'QA-123'}],
+      drivers:[{id:'qa-d',daCode:'QA0001',kapacitas:70,status:'aktiv'}],
+      fuelCards:[],contacts:[]};
+    const input={value:'synthetic.json',files:[
+      new File([JSON.stringify(fixture)],'synthetic.json',{type:'application/json'})
+    ]};
+    let prevented=false,stopped=false;
+    window.importData({target:input,
+      preventDefault(){prevented=true;},
+      stopImmediatePropagation(){stopped=true;}
+    });
+    await new Promise(resolve=>setTimeout(resolve,120));
+    return {unchanged:JSON.stringify(snapshot())===before,
+      pendingUnchanged:localStorage.getItem('flotta_pending_v16')===oldPending,
+      prevented,stopped,inputCleared:input.value==='',
+      status:document.getElementById('syncStatus')?.textContent||''};
+  });
+  assert.equal(blockedImport.prevented,true,'Original import event must be intercepted before FileReader');
+  assert.equal(blockedImport.stopped,true,'Original inline import must not continue');
+  assert.equal(blockedImport.inputCleared,true,'Rejected bulk file selection must reset');
+  assert.equal(blockedImport.unchanged,true,'Authenticated Fleet rich arrays must remain unchanged');
+  assert.equal(blockedImport.pendingUnchanged,true,'Rejected import must not create pending snapshot');
+  assert.match(blockedImport.status,/közvetlen JSON-importja letiltva/);
+  console.log('PASS [B+E]: REAL original Fleet browser denies unsafe bulk JSON import before seal, no rich mutation/pending replay');
   const after=await page.evaluate(()=>localStorage.getItem('flotta_nyilvantarto_v16'));
   assert.equal(after,before,'Pre-import legacy Fleet snapshot must remain unchanged');
   await page.evaluate(()=>window.save());
