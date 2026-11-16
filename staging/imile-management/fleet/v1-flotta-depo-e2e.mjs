@@ -428,6 +428,51 @@ try{
     null,{timeout:35000});
   console.log('PASS [B+E] second original Fleet browser authenticated after sealed import');
 
+  // SECURITY P0: after trusted seal, the integrated Fleet must STILL refuse
+  // the original bulk JSON import. It cannot atomically rewrite rich archived
+  // source + keyed masters + identity claims, even for a signed-in editor.
+  // This actual-browser test complements the PRE-SEAL import-denial E2E.
+  const richBeforeBulk=await serverRead('flottaSharedState/current');
+  const keyedBeforeBulk=await serverRead('flottaVehicles/ABC123');
+  const blockedAfterSeal=await flottaPage.evaluate(async()=>{
+    const original=JSON.stringify(snapshot());
+    const stored=localStorage.getItem('flotta_nyilvantarto_v16');
+    const pending=localStorage.getItem('flotta_pending_v16');
+    const unsafe={vehicles:[{id:'synthetic-evil',rendszam:'ABC-123',km:777777}],
+      drivers:[{id:'synthetic-evil-da',daCode:'DA0001',status:'aktiv',kapacitas:1}],
+      fuelCards:[],contacts:[]};
+    const input={value:'synthetic-replacement.json',
+      files:[new File([JSON.stringify(unsafe)],'synthetic-replacement.json',
+        {type:'application/json'})]};
+    let prevented=false,stopped=false;
+    window.importData({target:input,
+      preventDefault(){prevented=true;},
+      stopImmediatePropagation(){stopped=true;}});
+    await new Promise(resolve=>setTimeout(resolve,150));
+    return {prevented,stopped,inputCleared:input.value==='',
+      unchanged:JSON.stringify(snapshot())===original,
+      localUnchanged:localStorage.getItem('flotta_nyilvantarto_v16')===stored,
+      pendingUnchanged:localStorage.getItem('flotta_pending_v16')===pending,
+      status:document.getElementById('syncStatus')?.textContent||''};
+  });
+  assert.equal(blockedAfterSeal.prevented,true,
+    'POSTSEAL: real Fleet must intercept JSON import before FileReader');
+  assert.equal(blockedAfterSeal.stopped,true,
+    'POSTSEAL: original onchange handler must not continue');
+  assert.equal(blockedAfterSeal.inputCleared,true);
+  assert.equal(blockedAfterSeal.unchanged,true,
+    'POSTSEAL: rejected bulk import must not mutate rich in-memory arrays');
+  assert.equal(blockedAfterSeal.localUnchanged,true);
+  assert.equal(blockedAfterSeal.pendingUnchanged,true);
+  assert.match(blockedAfterSeal.status,/közvetlen JSON-importja letiltva/);
+  const richAfterBulk=await serverRead('flottaSharedState/current');
+  const keyedAfterBulk=await serverRead('flottaVehicles/ABC123');
+  assert.deepEqual(richAfterBulk,richBeforeBulk,
+    'POSTSEAL bulk import must not tamper archived full-rich Fleet source');
+  assert.deepEqual(keyedAfterBulk,keyedBeforeBulk,
+    'POSTSEAL bulk import must not tamper live keyed vehicle');
+  console.log('PASS [REAL CHROMIUM]: postseal original Fleet bulk JSON import DENY; rich source/keyed/local/pending all unchanged');
+
   await flottaPage.locator('#vehicleTable button[onclick^="editVehicle"]').first().click();
   await flottaPage.locator('#modal.active #km').fill('100100');
   await flottaPage.locator('#modal.active #vehicleForm button[type="submit"]').click();
