@@ -43,7 +43,7 @@
       ?translate('Olajcsere / kötelező szerviz esedékes','Oil change / scheduled service overdue')
       :translate('Olajcsere / szerviz közeleg','Oil change / service approaching')));
     const severity = node('span', overdue
-      ?translate('Túllépés: ','Over by ')+formatKm(-remaining)+' km'
+      ?translate('Túllépés: ','Over by ')+formatKm(Math.max(0, -remaining))+' km'
       :translate('Hátralévő: ','Remaining: ')+formatKm(remaining)+' km');
     severity.className = 'badge ' + (overdue ? 'overdue' : 'soon');
     severity.style.marginLeft = '.6rem';
