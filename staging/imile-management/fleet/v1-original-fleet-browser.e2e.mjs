@@ -154,6 +154,57 @@ try{
   assert.doesNotMatch(mileageUi.samples[2].text,/Kötelező olajcsere/);
   assert.doesNotMatch(mileageUi.samples[3].text,/Kötelező olajcsere/);
   console.log('PASS [B+E]: REAL original Fleet Chromium DOM displays overdue/near service km alerts; no bogus unconfigured alert or source mutation');
+  // The original clickable dashboard STAT counters previously counted date
+  // fields but omitted oil-change mileage. The lists omitted those cars too.
+  // Real DOM checks: exactly one row per vehicle even with multiple warnings.
+  const counters=await page.evaluate(()=>{
+    const originalVehicles=vehicles,before=JSON.stringify(snapshot());
+    let result;
+    try{
+      vehicles=[
+        {id:'qa-overdue',rendszam:'QA-OVERDUE',status:'aktiv',
+          km:37891,kovetkezoSzervizKm:37500,
+          biztositasLejarat:'2020-01-01',muszakiLejarat:'2020-02-01'},
+        {id:'qa-soon',rendszam:'QA-SOON',status:'aktiv',
+          km:37500,kovetkezoSzervizKm:38000},
+        {id:'qa-far',rendszam:'QA-FAR',status:'aktiv',
+          km:39000,kovetkezoSzervizKm:40001},
+        {id:'qa-none',rendszam:'QA-NONE',status:'aktiv',
+          km:100000,kovetkezoSzervizKm:0}
+      ];
+      renderStats();
+      const overdue=Number(document.querySelector('#stats .stat-card.danger .value')?.textContent);
+      const soon=Number(document.querySelector('#stats .stat-card.warning .value')?.textContent);
+      filterByStat('overdue');
+      const overdueCount=document.querySelectorAll('#filterModalContent tbody tr').length;
+      const overdueText=document.getElementById('filterModalContent')?.textContent||'';
+      const overdueTitle=document.getElementById('filterModalTitle')?.textContent||'';
+      filterByStat('soon');
+      const soonCount=document.querySelectorAll('#filterModalContent tbody tr').length;
+      const soonText=document.getElementById('filterModalContent')?.textContent||'';
+      const soonTitle=document.getElementById('filterModalTitle')?.textContent||'';
+      result={overdue,soon,overdueCount,soonCount,
+        overdueText,soonText,overdueTitle,soonTitle};
+    }finally{
+      vehicles=originalVehicles;
+      renderStats();
+      document.getElementById('filterModal')?.classList.remove('active');
+    }
+    return {...result,unchanged:JSON.stringify(snapshot())===before};
+  });
+  assert.equal(counters.overdue,1,
+    'One overdue vehicle must count ONCE despite overdue km + two expired dates');
+  assert.equal(counters.soon,1,'Exactly one vehicle with oil change due in 500 km');
+  assert.equal(counters.overdueCount,1,'Overdue stat list must equal counter');
+  assert.equal(counters.soonCount,1,'Soon stat list must equal counter');
+  assert.match(counters.overdueText,/QA-OVERDUE/);
+  assert.doesNotMatch(counters.overdueText,/QA-SOON|QA-FAR|QA-NONE/);
+  assert.match(counters.soonText,/QA-SOON/);
+  assert.doesNotMatch(counters.soonText,/QA-OVERDUE|QA-FAR|QA-NONE/);
+  assert.match(counters.overdueTitle,/olajcsere-km/);
+  assert.match(counters.soonTitle,/1000 km/);
+  assert.equal(counters.unchanged,true,'Stats and modal lists must remain read-only');
+  console.log('PASS [REAL CHROMIUM]: original Fleet stat counters and click-through lists include oil-change km exactly once per vehicle without data mutation');
   // Browser-level proof that the integrated bridge intercepts the ORIGINAL
   // importData handler BEFORE FileReader can replace live source arrays.
   // The import is synthetic, in-memory only; no cloud or local persistence.

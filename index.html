@@ -1303,21 +1303,33 @@
       return map[s] || s;
     }
 
+    // Match the original Fleet's km-based oil/service warning thresholds.
+    // Counters must count VEHICLES, not expired fields, and clicking a counter
+    // must show exactly those same vehicles (including overdue mileage).
+    const VEHICLE_DATE_WARNING_FIELDS =
+      ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'];
+    function remainingVehicleServiceKm(v) {
+      const current=v.km,due=v.kovetkezoSzervizKm;
+      return Number.isSafeInteger(current)&&current>=0&&
+        Number.isSafeInteger(due)&&due>0?due-current:null;
+    }
+    function vehicleHasWarning(v,kind) {
+      const mileage=remainingVehicleServiceKm(v);
+      if(kind==='overdue'&&mileage!==null&&mileage<=0)return true;
+      if(kind==='soon'&&mileage!==null&&mileage>0&&mileage<=1000)return true;
+      return VEHICLE_DATE_WARNING_FIELDS.some(field=>{
+        const days=daysUntil(v[field]);
+        return Number.isFinite(days)&&
+          (kind==='overdue'?days<0:days>=0&&days<=30);
+      });
+    }
+
     function renderStats() {
       const total = vehicles.length;
       const active = vehicles.filter(v => v.status === 'aktiv').length;
       const szerviz = vehicles.filter(v => v.status === 'szerviz').length;
-      let overdue = 0;
-      let soon = 0;
-      vehicles.forEach(v => {
-        ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].forEach(k => {
-          const d = daysUntil(v[k]);
-          if (d !== null) {
-            if (d < 0) overdue++;
-            else if (d <= 30) soon++;
-          }
-        });
-      });
+      const overdue = vehicles.filter(v=>vehicleHasWarning(v,'overdue')).length;
+      const soon = vehicles.filter(v=>vehicleHasWarning(v,'soon')).length;
       document.getElementById('stats').innerHTML = `
         <div class="stat-card" onclick="filterByStat('all')" style="cursor:pointer;"><h3>${t('statTotal')}</h3><div class="value">${total}</div></div>
         <div class="stat-card success" onclick="filterByStat('active')" style="cursor:pointer;"><h3>${t('statActive')}</h3><div class="value">${active}</div></div>
@@ -1450,21 +1462,11 @@
         filtered = vehicles.filter(v => v.status === 'szerviz');
         title = 'Szervizben';
       } else if (type === 'soon') {
-        filtered = vehicles.filter(v => {
-          return ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].some(k => {
-            const d = daysUntil(v[k]);
-            return d !== null && d >= 0 && d <= 30;
-          });
-        });
-        title = '30 napon belül lejár';
+        filtered = vehicles.filter(v=>vehicleHasWarning(v,'soon'));
+        title = '30 napon vagy 1000 km-en belül esedékes';
       } else if (type === 'overdue') {
-        filtered = vehicles.filter(v => {
-          return ['biztositasLejarat','muszakiLejarat','cascoLejarat','berletiSzerzodesLejarat'].some(k => {
-            const d = daysUntil(v[k]);
-            return d !== null && d < 0;
-          });
-        });
-        title = 'Lejárt';
+        filtered = vehicles.filter(v=>vehicleHasWarning(v,'overdue'));
+        title = 'Lejárt határidő vagy túllépett olajcsere-km';
       }
 
       document.getElementById('filterModalTitle').textContent = title + ` (${filtered.length})`;
