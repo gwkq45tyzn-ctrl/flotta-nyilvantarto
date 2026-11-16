@@ -129,9 +129,9 @@ try{
   assert.equal(await page.locator('#verificationPanel').isHidden(),true);
   assert.equal(await page.locator('#exportButton').isEnabled(),true);
 
-  // ANONYMIZED shape-only rehearsal based on the privately observed
-  // 12-driver / 14-car source dimensions. No real names, plates, DA records,
-  // phone numbers, source SHA or production JSON are ever in GitHub or CI.
+  // Fully SYNTHETIC small-depot edge-case rehearsal with 12 drivers and
+  // 14 cars. No real names, plates, DA records, phone numbers, source SHA
+  // or production JSON are used or stored in GitHub or CI.
   // Six active drivers have no capacity, three are inactive and three have
   // unreviewed statuses. Capacity 70 remains a SUGGESTION, not an auto-fill.
   const twelveFourteen={
