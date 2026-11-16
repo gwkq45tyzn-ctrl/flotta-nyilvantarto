@@ -289,6 +289,16 @@ async function main(){
     await book('2099-03-25','DA0026','ABC001',25,0,80);
     console.log('PASS ALLOW [E+SDK]: unique 26-driver archive books index zero and index 25');
 
+    for(const count of [27,28,29]){
+      const midway=fleet(count,1);
+      await seed(midway.drivers,midway.vehicles,slotsFor(midway.drivers,midway.vehicles));
+      await book('2099-04-'+String(count), 'DA'+String(count).padStart(4,'0'),
+        'ABC001',count-1,0,80);
+      assert.equal((await getDoc(doc(client,'bookings','2099-04-'+String(count)+'__ABC001')))
+        .data().driverIndex,count-1);
+      console.log('PASS ALLOW [E+SDK]: unique '+count+' drivers book the last index');
+    }
+
     const thirty=fleet(30,1);
     await seed(thirty.drivers,thirty.vehicles,slotsFor(thirty.drivers,thirty.vehicles));
     await book('2099-03-26','DA0001','ABC001',0,0,80);
@@ -313,6 +323,18 @@ async function main(){
     });
     await mustDeny('privileged duplicate in low slot denies selected high row 29',
       ()=>book('2099-03-29','DA0030','ABC001',29,0,80));
+
+    // If an untrusted privileged archive has a malformed row, the slimmer
+    // normalize-or-error comparison MUST fail closed, never consider it a
+    // harmless non-match and authorize the good index-zero courier.
+    const malformed=fleet(30,1);
+    malformed.drivers[29].daCode=123;
+    await seed(malformed.drivers,malformed.vehicles,{
+      driverSlots:[{id:'DA0001',daCode:'DA0001',capacity:80,sourceIndex:0}],
+      vehicleSlots:[{id:'ABC001',rendszam:'ABC-001',sourceIndex:0}]
+    });
+    await mustDeny('malformed non-string DA in row 29 cannot bypass all-row uniqueness',
+      ()=>book('2099-03-31','DA0001','ABC001',0,0,80));
 
     const thirtyOne=fleet(31,1);
     await seed(thirtyOne.drivers,thirtyOne.vehicles,slotsFor(thirtyOne.drivers,thirtyOne.vehicles));
