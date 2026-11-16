@@ -51,6 +51,9 @@ test('candidate summary is unlocked ONLY after disk roundtrip full-content and S
   assert.match(script[1],/savedCandidateRoundtripVerified/);
   assert.match(script[1],/candidateVersion\+\+/);
   assert.match(script[1],/expectedSummary!==savedSummary/);
+  assert.match(script[1],/checkVersion!==verificationVersion/);
+  assert.match(script[1],/sourceRef!==original/);
+  assert.match(script[1],/version!==candidateVersion/);
   assert.match(script[1],/nodes\.summary\.disabled=true/);
   assert.match(script[1],/nodes\.summary\.disabled=false/);
 });
