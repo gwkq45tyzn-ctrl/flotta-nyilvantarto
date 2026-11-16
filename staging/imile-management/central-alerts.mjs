@@ -16,26 +16,36 @@ const recordVehicleId=row=>norm(row?.data?.vehicleId||row?.vehicleId||'');
 const sentence=days=>days<0?'Lejárt '+(-days)+' napja':days===0?'Ma esedékes':days+' nap múlva esedékes';
 const add=(list,x)=>list.push({...x,source:'Flotta',actionUrl:'../staging/imile-management/fleet/operations.html'});
 export function collectFleetAlerts({
-  today,vehicles=[],drivers=[],fleetRecords=[],fleetAssignments=[],bookings=[]
+  today,vehicles=[],drivers=[],fleetRecords=[],trustedKeyedVehicles=[],
+  fleetAssignments=[],bookings=[]
 }={}){
   if(!validDate(today))throw Error('Érvénytelen ellenőrzési dátum');
   const alerts=[];
   const rows=safeArray(fleetRecords).filter(x=>x&&x.data&&schemas[x.kind]);
   const knownVehicles=new Map(safeArray(vehicles).map(x=>[norm(x.plate||x.id),x]));
   const knownDrivers=new Map(safeArray(drivers).map(x=>[norm(x.daCode||x.id),x]));
-  // V1 operational alert: nextServiceMileage is the Fleet's mandatory
-  // service/oil-change odometer threshold. Date-only expiryWarnings() does
-  // NOT inspect this field, so cars already past their required service
-  // mileage could remain invisible in the warning dashboard.
-  //
-  // Use the canonical fleetRecords vehicle mileage only—not a stale/mutable
-  // Depot vehicle mirror or the last service event. Never treat the default
-  // 0 km as a configured due threshold. All numbers must be safe integers.
+  // The sealed, server-confirmed original keyed Fleet master is authoritative
+  // for its vehicle odometers. Its validated projection is supplied ONLY by
+  // Depot's guarded canonicalMaster trust gate. Staging fleetRecords may still
+  // contain extra non-keyed demo data; NEVER override a trusted Fleet vehicle
+  // with a stale or conflicting staging kilometer threshold.
   const SERVICE_KM_WARNING_WINDOW=1000;
+  const keyedVehicleIds=new Set(),serviceSources=[];
+  for(const vehicle of safeArray(trustedKeyedVehicles)){
+    const vid=norm(vehicle?.plate||vehicle?.id);
+    if(!vid||keyedVehicleIds.has(vid))continue;
+    keyedVehicleIds.add(vid);
+    serviceSources.push({vid,id:'fleet-keyed-service-mileage:'+vid,
+      current:vehicle.mileage,due:vehicle.nextServiceMileage});
+  }
   for(const row of rows.filter(x=>x.kind==='vehicle')){
     const vid=recordVehicleId(row);
-    const current=row.data.mileage,due=row.data.nextServiceMileage;
-    if(!vid||!Number.isSafeInteger(current)||current<0||
+    if(!vid||keyedVehicleIds.has(vid))continue;
+    serviceSources.push({vid,id:'fleet-service-mileage:'+String(row.id),
+      current:row.data.mileage,due:row.data.nextServiceMileage});
+  }
+  for(const {vid,id,current,due} of serviceSources){
+    if(!Number.isSafeInteger(current)||current<0||
        !Number.isSafeInteger(due)||due<=0)continue;
     const remaining=due-current;
     if(remaining>SERVICE_KM_WARNING_WINDOW)continue;
@@ -47,13 +57,11 @@ export function collectFleetAlerts({
         ?'Elérte a kötelező szerviz/olajcsere kilométer-határát.'
         :'A következő kötelező szerviz/olajcsere '+remaining+' km múlva esedékes.';
     add(alerts,{
-      id:'fleet-service-mileage:'+String(row.id),
+      id,
       type:'service',
       level:remaining<=0?'urgent':remaining<=500?'warning':'upcoming',
       title:(vehicle?.plate||vid)+' – kötelező olajcsere / szerviz (km)',
       detail:detail+' Aktuális: '+current+' km; határ: '+due+' km.',
-      // A kilometer limit carries no reliable calendar due date. Showing
-      // today's date as an expiry would be misleading in Depot's due column.
       dueDate:null,days:null,vehicleId:vid,
       currentMileage:current,serviceMileage:due,remainingKm:remaining
     });
