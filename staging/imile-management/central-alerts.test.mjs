@@ -59,7 +59,8 @@ assert.match(overdue[0].title,/kötelező olajcsere \/ szerviz \(km\)/);
 assert.match(overdue[0].detail,/391 km-rel túllépte/);
 assert.match(overdue[0].detail,/37891 km; határ: 37500 km/);
 assert.equal(overdue[0].vehicleId,'KM001');
-assert.equal(overdue[0].dueDate,today);
+assert.equal(overdue[0].dueDate,null,'Odometer-only threshold is not a calendar deadline');
+assert.equal(overdue[0].days,null);
 assert.equal(overdue[0].type,'service');
 assert.equal(overdue[0].source,'Flotta');
 assert.equal(overdue[0].actionUrl,'../staging/imile-management/fleet/operations.html');
@@ -75,6 +76,18 @@ const upcoming=kmAlerts(39000,40000);
 assert.equal(upcoming.length,1);
 assert.equal(upcoming[0].level,'upcoming');
 assert.equal(upcoming[0].remainingKm,1000);
+assert.equal(upcoming[0].dueDate,null);
+// Mixed calendar and odometer alerts must sort safely and keep the actual
+// calendar expiry ahead of the date-unknown alert at the same priority.
+const mixed=collectFleetAlerts({today,vehicles:[kmVehicle],
+  fleetRecords:[kmRecord(37891,37500),{
+    id:'driver__DA002',kind:'driver',
+    data:{driverId:'DA002',licenseExpiry:today}
+  }]});
+assert.equal(mixed.length,2);
+assert.deepEqual(mixed.map(x=>x.level),['urgent','urgent']);
+assert.equal(mixed[0].dueDate,today);
+assert.equal(mixed[1].dueDate,null);
 // The default 0 means no configured due mileage; a bad field must not
 // generate spurious alerts or display the full source.
 assert.deepEqual(kmAlerts(39000,40001),[]);
