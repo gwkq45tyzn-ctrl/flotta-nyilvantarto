@@ -681,6 +681,20 @@
       const form=document.getElementById(id);
       if(form)form.addEventListener('submit',event=>{block(event);},true);
     }
+    // JSON bulk import is a PRIVILEGED MIGRATION, never a normal shared Fleet
+    // browser edit. Even post-seal the original UI cannot atomically replace
+    // the keyed masters/claims through a local JSON import; letting it try
+    // would show unsaved rich data and risk a stale/pending legacy overwrite.
+    // Keep the original export available for private owner backup.
+    if(typeof window.importData==='function'){
+      window.importData=function(event){
+        if(event&&typeof event.preventDefault==='function')event.preventDefault();
+        if(event&&typeof event.stopImmediatePropagation==='function')
+          event.stopImmediatePropagation();
+        if(event?.target?.value!==undefined)event.target.value='';
+        status('A közös Flotta közvetlen JSON-importja letiltva. A teljes mentést csak ellenőrzött, jogosult átállítási folyamattal lehet visszatölteni.',true);
+      };
+    }
   }
 
   function patchSave() {
