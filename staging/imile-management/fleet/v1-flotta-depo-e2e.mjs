@@ -247,6 +247,42 @@ try{
     null,{timeout:20000});
   console.log('PASS [B+E]: actual original Depot UI shows server-confirmed Fleet rev 1 and normalized plate');
 
+  // The original Depot alert view must really render the live Firestore
+  // fleetRecords odometer threshold, rather than merely passing a unit test.
+  // Privileged writes below are synthetic LOCAL EMULATOR fixture only, never
+  // an operator/client ability or an actual production Fleet update.
+  const setSyntheticServiceMileage=async(mileage,nextServiceMileage)=>{
+    await env.withSecurityRulesDisabled(async ctx=>{
+      await setDoc(doc(ctx.firestore(),'fleetRecords','vehicle__ABC123'),{
+        id:'vehicle__ABC123',kind:'vehicle',
+        data:{vehicleId:'ABC123',mileage,nextServiceMileage}
+      });
+    });
+  };
+  await setSyntheticServiceMileage(37891,37500);
+  await depotPage.locator('#shell [data-view="alerts"]').click();
+  const mileageRow=depotPage.locator('#content tr')
+    .filter({hasText:'kötelező olajcsere / szerviz (km)'});
+  await mileageRow.waitFor({state:'visible',timeout:20000});
+  assert.match(await mileageRow.textContent(),/391 km-rel túllépte/);
+  assert.match(await mileageRow.textContent(),/Sürgős/);
+  assert.equal((await mileageRow.locator('td').nth(2).textContent()).trim(),'—',
+    'Kilometer-only expiry must NOT claim a calendar due date in actual Depot');
+  // Server change should propagate through existing onSnapshot, without a
+  // manual refresh or changing Fleet service thresholds in the browser.
+  await setSyntheticServiceMileage(37200,37500);
+  await depotPage.waitForFunction(()=>{
+    const row=[...document.querySelectorAll('#content tr')]
+      .find(x=>x.textContent?.includes('kötelező olajcsere / szerviz (km)'));
+    return row?.textContent?.includes('300 km múlva esedékes')&&
+      row.textContent.includes('Közelgő');
+  },null,{timeout:20000});
+  await setSyntheticServiceMileage(37891,0);
+  await mileageRow.waitFor({state:'detached',timeout:20000});
+  console.log('PASS [B+E]: genuine Depot alerts live onSnapshot: 391 km overdue urgent, 300 km warning, reset due=0 clears alert, no false calendar date');
+  await depotPage.locator('#shell [data-view="sharedFleet"]').click();
+
+
   // #133/#141: imported source arrays are frozen even BEFORE seal.
   // Check actual original Fleet UI does not let the operator open a source
   // record editor, and server state stays unchanged (no local pending replay).
