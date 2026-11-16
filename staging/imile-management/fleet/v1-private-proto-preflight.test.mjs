@@ -65,6 +65,20 @@ test('large 440-pair source CAN be measured offline while operational and truste
   assert.equal(result.authorizedForImport,false);
 });
 
+test('real protobuf size measurement never masks 57-pair atomic migration NO-GO',()=>{
+  const source=syntheticFourBlockSource({
+    drivers:30,vehicles:27,fuelCards:3,contacts:2
+  });
+  const result=measure(source);
+  assert.equal(result.ok,true);
+  assert.equal(result.measuredDocuments,115);
+  assert.equal(result.counts.keyedPairs,57);
+  assert.equal(result.operationallyReady,false);
+  assert.ok(result.operationalReasons.includes(
+    'PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED'));
+  assert.equal(result.authorizedForImport,false);
+  assert.equal(result.productionFirestoreEncodedSizeVerified,false);
+});
 test('hostile rich source and metadata collision fail closed with static no-PII reason',()=>{
   const hostile=[
     ['sealed',()=>({...original(),sealed:true})],
