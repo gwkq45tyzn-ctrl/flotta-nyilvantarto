@@ -129,6 +129,79 @@ try{
   assert.equal(await page.locator('#verificationPanel').isHidden(),true);
   assert.equal(await page.locator('#exportButton').isEnabled(),true);
 
+  // Fully SYNTHETIC small-depot edge-case rehearsal with 12 drivers and
+  // 14 cars. No real names, plates, DA records, phone numbers, source SHA
+  // or production JSON are used or stored in GitHub or CI.
+  // Six active drivers have no capacity, three are inactive and three have
+  // unreviewed statuses. Capacity 70 remains a SUGGESTION, not an auto-fill.
+  const twelveFourteen={
+    drivers:Array.from({length:12},(_,i)=>({
+      id:'synthetic-courier-'+i,
+      daCode:'DA'+String(i+1).padStart(4,'0'),
+      status:i<6?'aktiv':i<9?'inaktiv':'ismeretlen',
+      history:[{note:'SYNTHETIC_RICH_DRIVER_'+i,
+        nested:{preserve:['2026',i]}}]
+    })),
+    vehicles:Array.from({length:14},(_,i)=>({
+      id:'synthetic-vehicle-'+i,
+      rendszam:'QA-'+String(i+100).padStart(4,'0'),
+      status:'aktiv',
+      km:12000+i,
+      history:[{event:'synthetic-service',nested:{index:i}}]
+    })),
+    fuelCards:Array.from({length:14},(_,i)=>({id:'synthetic-card-'+i,
+      history:[{rich:{index:i}}]})),
+    contacts:Array.from({length:5},(_,i)=>({id:'synthetic-contact-'+i,
+      futureFields:{nested:{index:i}}})),
+    futureRoot:{keep:{nested:'SYNTHETIC_RICH_ROOT_CANARY'}}
+  };
+  await load(twelveFourteen);
+  assert.equal(await page.locator('#reviewPanel').isVisible(),true);
+  assert.equal(await page.locator('tbody tr').count(),6,
+    'only six active drivers must require owner capacity decisions');
+  assert.match(await page.locator('#otherRows').innerText(),/Bizonytalan státuszú futárok: 3/);
+  assert.match(await page.locator('#numbers').innerText(),/56\/120/,
+    '26 keyed pairs generate exactly 56 locally owned read documents');
+  assert.equal(await page.locator('#exportButton').isDisabled(),true,
+    'six active capacity gaps must never receive implicit 70 from the UI');
+  const explicit=[];
+  for(let i=1;i<=6;i++){
+    const code='DA'+String(i).padStart(4,'0');
+    const spin=page.getByRole('spinbutton',{name:code+' jóváhagyott kapacitása'});
+    assert.equal(await spin.inputValue(),'',
+      'missing capacity must be empty, not prefilled with suggested 70');
+    await spin.fill('70');
+    await page.getByRole('checkbox',{name:code+' ellenőriztem'}).check();
+    explicit.push({daCode:code,kapacitas:70,reviewed:true});
+    if(i<6)assert.equal(await page.locator('#exportButton').isDisabled(),true,
+      'each of six active couriers must be reviewed separately');
+  }
+  assert.equal(await page.locator('#exportButton').isEnabled(),true);
+  const shapeDownload=page.waitForEvent('download');
+  await page.locator('#exportButton').click();
+  const shapeFile=await shapeDownload;
+  const shapeCandidate=JSON.parse(readFileSync(await shapeFile.path(),'utf8'));
+  const reviewed=prepareReviewedCourierCapacities(twelveFourteen,explicit);
+  assert.equal(reviewed.ok,true,reviewed.reason);
+  assert.deepEqual(shapeCandidate,reviewed.candidate,
+    'exact full rich four arrays plus unknown root metadata must survive');
+  assert.equal(shapeCandidate.drivers.filter(d=>d.status==='ismeretlen').length,3,
+    'unknown statuses must remain unknown, not quietly activated');
+  assert.equal(shapeCandidate.drivers.filter(d=>d.status==='aktiv'&&d.kapacitas===70).length,6);
+  assert.equal(shapeCandidate.vehicles.length,14);
+  assert.deepEqual(shapeCandidate.futureRoot,twelveFourteen.futureRoot);
+  await page.locator('#savedFile').setInputFiles(await shapeFile.path());
+  await page.waitForFunction(()=>!document.querySelector('#summaryButton').disabled);
+  const shapeSummaryDownload=page.waitForEvent('download');
+  await page.locator('#summaryButton').click();
+  const shapeSummary=JSON.parse(readFileSync(await (await shapeSummaryDownload).path(),'utf8'));
+  assert.equal(shapeSummary.migrationOwnedReadDocuments,56);
+  assert.equal(shapeSummary.migrationWithinAtomicReadBound,true);
+  assert.equal(shapeSummary.authorizedForImport,false);
+  assert.equal(shapeSummary.newIndependentBackupRequired,true);
+  assert.deepEqual(network,[],'Realistic shape-only review must remain completely offline');
+  console.log('PASS [REAL CHROMIUM]: 12/14 anonymized Fleet shape, six explicit 70 reviews, three unknown kept, full rich roundtrip and 56/120 local bound, zero HTTP');
+
   // Owner UI must accept precisely 30 driver rows, but NOT the 31st.
   const thirty=source();
   for(let i=4;i<30;i++)thirty.drivers.push({
