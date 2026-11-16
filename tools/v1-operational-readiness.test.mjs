@@ -52,7 +52,10 @@ test('31 or more rows fail for the actual current Rules window even if only one 
   assert.equal(assess(s).ready,false);
   assert.ok(assess(s).reasons.includes('PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'));
   s.drivers.length=MAX_PHASE1_DRIVER_ROWS;
+  assert.equal(s.drivers.length,30);
   assert.equal(assess(s).ready,true);
+  assert.equal(assess(s).counts.drivers,30);
+  assert.equal(assess(s).authorizedForImport,false);
 });
 test('no operationally usable vehicles or missing source arrays blocks readiness',()=>{
   const s=source();s.vehicles[0].status='szerviz';
