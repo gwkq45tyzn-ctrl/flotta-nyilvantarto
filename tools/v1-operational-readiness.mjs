@@ -6,6 +6,7 @@
  * Privacy: no names, phone numbers, DA codes or plates in the result.
  * This does not inspect live Firebase, grant IAM rights, seal or deploy.
  */
+import {assessAtomicMigrationBudget} from './v1-atomic-migration-budget.mjs';
 export const MAX_PHASE1_DRIVER_ROWS=30; // proven current 20+10 split on original Rules; no production IAM GO
 const active=s=>typeof s==='string'&&['aktiv','aktív'].includes(s.trim().toLowerCase());
 const unknown=s=>typeof s!=='string'||![
@@ -21,6 +22,11 @@ export function assessFleetDepotOperationalReadiness(source){
         activeWithoutCapacity:0,uncertainDriverStatuses:0},
       authorizedForImport:false,ownerApprovalVerified:false};
   const drivers=source.drivers,vehicles=source.vehicles;
+  const migration=assessAtomicMigrationBudget({
+    drivers:drivers.length,vehicles:vehicles.length
+  });
+  if(!migration.withinProvenReadBound)
+    reasons.push('PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED');
   const activeDrivers=drivers.filter(d=>d&&active(d.status));
   const activeVehicles=vehicles.filter(v=>v&&active(v.status));
   const activeWithoutCapacity=activeDrivers.filter(d=>
@@ -39,7 +45,12 @@ export function assessFleetDepotOperationalReadiness(source){
     reasons,warnings,
     counts:{drivers:drivers.length,vehicles:vehicles.length,
       activeDrivers:activeDrivers.length,activeVehicles:activeVehicles.length,
-      activeWithoutCapacity,uncertainDriverStatuses},
+      activeWithoutCapacity,uncertainDriverStatuses,
+      keyedPairs:migration.keyedPairs,
+      receiptDocuments:migration.receiptDocuments,
+      ownedReadDocuments:migration.ownedReadDocuments,
+      maxAtomicOwnedReadDocuments:migration.maxAtomicOwnedReadDocuments,
+      withinAtomicReadBound:migration.withinProvenReadBound},
     // Local data quality is NEVER a production release authorization.
     authorizedForImport:false,ownerApprovalVerified:false
   };
