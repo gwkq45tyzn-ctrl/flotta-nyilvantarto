@@ -74,4 +74,4 @@ jobs:
         run: |
           test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
           # Reviewed full original Flotta with the targeted mileage-oil-change warning; exact source blob pin.
-          test "$(git rev-parse HEAD:index.html)" = "96bce98d812d62e6fca1e3c8f1b6fa564671696c"
+          test "$(git rev-parse HEAD:index.html)" = "f04cc399f3ed91199ab2f7a2a904f6077d69fb62"
