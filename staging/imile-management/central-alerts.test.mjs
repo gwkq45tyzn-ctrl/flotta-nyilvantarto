@@ -102,3 +102,25 @@ collectFleetAlerts({today,vehicles:[kmVehicle],fleetRecords:[originalKmRecord]})
 assert.equal(JSON.stringify(originalKmRecord),originalKmSnapshot);
 console.log('PASS: overdue/equal/near service-odometer alerts, unconfigured and malformed km denial, no mutation');
 console.log('PASS: shared Fleet expiry/service/license/card/unavailability and same-day booking conflicts');
+
+// A trusted sealed original Fleet master MUST win over a stale staging
+// fleetRecords odometer row for the same normalized vehicle identity.
+const trustedKeyed={id:'KM001',plate:'KM001',status:'Elérhető',
+  mileage:37891,nextServiceMileage:37500};
+const staleStaging=kmRecord(10000,20000);
+const keyedAlerts=collectFleetAlerts({today,vehicles:[kmVehicle],
+  fleetRecords:[staleStaging],trustedKeyedVehicles:[trustedKeyed]});
+assert.equal(keyedAlerts.length,1);
+assert.equal(keyedAlerts[0].id,'fleet-keyed-service-mileage:KM001');
+assert.equal(keyedAlerts[0].remainingKm,-391);
+assert.equal(keyedAlerts[0].dueDate,null);
+// Completed/reset service in trusted Fleet MUST NOT resurrect a stale,
+// already overdue staging alarm.
+const cleared=collectFleetAlerts({today,vehicles:[kmVehicle],
+  fleetRecords:[kmRecord(37891,37500)],
+  trustedKeyedVehicles:[{...trustedKeyed,nextServiceMileage:null}]});
+assert.deepEqual(cleared,[]);
+const originalTrustedSnapshot=JSON.stringify(trustedKeyed);
+collectFleetAlerts({today,vehicles:[kmVehicle],trustedKeyedVehicles:[trustedKeyed]});
+assert.equal(JSON.stringify(trustedKeyed),originalTrustedSnapshot);
+console.log('PASS: confirmed keyed original Fleet km source wins over stale stage, zero service clears, no mutation');
