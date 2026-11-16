@@ -5,6 +5,7 @@ on:
       - 'tools/**'
       - 'docs/**'
       - 'staging/imile-management/fleet/**'
+      - 'staging/imile-management/central-alerts.*'
       - 'staging/imile-management/build-preview.mjs'
       - 'staging/imile-management/build-v1-core.mjs'
       - 'staging/imile-management/build-v1-core.test.mjs'

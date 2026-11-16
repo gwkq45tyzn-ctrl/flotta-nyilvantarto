@@ -52,7 +52,9 @@ export function collectFleetAlerts({
       level:remaining<=0?'urgent':remaining<=500?'warning':'upcoming',
       title:(vehicle?.plate||vid)+' – kötelező olajcsere / szerviz (km)',
       detail:detail+' Aktuális: '+current+' km; határ: '+due+' km.',
-      dueDate:today,days:0,vehicleId:vid,
+      // A kilometer limit carries no reliable calendar due date. Showing
+      // today's date as an expiry would be misleading in Depot's due column.
+      dueDate:null,days:null,vehicleId:vid,
       currentMileage:current,serviceMileage:due,remainingKm:remaining
     });
   }
@@ -117,5 +119,6 @@ export function collectFleetAlerts({
     }
   }
   return alerts.sort((a,b)=>priority[a.level]-priority[b.level]||
-    a.dueDate.localeCompare(b.dueDate)||a.title.localeCompare(b.title,'hu'));
+    (a.dueDate??'9999-12-31').localeCompare(b.dueDate??'9999-12-31')||
+    a.title.localeCompare(b.title,'hu'));
 }
