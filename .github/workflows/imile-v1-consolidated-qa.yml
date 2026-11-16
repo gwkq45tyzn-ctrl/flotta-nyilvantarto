@@ -32,6 +32,8 @@ jobs:
         run: git rev-parse HEAD
       - name: Phase-1 Fleet+Depot CORE-only bundle boundary
         run: node --test staging/imile-management/core-preview-scope.test.mjs
+      - name: Original rich Fleet HTML mandatory oil-change km warning regression
+        run: node --test staging/imile-management/fleet/v1-original-mileage-alerts.test.mjs
       - name: Read-only central Fleet overdue oil-change km and shared Depot alert integration
         run: |
           node staging/imile-management/central-alerts.test.mjs
@@ -110,7 +112,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Assert unchanged actual original full Fleet HTML
-        run: test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
+        run: test "$(git rev-parse HEAD:index.html)" = "8e4111d5d87f90b55d08294ac70193c73b80a916"
       - name: Free local browser & pinned Firebase dependencies
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
