@@ -32,3 +32,19 @@ test('missing capacity blocks',()=>{
   assert.equal(projectKeyedMasters(snap([['DA0001',{daCode:'DA0001',status:'aktiv'}]]),vehicles(),fleet()),null);
 });
 console.log('keyed master tests defined');
+
+test('canonical vehicle keeps only safe, full-rich Fleet mileage alert fields',()=>{
+  const withKm=snap([['ABC123',{rendszam:'ABC-123',status:'aktiv',
+    km:37891,kovetkezoSzervizKm:37500,history:[{note:'still rich'}]}]]);
+  const out=projectKeyedMasters(drivers(),withKm,fleet());
+  assert.equal(out?.trusted,true);
+  assert.equal(out.vehicles[0].mileage,37891);
+  assert.equal(out.vehicles[0].nextServiceMileage,37500);
+  assert.deepEqual(out.vehicles[0].history,[{note:'still rich'}]);
+  const bogus=snap([['ABC123',{rendszam:'ABC-123',status:'aktiv',
+    km:'37891',kovetkezoSzervizKm:0}]]);
+  const invalid=projectKeyedMasters(drivers(),bogus,fleet());
+  assert.equal(invalid?.trusted,true);
+  assert.equal(invalid.vehicles[0].mileage,null);
+  assert.equal(invalid.vehicles[0].nextServiceMileage,null);
+});
