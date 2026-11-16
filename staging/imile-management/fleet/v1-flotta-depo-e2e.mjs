@@ -97,7 +97,8 @@ const localDepotConfig=
 
 const fleetData={
   vehicles:[{id:'fleet-qa-vehicle-1',rendszam:'ABC-123',gyartmany:'Ford',
-    modell:'Transit',km:5000,status:'aktiv',normalizedPlate:'ABC123',
+    modell:'Transit',km:5000,kovetkezoSzervizKm:4900,
+    status:'aktiv',normalizedPlate:'ABC123',
     history:[{date:'2026-01-01',note:'synthetic'}]}],
   drivers:[{id:'fleet-qa-driver-1',daCode:'DA0001',name:'Synthetic',
     status:'aktiv',kapacitas:80}],
@@ -221,6 +222,23 @@ try{
       null,{timeout:45000});
   }
   console.log('PASS [B+E]: two isolated signed-in original Fleet sessions; Depot session prepared via real Firebase Auth');
+  // The original Fleet real DOM (not prototype or a test-local rewrite)
+  // must display the required oil-change warning from the full-rich archive.
+  await flottaPage.waitForFunction(()=>{
+    const panel=document.getElementById('alerts');
+    return panel?.textContent?.includes('Kötelező olajcsere / szerviz (km)')
+      &&panel?.textContent?.includes('100 km-rel túllépte')
+      &&panel?.textContent?.includes('Aktuális: 5000 km')
+      &&panel?.textContent?.includes('Határ: 4900 km');
+  },null,{timeout:20000});
+  const originalFleetMileageNotice=await flottaPage.locator('#alerts .alert-item')
+    .filter({hasText:'Kötelező olajcsere / szerviz (km)'})
+    .textContent();
+  assert.match(originalFleetMileageNotice,/100 km-rel túllépte/);
+  assert.doesNotMatch(originalFleetMileageNotice,/2026-11-16/,
+    'The original Fleet must not fabricate a due date for a kilometer warning');
+  console.log('PASS [REAL CHROMIUM]: ORIGINAL Fleet displays 100 km overdue oil-change alert from actual rich source');
+
 
   // Same second browser context, authenticated via a real Fleet login before
   // navigating to the original Depot UI. No fake shell/document injection.
