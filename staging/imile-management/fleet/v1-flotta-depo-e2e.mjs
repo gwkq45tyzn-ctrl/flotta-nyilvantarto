@@ -351,6 +351,29 @@ try{
     await setDoc(sourceRef,{...confirmed,sealed:true});
   });
   console.log('PASS [B+E]: synthetic privileged post-import rich keyed parity verified before immutable seal');
+  // Provenance precedence: the original Fleet 5000/4900 sealed keyed master
+  // MUST replace an older, conflicting staged 37891/37500 odometer alarm.
+  // This fixture mutation uses privileged local emulator only.
+  await setSyntheticServiceMileage(37891,37500);
+  await depotPage.locator('#shell [data-view="alerts"]').click();
+  await depotPage.waitForFunction(()=>{
+    const rows=[...document.querySelectorAll('#content tr')];
+    const mileage=rows.filter(x=>
+      x.textContent?.includes('kötelező olajcsere / szerviz (km)'));
+    return mileage.length===1 &&
+      mileage[0].textContent?.includes('100 km-rel túllépte') &&
+      mileage[0].textContent?.includes('Aktuális: 5000 km') &&
+      mileage[0].textContent?.includes('határ: 4900 km') &&
+      !mileage[0].textContent?.includes('391 km-rel túllépte');
+  },null,{timeout:25000});
+  const canonicalMileageRow=depotPage.locator('#content tr')
+    .filter({hasText:'kötelező olajcsere / szerviz (km)'});
+  assert.equal(await canonicalMileageRow.count(),1,
+    'Do not duplicate stale staging and trusted original Fleet alerts');
+  assert.equal((await canonicalMileageRow.locator('td').nth(2).textContent()).trim(),'—',
+    'Canonical Fleet km alert has no invented calendar due date');
+  console.log('PASS [REAL CHROMIUM]: after sealed original Fleet trust, Depot shows true 100 km overdue keyed master once, ignores stale 391 km staged duplicate');
+
 
   // Real booking through original Depot planning UI; tomorrow is deliberate:
   // same-day bookings additionally require a trusted Attendance clearance
