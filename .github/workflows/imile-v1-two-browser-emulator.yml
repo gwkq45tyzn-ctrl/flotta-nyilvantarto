@@ -77,5 +77,5 @@ jobs:
       - name: Staging deployment remains disabled
         run: |
           # Approved reviewed full Flotta with bounded daily driver capacity (#158).
-          test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
+          test "$(git rev-parse HEAD:index.html)" = "8e4111d5d87f90b55d08294ac70193c73b80a916"
           echo "Browser QA used localhost only; no Firebase deploy step exists."

@@ -35,13 +35,14 @@ test('ORIGINAL complete Fleet remains intact with rich features and guarded clou
     '<script src="features/vehicle-groups-v27.js"></script>',
     '<script src="features/active-driver-assignment-v25.js"></script>'])
     assert.ok(fleet.includes(exact),'Missing original feature '+exact);
-  // Preserve the exact approved original Fleet HTML blob unchanged:
-  // all shared navigation is added by the bridge rather than editing the app.
+  // Keep the exact reviewed original rich Fleet HTML source pinned, including
+  // the narrowly scoped mandatory-service kilometer warning amendment.
+  // All other shared navigation remains provided by the bridge.
   const bytes=Buffer.from(fleet,'utf8');
   const blob=crypto.createHash('sha1')
     .update(Buffer.from('blob '+bytes.length+'\0','utf8'))
     .update(bytes).digest('hex');
-  assert.equal(blob,'00773451fbe2d8c23046d195f5d707efd46b3700');
+  assert.equal(blob,'8e4111d5d87f90b55d08294ac70193c73b80a916');
   assert.match(bridge,/function ensureUnifiedNavigation\(/);
   assert.match(bridge,/oldSetup.hidden=true/);
   assert.match(bridge,/PRESEAL_FLEET_READ_ONLY_UNTIL_TRUSTED_IMPORT/);
