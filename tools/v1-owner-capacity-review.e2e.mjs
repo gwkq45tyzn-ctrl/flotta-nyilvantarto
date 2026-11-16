@@ -129,7 +129,7 @@ try{
   // Owner UI must accept precisely 30 driver rows, but NOT the 31st.
   const thirty=source();
   for(let i=4;i<30;i++)thirty.drivers.push({
-    id:'driver-extra-'+i,daCode:'DA'+String(i).padStart(4,'0'),
+    id:'driver-extra-'+i,daCode:'DA'+String(i+1).padStart(4,'0'),
     status:'inaktiv'
   });
   await load(thirty);
