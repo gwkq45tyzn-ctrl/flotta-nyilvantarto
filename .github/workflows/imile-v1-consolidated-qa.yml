@@ -38,6 +38,7 @@ jobs:
         run: |
           node staging/imile-management/central-alerts.test.mjs
           node staging/imile-management/central-alerts.integration.test.mjs
+          node --test depokapacitas/keyed-live-master.test.mjs
       - name: Read-only source SHA-256 evidence and adversarial integrity tests
         run: |
           node --test tools/v1-release-fingerprint.test.mjs

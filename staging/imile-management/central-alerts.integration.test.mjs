@@ -9,6 +9,8 @@ assert.match(depot,/import \{collectFleetAlerts\} from '\.\.\/staging\/imile-man
 assert.match(depot,/const state=.*fleetRecords:\[\],fleetAssignments:\[\]/);
 assert.match(depot,/const watchedCollections=\[[\s\S]*?'fleetRecords','fleetAssignments'/);
 assert.match(depot,/for\(const name of watchedCollections\)/);
+assert.match(depot,/trustedKeyedVehicles:state\.canonicalMaster\?\.trusted===true/);
+assert.match(depot,/state\.canonicalMaster\?\.liveVerified===true/);
 assert.match(depot,/onSnapshot\(collection\(db,name\),\{includeMetadataChanges:true\}/);
 assert.match(depot,/return datebar\(\)\+nextDayPanel\(\)\+centralTaskList\(8\)/);
 assert.match(depot,/return datebar\(\)\+nextDayPanel\(\)\+centralTaskList\(5\)/);

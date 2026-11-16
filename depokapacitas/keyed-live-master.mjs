@@ -57,6 +57,11 @@ export function projectKeyedMasters(driversSnap,vehiclesSnap,fleet) {
       model:String(v.model||[v.gyartmany,v.modell].filter(Boolean).join(' ')),
       status:['aktiv','aktív'].includes(v.status)?'Elérhető':
         v.status==='szerviz'?'Szerviz':'Leállított',
+      // Read-only validated projection of the SAME trusted rich keyed Fleet
+      // master. Never use Depot's potentially stale vehicles mirror for km.
+      mileage:Number.isSafeInteger(v.km)&&v.km>=0?v.km:null,
+      nextServiceMileage:Number.isSafeInteger(v.kovetkezoSzervizKm)&&v.kovetkezoSzervizKm>0
+        ?v.kovetkezoSzervizKm:null,
       history:v.history||[]
     });
   }
