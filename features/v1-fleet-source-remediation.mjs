@@ -8,7 +8,8 @@
  */
 import {sha256,preflight} from '../tools/v1-migration-dryrun.mjs';
 import {projectBlockPairs} from '../tools/v1-variable-block-migration.mjs';
-import {planSharedMigration} from './shared-master-adapter.mjs';
+import {assessFleetDepotOperationalReadiness,MAX_PHASE1_DRIVER_ROWS} from '../tools/v1-operational-readiness.mjs';
+import {planSharedMigration,recordedFleetCapacity} from './shared-master-adapter.mjs';
 
 const BLOCKS=['drivers','vehicles','fuelCards','contacts'];
 const ALLOWED_STATUS=new Set(['aktiv','aktív','inaktiv','inaktív']);
@@ -16,10 +17,7 @@ const SAFE_INACTIVE=new Set(['inaktiv','inaktív']);
 const isObject=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
 const has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const daOf=v=>typeof v==='string'?v.trim().toUpperCase():'';
-const missingCapacity=d=>{
-  const v=d.kapacitas??d.capacity;
-  return v===undefined||v===null||(typeof v==='string'&&!v.trim());
-};
+const missingCapacity=d=>recordedFleetCapacity(d)===null;
 const validStatus=d=>ALLOWED_STATUS.has(String(d.status??'').trim().toLowerCase());
 const sourceShape=source=>isObject(source) &&
   BLOCKS.every(k=>Array.isArray(source[k]));
@@ -69,12 +67,9 @@ export function auditFleetSourceForImport(source){
       issues.push({kind:'source',reason:'KEYED_PROJECTION_OR_SIZE_PREFLIGHT_DENIED'});
     }
   }
-  // Current original Rules can prove normalized unique DAs for <=20 rows.
-  // A genuine 21+ driver source must NOT be called release-ready merely
-  // because its migration planner can project all records.
-  const bookingWindowReady=source.drivers.length<=20;
-  if(!bookingWindowReady)
-    issues.push({kind:'source',reason:'BOOKING_RULES_20_DRIVER_WINDOW_EXCEEDED'});
+  const operational=assessFleetDepotOperationalReadiness(source);
+  const bookingWindowReady=source.drivers.length<=MAX_PHASE1_DRIVER_ROWS;
+  for(const reason of operational.reasons)issues.push({kind:'source',reason});
   return {
     originalSha256,
     counts:Object.fromEntries(BLOCKS.map(k=>[k,source[k].length])),

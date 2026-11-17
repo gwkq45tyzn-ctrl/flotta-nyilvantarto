@@ -75,3 +75,11 @@ assert.equal(unknownStatus.ready,false);
 assert.equal(unknownStatus.drivers[0].active,false);
 assert.throws(()=>planSharedMigration({vehicles:[],drivers:[]}),/four arrays required/);
 console.log('shared-master canonical, identity, lossless and schema tests passed');
+
+for (const invalid of [true,false,[],[70],{},'0x46','7e1','70.0','70',null,'']) {
+  const raw={...snapshot.drivers[0],kapacitas:invalid,capacity:70};
+  assert.equal(fleetDriverToDepo(raw),null,'Invalid canonical capacity must never select a mirror or use coercion');
+}
+const historical={...snapshot.drivers[0],capacity:64};
+delete historical.kapacitas;
+assert.equal(fleetDriverToDepo(historical).capacity,64);

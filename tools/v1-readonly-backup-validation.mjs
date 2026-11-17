@@ -3,18 +3,13 @@
  * Reuses the real migration preflight instead of maintaining a weaker
  * exact-string DA/plate duplicate check. Neither result authorizes import.
  */
+import {recordedFleetCapacity} from '../features/shared-master-adapter.mjs';
 import {preflight} from './v1-migration-dryrun.mjs';
 
 const validDriverStatuses=new Set(['aktiv','aktív','inaktiv','inaktív']);
 const validVehicleStatuses=new Set(['aktiv','aktív','szerviz','leállított','leallitott']);
 const asRows=(obj,k)=>Array.isArray(obj?.[k])?obj[k]:[];
 const own=(v,k)=>v!==null&&typeof v==='object'&&Object.prototype.hasOwnProperty.call(v,k);
-const capacityValid=d=>{
-  const raw=d?.kapacitas??d?.capacity;
-  if(raw===null||raw===undefined||(typeof raw==='string'&&!raw.trim()))return false;
-  const n=Number(raw);
-  return Number.isSafeInteger(n)&&n>=0&&n<=10000;
-};
 const normStatus=x=>typeof x==='string'?x.trim().toLowerCase():'';
 
 /** The source preflight can include original identifiers in diagnostics.
@@ -47,7 +42,7 @@ export function validateBackup(raw){
     // discard the record. Explicit malformed history is a structural error.
     driversWithoutHistory:drivers.filter(d=>!own(d,'history')).length,
     vehiclesWithoutHistory:vehicles.filter(v=>!own(v,'history')).length,
-    driversMissingOrInvalidDailyCapacity:drivers.filter(d=>!capacityValid(d)).length,
+    driversMissingOrInvalidDailyCapacity:drivers.filter(d=>recordedFleetCapacity(d)===null).length,
     driversWithUnknownStatus:drivers.filter(d=>!validDriverStatuses.has(normStatus(d?.status))).length,
     vehiclesWithUnknownStatus:vehicles.filter(v=>!validVehicleStatuses.has(normStatus(v?.status))).length
   };
