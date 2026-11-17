@@ -1,3 +1,4 @@
+import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * LOCAL SYNTHETIC FIRESTORE ONLY. A single real read/write transaction
  * binds the root-signed registry highwater, signer-signed full-rich Fleet
@@ -41,12 +42,13 @@ function demo(db,projectId){
     db?.app?.options?.projectId===projectId;
 }
 export class LocalSignedSourceEpochBinding {
+  #floorOptions;
   #db;#project;#root;#rootSha;#signer;#audience;#revision;
   constructor({
     db,projectId,rootPublicKeySpkiBase64,independentlyPinnedRootSha256,
     expectedSignerId='local-test-owner',
     expectedRegistryAudience='demo-imile-v1-owner-registry',
-    expectedRevision=1
+    expectedRevision=1,independentRegistryPath,independentlyPinnedRegistrySha256
   }={}){
     if(!demo(db,projectId))throw Error('LOCAL_DEMO_FIRESTORE_REQUIRED');
     if(typeof rootPublicKeySpkiBase64!=='string'||
@@ -55,6 +57,8 @@ export class LocalSignedSourceEpochBinding {
        !/^[A-Za-z0-9._-]{3,80}$/.test(expectedSignerId)||
        !Number.isSafeInteger(expectedRevision)||expectedRevision<1)
       throw Error('PINNED_ROOT_AND_SOURCE_CONTEXT_REQUIRED');
+    createIndependentRegistryFloor({independentRegistryPath,independentlyPinnedRegistrySha256});
+    this.#floorOptions={independentRegistryPath,independentlyPinnedRegistrySha256};
     this.#db=db;this.#project=projectId;this.#root=rootPublicKeySpkiBase64;
     this.#rootSha=independentlyPinnedRootSha256;
     this.#signer=expectedSignerId;this.#audience=expectedRegistryAudience;
@@ -71,6 +75,7 @@ export class LocalSignedSourceEpochBinding {
     let chain,plan,entries,ids;
     try{
       chain=createTrustedSignerContract({
+        ...this.#floorOptions,
         rootPublicKeySpkiBase64:this.#root,
         independentlyPinnedRootSha256:this.#rootSha,
         expectedRegistryAudience:this.#audience,

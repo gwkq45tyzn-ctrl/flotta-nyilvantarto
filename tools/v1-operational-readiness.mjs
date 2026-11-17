@@ -38,8 +38,10 @@ export function assessFleetDepotOperationalReadiness(source){
   if(activeVehicles.length===0)reasons.push('NO_ACTIVE_VEHICLES');
   if(activeWithoutCapacity>0)
     reasons.push('ACTIVE_DRIVER_CAPACITY_UNSET_OR_INVALID');
-  if(uncertainDriverStatuses>0)
+  if(uncertainDriverStatuses>0){
     warnings.push('DRIVER_STATUS_NEEDS_OWNER_REVIEW');
+    reasons.push('DRIVER_STATUS_NEEDS_OWNER_REVIEW');
+  }
   return {
     ready:reasons.length===0,
     reasons,warnings,

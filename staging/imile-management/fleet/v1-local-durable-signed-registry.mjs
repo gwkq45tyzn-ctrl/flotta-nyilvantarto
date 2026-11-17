@@ -1,3 +1,4 @@
+import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * DEMO ONLY: one real Firestore transaction advances/checks a ROOT-SIGNED
  * offline registry high-water shared across independent Node OS processes.
@@ -55,10 +56,11 @@ const safeEnv=(db,projectId)=>
   db?.app?.options?.projectId===projectId;
 
 export class LocalSignedRegistryHighwater {
+  #independentFloor;
   #db;#project;#root;#rootFingerprint;#audience;#minimum;
   constructor({db,projectId,rootPublicKeySpkiBase64,
     independentlyPinnedRootSha256,expectedRegistryAudience='demo-imile-v1-owner-registry',
-    minimumRegistrySequence=1}={}){
+    minimumRegistrySequence=1,independentRegistryPath,independentlyPinnedRegistrySha256}={}){
     if(!safeEnv(db,projectId))throw Error('LOCAL_DEMO_EMULATOR_REQUIRED');
     if(!DEMO.test(expectedRegistryAudience)||
        !Number.isSafeInteger(minimumRegistrySequence)||minimumRegistrySequence<1||
@@ -70,6 +72,7 @@ export class LocalSignedRegistryHighwater {
       Buffer.from(root.fingerprint,'hex'),
       Buffer.from(independentlyPinnedRootSha256,'hex')
     ))throw Error('ROOT_FINGERPRINT_MISMATCH');
+    this.#independentFloor=createIndependentRegistryFloor({independentRegistryPath,independentlyPinnedRegistrySha256});
     this.#db=db;this.#project=projectId;
     this.#root=root.key;this.#rootFingerprint=root.fingerprint;
     this.#audience=expectedRegistryAudience;this.#minimum=minimumRegistrySequence;
@@ -118,8 +121,10 @@ export class LocalSignedRegistryHighwater {
     const proof=this.#validate(signed);
     if(!proof.ok)return proof;
     try{
+      this.#independentFloor?.assertCurrentRegistry(signed);
       const p=proof.payload,docRef=doc(this.#db,PATH);
       const result=await runTransaction(this.#db,async tx=>{
+        this.#independentFloor?.assertCurrentRegistry(signed);
         const observed=await tx.get(docRef);
         const now=Date.now();
         if(now<p.notBeforeMs||now>=p.expiresAtMs)
