@@ -20,7 +20,7 @@ test('bridge stores normalizedPlate', () => {
 
 test('booking normalizes plate for index lookup', () => {
   const src = readFileSync('depokapacitas/canonical-booking-transaction.mjs', 'utf8');
-  assert.match(src, /norm\(v\.rendszam\)/);
+  assert.match(src, /normVehicle\(v\.rendszam\)/);
 });
 
 console.log('capacity and normalize tests defined');

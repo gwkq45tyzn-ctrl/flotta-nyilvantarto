@@ -138,11 +138,12 @@ test('untrusted per-call pin/revision overrides denied and seal cannot become en
   assert.equal(typeof i.persist,'undefined');
   assert.equal(typeof i.writeToFirestore,'undefined');
 });
-test('empty valid Fleet source has zero plans and cannot claim seal',async()=>{
+test('empty source cannot start an operational migration or claim seal',async()=>{
   const raw={drivers:[],vehicles:[],fuelCards:[],contacts:[]};
   const {i,result}=await begin(raw);
-  assert.equal(result.ok,true);
-  assert.equal(i.getCheckpoint().totalPlanned,0);
+  denied(result);
+  assert.match(result.reason,/PHASE1_OPERATIONAL_READINESS_DENIED/);
+  assert.equal(i.getCheckpoint(),null);
   denied(await i.applyBatch([]));
   denied(await i.seal());
 });

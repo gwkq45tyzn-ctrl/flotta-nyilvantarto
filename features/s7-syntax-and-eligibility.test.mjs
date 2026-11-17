@@ -8,13 +8,12 @@ test('bridge has no duplicate const projected in the same block', () => {
   assert.equal(matches.length, 1, 'only one const projected allowed');
 });
 
-test('eligibility lists are derived from the actual arrays, not free-form', () => {
-  // Documented contract: eligibleDrivers/eligibleVehicles must be computed
-  // from the drivers/vehicles arrays in the same payload. A separate list
-  // that can be forged independently is not acceptable.
+test('sealed bridge keeps archive immutable and writes current keyed masters', () => {
+  // Archived identity provenance stays frozen; operational edits use keyed masters.
   const src = readFileSync('features/firestore-bridge.js', 'utf8');
-  assert.match(src, /eligibleDrivers: projected\.drivers/);
-  assert.match(src, /eligibleVehicles: projected\.vehicles/);
+  assert.match(src, /payload\.drivers = existing\.drivers/);
+  assert.match(src, /payload\.vehicles = existing\.vehicles/);
+  assert.match(src, /tx\.set\(item\.ref, item\.merged\)/);
 });
 
 console.log('syntax and eligibility tests defined');

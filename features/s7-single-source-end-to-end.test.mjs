@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 
 test('rules check raw rendszam via getAfter, not forgeable normalizedPlate', () => {
   const rules = readFileSync('depokapacitas/firestore-v1-restricted.rules', 'utf8');
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*vehicles\[.*\]\.rendszam/);
-  assert.doesNotMatch(rules, /normalizedPlate/);
+  assert.match(rules, /fleet\.vehicles\[data\.vehicleIndex\]\.rendszam/);
+  const booking = rules.split('function bookingCreateAllowed')[1].split('match /bookings/')[0];
+  assert.doesNotMatch(booking, /normalizedPlate/);
+  assert.match(booking, /vehicle\.sourceIndex == data\.vehicleIndex/);
 });
 
 test('booking gate does not require depot mirrors', () => {

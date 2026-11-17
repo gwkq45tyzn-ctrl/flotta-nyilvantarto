@@ -77,3 +77,25 @@ test('SHA is deterministic', () => {
   const b = sha256(JSON.parse(JSON.stringify(goodSnapshot)));
   assert.equal(a, b);
 });
+
+test('restore requires the original preimport v2 envelope and exact four-block counts', () => {
+  const expected = sha256(goodSnapshot);
+  for (const change of [
+    backup => { delete backup.counts; },
+    backup => { backup.counts = null; },
+    backup => { delete backup.counts.contacts; },
+    backup => { backup.counts.unexpected = 1; },
+    backup => { backup.counts.drivers = '1'; },
+    backup => { delete backup.version; },
+    backup => { backup.version = 3; },
+    backup => { delete backup.imported; },
+    backup => { backup.imported = true; },
+  ]) {
+    const backup = simulateBackup(goodSnapshot);
+    change(backup);
+    const result = restoreDrill(backup, expected);
+    assert.equal(result.ok, false);
+    assert.equal(result.historyPreserved, false);
+    assert.equal(result.authorizedForImport, false);
+  }
+});

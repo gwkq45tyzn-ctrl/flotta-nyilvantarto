@@ -16,7 +16,7 @@ test('mirror writes closed after import', () => {
 
 test('booking uses raw rendszam', () => {
   const src = readFileSync('depokapacitas/canonical-booking-transaction.mjs', 'utf8');
-  assert.match(src, /String\(v\.rendszam\|\|''\)===vehicleId/);
+  assert.match(src, /normVehicle\(v\.rendszam\)===vehicleId/);
 });
 
 console.log('no-mirror rules tests defined');
