@@ -175,3 +175,24 @@ test('huge attacker-supplied TSV rejected at local read boundary',()=>{
   assert.equal(x.status,1);
   assert.deepEqual(JSON.parse(x.stdout).reasons,['FIRST_PRIVATE_FILE_UNREADABLE_OR_INVALID']);
 });
+
+test('invalid UTF-8 saved bytes fail at the read boundary rather than lossy decode',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'imile-owner-invalid-utf8-'));
+  try{
+    const first=join(dir,'first.tsv'),second=join(dir,'second.tsv'),
+      saved=join(dir,'saved.json');
+    const original=row(sample());
+    writeFileSync(first,original,{mode:0o600});
+    writeFileSync(second,original,{mode:0o600});
+    // This is NOT valid UTF-8; a replacement-character decode would be lossy.
+    writeFileSync(saved,Buffer.from([0x7b,0x22,0x78,0x22,0x3a,0x22,0x80,0x22,0x7d]),
+      {mode:0o600});
+    const output=spawnSync(process.execPath,[
+      cli,'--first',first,'--second',second,'--saved',saved,'--json'
+    ],{cwd:resolve('.'),timeout:10000,encoding:'utf8'});
+    assert.equal(output.status,1,output.stderr);
+    assert.deepEqual(JSON.parse(output.stdout).reasons,
+      ['SAVED_PRIVATE_FILE_UNREADABLE_OR_INVALID']);
+    redact(output.stdout+output.stderr);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
