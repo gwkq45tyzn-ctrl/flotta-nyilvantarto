@@ -9,7 +9,9 @@
  *   "node staging/imile-management/fleet/v1-migration-emulator-acceptance.mjs"
  */
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
 import {collection,doc,getDocs,getDoc,setDoc,updateDoc,deleteDoc,
   writeBatch,runTransaction,Timestamp} from 'firebase/firestore';
@@ -69,6 +71,8 @@ async function main(){
   const env=await initializeTestEnvironment({
     projectId,firestore:{host,port,rules:rawRules.replaceAll('REPLACE_WITH_REAL_SHARED_UID',uid)}
   });
+  const folder=await mkdtemp(join(tmpdir(),'imile-synthetic-restore-'));
+  const backupPath=join(folder,'before-import.json');
   try {
     const snapshot=before(),health=preflight(snapshot);
     assert.equal(health.ok,true,JSON.stringify(health.errors));
@@ -92,7 +96,9 @@ async function main(){
     assert.equal(plan.authorizedForImport,false);
     assert.equal(plan.firestoreEncodedSizeVerified,false);
     assert.equal(plan.sourceSha256,sha256(snapshot));
-    const backup=simulateBackup(snapshot),expectedSha=backup.sourceSha256;
+    const expectedSha=health.sourceSha256;
+    const backup=simulateBackup(snapshot);
+    await writeFile(backupPath,JSON.stringify(backup),{flag:'wx',mode:0o600});
     assert.equal(restoreDrill(backup,expectedSha).ok,true);
     const doctored=structuredClone(backup);
     doctored.snapshot.vehicles[0].history=[];
@@ -288,21 +294,43 @@ async function main(){
       // Restore rehearsal uses a DISTINCT scratch namespace. The active
       // sealed archive, approval and keyed production-shaped docs are NEVER
       // deleted by a restore test.
-      const recovery=simulateBackup(snapshot);
-      assert.equal(restoreDrill(recovery,expectedSha).ok,true);
-      const scratch=items.map(i=>({id:i,
-        ref:doc(db,restorePrefix,i.replace('/','__'))}));
-      for(const item of scratch)await setDoc(item.ref,expected[item.id]);
-      const casualty=scratch[0];
-      await deleteDoc(casualty.ref);
-      assert.equal((await getDoc(casualty.ref)).exists(),false);
-      await setDoc(casualty.ref,expected[casualty.id]);
-      for(const item of scratch){
-        const d=await getDoc(item.ref);
-        assert.equal(sha256(d.data()),sha256(expected[item.id]),
-          'scratch full-rich restore parity '+item.id);
-        await deleteDoc(item.ref);
+      async function restoreFromFile(path){
+        const recovery=JSON.parse(await readFile(path,'utf8'));
+        const verification=restoreDrill(recovery,expectedSha);
+        if(!verification.ok)throw Error('RESTORE_BACKUP_DENIED');
+        const recoveredPlan=buildPlan(recovery.snapshot);
+        const batch=writeBatch(db);
+        batch.set(doc(db,restorePrefix,'archive'),recovery.snapshot);
+        for(const kind of ['drivers','vehicles']){
+          for(const row of recoveredPlan[kind]){
+            batch.set(doc(db,restorePrefix,kind+'__'+row.id),row.data);
+          }
+        }
+        await batch.commit();
       }
+      const invalidPath=join(folder,'damaged.json');
+      for(const damage of [
+        copy=>{delete copy.counts;},
+        copy=>{copy.snapshot.contacts[0].history=[];},
+        copy=>{copy.snapshot.fuelCards=[];}
+      ]){
+        const invalid=structuredClone(backup);
+        damage(invalid);
+        await writeFile(invalidPath,JSON.stringify(invalid),{mode:0o600});
+        await assert.rejects(restoreFromFile(invalidPath),/RESTORE_BACKUP_DENIED/);
+        assert.equal((await getDocs(collection(db,restorePrefix))).empty,true);
+      }
+      await restoreFromFile(backupPath);
+      const recovered=await getDocs(collection(db,restorePrefix));
+      assert.equal(recovered.size,items.length+1);
+      const archive=recovered.docs.find(row=>row.id==='archive').data();
+      assert.equal(sha256(archive),expectedSha);
+      assert.deepEqual(archive,snapshot); // all four arrays, order, unknown root and history
+      for(const [id,data] of Object.entries(expected)){
+        const row=recovered.docs.find(item=>item.id===id.replace('/','__'));
+        assert.deepEqual(row.data(),data,'restored keyed content '+id);
+      }
+      for(const row of recovered.docs)await deleteDoc(row.ref);
       assert.equal((await getDoc(master)).data().sealed,true);
       assert.equal((await getDoc(master)).data().migrationSourceSha256,expectedSha);
       assert.equal(detectPartial(plan,await readLive()).complete,true);
@@ -310,6 +338,7 @@ async function main(){
     });
     console.log('PASS [E]: all synthetic privileged emulator migration and real client deny controls');
   }finally{
+    await rm(folder,{recursive:true,force:true});
     await env.cleanup();
   }
 }
