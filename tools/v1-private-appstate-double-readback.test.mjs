@@ -196,3 +196,27 @@ test('invalid UTF-8 saved bytes fail at the read boundary rather than lossy deco
     redact(output.stdout+output.stderr);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+
+test('stable opaque request ID matches capture token but must not claim matching timestamps',()=>{
+  const data=sample(),token='SYNTHETIC_REQUEST_TOKEN_CANARY';
+  const capture=row(data,42,token);
+  const result=assessPrivateAppStateReadbacks(capture,capture,JSON.stringify(data));
+  assert.equal(result.localReadbackAndSavedBytesConsistent,true);
+  assert.equal(result.captureTokenMatched,true);
+  assert.equal(result.captureTokenKind,'opaque');
+  assert.equal(result.timestampMatched,false);
+  assert.equal(result.freshLiveSourceVerified,false);
+  assert.equal(JSON.stringify(result).includes(token),false);
+  const changed=assessPrivateAppStateReadbacks(capture,row(data,42,token+'2'),JSON.stringify(data));
+  assert.equal(changed.localReadbackAndSavedBytesConsistent,false);
+  assert.ok(changed.reasons.includes('CAPTURE_TOKEN_CHANGED_BETWEEN_READS'));
+});
+
+test('calendar-invalid timestamp-shaped capture token is treated as opaque',()=>{
+  const data=sample(),capture=row(data,42,'2026-02-31T08:12:01.000Z');
+  const result=assessPrivateAppStateReadbacks(capture,capture,JSON.stringify(data));
+  assert.equal(result.localReadbackAndSavedBytesConsistent,true);
+  assert.equal(result.captureTokenKind,'opaque');
+  assert.equal(result.timestampMatched,false);
+});
