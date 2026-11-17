@@ -67,6 +67,7 @@ jobs:
             tools/v1-apps-script-cutover-evidence.test.mjs \
             tools/v1-apps-script-cutover-cli.test.mjs \
             tools/v1-source-cutover-bound-preflight.test.mjs \
+            tools/v1-private-appstate-double-readback.test.mjs \
             tools/v1-owner-capacity-review.static.test.mjs \
             docs/v1-apps-script-inventory-static.test.mjs
   signed-in-restricted-rules:
