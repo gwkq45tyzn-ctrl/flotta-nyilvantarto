@@ -67,7 +67,7 @@ export function assessPrivateCapacityTransition({
   const readback=assessPrivateAppStateReadbacks(firstText,secondText,originalText);
   if(!readback.localReadbackAndSavedBytesConsistent)
     return verdict(['ORIGINAL_READBACK_OR_SAVED_BYTES_DENIED'],{
-      readbackStable:readback.revisionMatched&&readback.timestampMatched&&
+      readbackStable:readback.revisionMatched&&readback.captureTokenMatched&&
         readback.sourceCellBytesMatched,
       originalFileMatchesReadback:readback.savedExportBytesMatched,
       counts:readback.counts||null

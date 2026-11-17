@@ -6,7 +6,7 @@
  * credentials, signed identity, file writes, backup creation, or deployment.
  *
  * Input rows are either a 3-value JSON array:
- *   [42, "2026-11-17T08:00:00Z", "{\"vehicles\":[],...}"]
+ *   [42, "synthetic-request-token", "{\"vehicles\":[],...}"]
  * or a UTF-8 TSV clipboard row copied from A2:C2. Google Sheets TSV quoting
  * of JSON (double-double-quotes) is supported. No real source data in repo.
  *
@@ -15,7 +15,7 @@
  *   --saved /private/full-original-flotta.json [--json]
  *
  * Passing means only that the two supplied local captures have consistent
- * revision/time/raw JSON and the SAVED C2 bytes are identical. It is NOT
+ * revision/capture-token/raw JSON and the SAVED C2 bytes are identical. It is NOT
  * proof the captures came from the live authoritative Sheet, that concurrent
  * writers were stopped, or that the source was independently backed up.
  */
@@ -25,7 +25,7 @@ import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {assessPrivateFleetExport} from './v1-owner-readiness-cli.mjs';
 
 const MAX_PRIVATE_BYTES=1_200_000;
-export const APPSTATE_READBACK_SCHEMA='imile-v1-private-appstate-double-readback-1';
+export const APPSTATE_READBACK_SCHEMA='imile-v1-private-appstate-double-readback-2';
 
 function result(reasons,detail={}){
   return {
@@ -33,6 +33,8 @@ function result(reasons,detail={}){
     localReadbackAndSavedBytesConsistent:reasons.length===0,
     reasons,
     revisionMatched:false,
+    captureTokenMatched:false,
+    captureTokenKind:null,
     timestampMatched:false,
     sourceCellBytesMatched:false,
     savedExportBytesMatched:false,
@@ -100,7 +102,9 @@ export function decodePrivateAppStateRow(text){
   const source=JSON.parse(sourceText);
   if(!source||typeof source!=='object'||Array.isArray(source))
     throw Error('ROW_INVALID');
-  return {revision,updatedAt,sourceText,source};
+  // updatedAt is retained only as a legacy input alias. Column B is an
+  // opaque Request ID in the actual source; it never establishes freshness.
+  return {revision,captureToken:updatedAt,updatedAt,sourceText,source};
 }
 
 export function assessPrivateAppStateReadbacks(firstText,secondText,savedExportText){
@@ -110,13 +114,21 @@ export function assessPrivateAppStateReadbacks(firstText,secondText,savedExportT
   try{b=decodePrivateAppStateRow(secondText);}
   catch{return result(['SECOND_APPSTATE_CAPTURE_INVALID']);}
   const revisionMatched=a.revision===b.revision;
-  const timestampMatched=a.updatedAt===b.updatedAt;
+  const captureTokenMatched=a.captureToken===b.captureToken;
+  const isIso=s=>/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(s)&&
+    Number.isFinite(Date.parse(s))&&new Date(Date.parse(s)).toISOString()===s;
+  const bothIso=isIso(a.captureToken)&&isIso(b.captureToken);
+  const captureTokenKind=bothIso?'iso-timestamp-text':'opaque';
+  const timestampMatched=bothIso&&captureTokenMatched;
   const sourceCellBytesMatched=a.sourceText===b.sourceText;
   const savedExportBytesMatched=typeof savedExportText==='string'&&
     savedExportText===a.sourceText;
   const reasons=[];
   if(!revisionMatched)reasons.push('REVISION_CHANGED_BETWEEN_READS');
-  if(!timestampMatched)reasons.push('TIMESTAMP_CHANGED_BETWEEN_READS');
+  if(!captureTokenMatched){
+    reasons.push('CAPTURE_TOKEN_CHANGED_BETWEEN_READS');
+    if(bothIso)reasons.push('TIMESTAMP_CHANGED_BETWEEN_READS');
+  }
   if(!sourceCellBytesMatched)reasons.push('SOURCE_CELL_CHANGED_BETWEEN_READS');
   if(!savedExportBytesMatched)reasons.push('SAVED_SOURCE_NOT_BYTE_IDENTICAL');
   let preflight=null;
@@ -126,7 +138,7 @@ export function assessPrivateAppStateReadbacks(firstText,secondText,savedExportT
     reasons.push('FULL_RICH_SOURCE_PREFLIGHT_DENIED');
   return result(reasons,{
     localReadbackAndSavedBytesConsistent:reasons.length===0,
-    revisionMatched,timestampMatched,sourceCellBytesMatched,
+    revisionMatched,captureTokenMatched,captureTokenKind,timestampMatched,sourceCellBytesMatched,
     savedExportBytesMatched,
     sourcePreflightOk:preflight?.sourcePreflightOk===true,
     operationallyReady:preflight?.operationallyReady===true,
@@ -176,7 +188,8 @@ function output(r,json){
     'Két kiolvasás és a fájl egyezése: '+
       (r.localReadbackAndSavedBytesConsistent?'HELYI EGYEZÉS':'ELUTASÍTVA'),
     'Verzió egyezik: '+(r.revisionMatched?'IGEN':'NEM'),
-    'Időbélyeg egyezik: '+(r.timestampMatched?'IGEN':'NEM'),
+    'Második cella (kérésazonosító/token) egyezik: '+(r.captureTokenMatched?'IGEN':'NEM'),
+    'Második cella típusa: '+(r.captureTokenKind==='iso-timestamp-text'?'ISO dátumszöveg, nem hiteles frissesség':'Nem időbélyeg, átlátszatlan token'),
     'Teljes JSON karakterhűen egyezik: '+(r.sourceCellBytesMatched?'IGEN':'NEM'),
     'A mentett fájl byte-pontosan egyezik: '+(r.savedExportBytesMatched?'IGEN':'NEM'),
     'Aktív futárkapacitások rendben: '+(r.operationallyReady?'IGEN':'NEM'),
