@@ -13,7 +13,8 @@
  * An SDK/encoder upgrade, malformed source, missing archive, or unsupported
  * representation must fail closed; no source data, path or raw exception leaks.
  */
-import {readFileSync,statSync} from 'node:fs';
+import {readStrictPrivateUtf8File}
+  from '../../../tools/v1-private-utf8-read.mjs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {initializeApp} from 'firebase/app';
@@ -147,14 +148,11 @@ export function runPrivateProtoPreflight(args=process.argv.slice(2)){
   }
   let raw;
   try{
-    const stat=statSync(flags[1]);
-    if(!stat.isFile()||stat.size<1||stat.size>MAX_INPUT_FILE_BYTES){
-      report(refusal('SOURCE_FILE_EMPTY_OR_TOO_LARGE'),asJson);
-      return 1;
-    }
-    raw=JSON.parse(readFileSync(flags[1],'utf8'));
-  }catch{
-    report(refusal('SOURCE_FILE_UNREADABLE_OR_INVALID_JSON'),asJson);
+    raw=JSON.parse(readStrictPrivateUtf8File(flags[1],MAX_INPUT_FILE_BYTES));
+  }catch(e){
+    report(refusal(e?.code==='PRIVATE_FILE_SIZE_DENIED'
+      ?'SOURCE_FILE_EMPTY_OR_TOO_LARGE'
+      :'SOURCE_FILE_UNREADABLE_OR_INVALID_JSON'),asJson);
     return 1;
   }
   const result=measurePrivateRichFleetSource(raw);
