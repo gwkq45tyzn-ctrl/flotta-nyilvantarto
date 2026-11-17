@@ -318,6 +318,24 @@ try{
   assert.equal(persisted.migrationSourceSha256,sourceSha);
   console.log('PASS [B+E]: original Fleet preseal editor read-only; server imported arrays and rich history unchanged');
 
+  async function assertCardArchiveReadOnly(label) {
+    const before=await serverRead('flottaSharedState/current');
+    const localBefore=await flottaPage.evaluate(()=>JSON.stringify(snapshot()));
+    const pendingBefore=await flottaPage.evaluate(()=>localStorage.getItem('flotta_pending_v16'));
+    await flottaPage.locator('#cardTable button[onclick^="editCard"]').first().click();
+    assert.equal(await flottaPage.locator('#cardModal.active').count(),0);
+    await flottaPage.locator('#cardTable button[onclick^="deleteCard"]').first().click();
+    await flottaPage.evaluate(()=>saveCard({preventDefault(){}}));
+    assert.match(await flottaPage.locator('#syncStatus').textContent(),/írásvédett/);
+    assert.equal(await flottaPage.evaluate(()=>JSON.stringify(snapshot())),localBefore,
+      'Blocked card edit/delete/save must preserve all four local rich arrays');
+    assert.equal(await flottaPage.evaluate(()=>localStorage.getItem('flotta_pending_v16')),pendingBefore);
+    assert.deepEqual(await serverRead('flottaSharedState/current'),before);
+    console.log('PASS [REAL CHROMIUM]: '+label+' card archive rejects edit/delete/save before local mutation; full rich source and pending unchanged');
+  }
+  await assertCardArchiveReadOnly('PRESEAL');
+
+
   // A booking is deliberately FORBIDDEN before trusted sealed migration
   // (#147). This synthetic, privileged local-emulator-only dry-run creates
   // FULL RICH keyed masters from server-confirmed post-edit Fleet source,
@@ -373,6 +391,14 @@ try{
   assert.equal((await canonicalMileageRow.locator('td').nth(2).textContent()).trim(),'—',
     'Canonical Fleet km alert has no invented calendar due date');
   console.log('PASS [REAL CHROMIUM]: after sealed original Fleet trust, Depot shows true 100 km overdue keyed master once, ignores stale 391 km staged duplicate');
+  // Depot and original Fleet have independent listeners. A ready Depot
+  // does not prove the Fleet applied BOTH rich keyed collection snapshots.
+  // Wait for that real source transition before the no-mutation baseline.
+  await flottaPage.waitForFunction(()=>
+    drivers.some(d=>d.daCode==='DA0001'&&d.sourceIndex===0&&d.revision===1)&&
+    vehicles.some(v=>v.rendszam==='ABC-123'&&v.sourceIndex===0&&v.revision===1),
+    null,{timeout:20000});
+  await assertCardArchiveReadOnly('POSTSEAL');
 
 
   // Real booking through original Depot planning UI; tomorrow is deliberate:

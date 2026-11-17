@@ -57,6 +57,7 @@
   // independently committed field from another browser.
   let vehicleEditGuardPatched = false;
   let driverEditGuardPatched = false;
+  let archiveAuxiliaryGuardPatched = false;
   let openDriverEdit = null;
   const STALE_DRIVER_DRAFT = 'flotta_stale_driver_draft_v1';
   let openVehicleEdit = null;
@@ -697,6 +698,26 @@
     driverEditGuardPatched = true;
   }
 
+  function patchArchiveAuxiliaryGuard() {
+    if (archiveAuxiliaryGuardPatched) return;
+    const block = event => {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (event && typeof event.stopImmediatePropagation === 'function')
+        event.stopImmediatePropagation();
+      status('A tankolókártyák importált archívuma ezen a felületen írásvédett. Az eredeti adatok megtekinthetők és a teljes mentés exportálható.',true);
+    };
+    // Rules freeze ALL four imported arrays. A card form must not replace
+    // its rich local row, queue an unsaveable draft, or report a deletion.
+    // A future keyed auxiliary editor needs its own audited source model.
+    for (const name of ['openCardModal','editCard','saveCard','deleteCard']) {
+      if (typeof window[name] !== 'function') continue;
+      window[name] = function (...args) { block(args[0]); };
+    }
+    const form = document.getElementById('cardForm');
+    if (form) form.addEventListener('submit',block,true);
+    archiveAuxiliaryGuardPatched = true;
+  }
+
   // Original Fleet's inline handlers mutate in-memory objects BEFORE
   // calling save(). Block them at the user-event boundary, so a preseal
   // editor cannot silently change local records or accidentally persist a
@@ -749,6 +770,7 @@
   function patchSave() {
     patchVehicleEditGuard();
     patchDriverEditGuard();
+    patchArchiveAuxiliaryGuard();
     patchPresealEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
