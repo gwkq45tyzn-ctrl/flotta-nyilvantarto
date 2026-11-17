@@ -391,6 +391,13 @@ try{
   assert.equal((await canonicalMileageRow.locator('td').nth(2).textContent()).trim(),'—',
     'Canonical Fleet km alert has no invented calendar due date');
   console.log('PASS [REAL CHROMIUM]: after sealed original Fleet trust, Depot shows true 100 km overdue keyed master once, ignores stale 391 km staged duplicate');
+  // Depot and original Fleet have independent listeners. A ready Depot
+  // does not prove the Fleet applied BOTH rich keyed collection snapshots.
+  // Wait for that real source transition before the no-mutation baseline.
+  await flottaPage.waitForFunction(()=>
+    drivers.some(d=>d.daCode==='DA0001'&&d.sourceIndex===0&&d.revision===1)&&
+    vehicles.some(v=>v.rendszam==='ABC-123'&&v.sourceIndex===0&&v.revision===1),
+    null,{timeout:20000});
   await assertCardArchiveReadOnly('POSTSEAL');
 
 
