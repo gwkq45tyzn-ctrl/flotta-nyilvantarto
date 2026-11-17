@@ -8,7 +8,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testing';
 import {collection,doc,getDoc,getDocs,setDoc,updateDoc,deleteDoc} from 'firebase/firestore';
 import {sha256,simulateBackup,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
@@ -336,6 +338,39 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
         denied(await attestor.seal(),
           /NO_PRODUCTION_OWNER_IAM_CLOSED_WRITERS_OR_ATOMIC_SEAL/);
         console.log('PASS VULNERABILITY [E+SDK 440]: separate privileged writer reset revoked highwater seq2 to seq1, old signed receipts accepted again; no production GO');
+
+        // Same real privileged reset, but verifier configuration commits to
+        // a separately protected root-signed checkpoint outside Firestore.
+        // Actual deployment ownership is NOT proved by this writable fixture.
+        const floorDir=await mkdtemp(join(tmpdir(),'imile-independent-floor-'));
+        try{
+          const floorPath=join(floorDir,'approved-registry.json');
+          const floorBytes=JSON.stringify(revokedSignedRegistry);
+          await writeFile(floorPath,floorBytes,{mode:0o600});
+          const strictOptions={
+            rootPublicKeySpkiBase64:rootSpki,
+            independentlyPinnedRootSha256:rootSha,
+            independentRegistryPath:floorPath,
+            independentlyPinnedRegistrySha256:createHash('sha256').update(floorBytes).digest('hex')
+          };
+          const strictGate=createLocalSignedRegistryHighwater({db:dbA,projectId,...strictOptions});
+          accepted(await strictGate.adoptRootSignedRegistry(revokedSignedRegistry));
+          await setDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'),olderHighwater);
+          denied(await strictGate.adoptRootSignedRegistry(bundle),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+          for(const removeHighwater of [false,true]){
+            if(removeHighwater)await deleteDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'));
+            const restarted=createLocal440SignedChunkReceipts({db:dbB,projectId,...strictOptions});
+            denied(await restarted.recordChunk(evidence,0),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+            denied(await restarted.aggregate(evidence),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+          }
+          // Valid OLD signed file replay still cannot change deployment byte pin.
+          await writeFile(floorPath,JSON.stringify(bundle));
+          denied(await strictGate.adoptRootSignedRegistry(bundle),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+          console.log('PASS DENY [E+SDK 440]: independent pinned checkpoint blocks revoked signer after privileged highwater reset/deletion, fresh verifier and valid old checkpoint substitution; no production isolation claim');
+        }finally{
+          await rm(floorDir,{recursive:true,force:true});
+          await setDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'),olderHighwater);
+        }
 
         // A single full 440-pair transaction is NOT the solution:
         // the bounded known-document proof must refuse the oversized

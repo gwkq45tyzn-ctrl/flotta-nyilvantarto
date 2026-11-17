@@ -1,3 +1,4 @@
+import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * DEMO-ONLY source-signed 440 FULL-RICH master+claim attestation.
  * 19 bounded Firestore read+write transactions, one per known chunk,
@@ -56,11 +57,12 @@ const expectedClaim=(e,pin)=>({
 const readOnlySchema=(expected,actual)=>sha256(expected)===sha256(actual);
 
 export class Local440SignedChunkReceipts {
+  #floorOptions;
   #db;#id;#root;#rootSha;#audience;#signer;#revision;
   constructor({db,projectId,rootPublicKeySpkiBase64,
     independentlyPinnedRootSha256,
     expectedRegistryAudience='demo-imile-v1-owner-registry',
-    expectedSignerId='local-test-owner',expectedRevision=1}={}){
+    expectedSignerId='local-test-owner',expectedRevision=1,independentRegistryPath,independentlyPinnedRegistrySha256}={}){
     if(!demo(db,projectId))throw Error('DEMO_LOCAL_FIRESTORE_ONLY');
     if(typeof rootPublicKeySpkiBase64!=='string'||
       !HASH.test(independentlyPinnedRootSha256||'')||
@@ -68,6 +70,8 @@ export class Local440SignedChunkReceipts {
       !/^[A-Za-z0-9._-]{3,80}$/.test(expectedSignerId)||
       !Number.isSafeInteger(expectedRevision)||expectedRevision<1)
       throw Error('PINNED_SYNTHETIC_SOURCE_ROOT_REQUIRED');
+    createIndependentRegistryFloor({independentRegistryPath,independentlyPinnedRegistrySha256});
+    this.#floorOptions={independentRegistryPath,independentlyPinnedRegistrySha256};
     this.#db=db;this.#id=projectId;this.#root=rootPublicKeySpkiBase64;
     this.#rootSha=independentlyPinnedRootSha256;this.#audience=expectedRegistryAudience;
     this.#signer=expectedSignerId;this.#revision=expectedRevision;
@@ -78,6 +82,7 @@ export class Local440SignedChunkReceipts {
       !HASH.test(independentlyPinnedSourceSha256||''))
       throw Error('SOURCE_PIN_AND_EPOCH_REQUIRED');
     const chain=createTrustedSignerContract({
+      ...this.#floorOptions,
       rootPublicKeySpkiBase64:this.#root,
       independentlyPinnedRootSha256:this.#rootSha,
       expectedRegistryAudience:this.#audience,
