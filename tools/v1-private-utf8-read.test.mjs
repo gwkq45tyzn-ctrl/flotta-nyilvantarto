@@ -1,4 +1,6 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,readFileSync,symlinkSync,rmSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -91,4 +93,49 @@ test('both dependency-free private owner CLIs DENY symlink and malformed UTF-8, 
       }
     }
   }finally{rmSync(dir,{force:true,recursive:true});}
+});
+
+
+test('same-size overwrite after descriptor preflight is rejected without returning torn source',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'imile-private-read-race-'));
+  const input=join(dir,'source.json');
+  writeFileSync(input,'{"ok":1}',{mode:0o600});
+  const original=fs.fstatSync;let changed=false,handle;
+  try{
+    handle=test.mock.method(fs,'fstatSync',(...args)=>{
+      const result=original(...args);
+      if(!changed){
+        changed=true;writeFileSync(input,'{"ok":2}');
+        fs.utimesSync(input,new Date(),new Date(Date.now()+10000));
+      }
+      return result;
+    });
+    syncBuiltinESMExports();
+    assert.throws(()=>readStrictPrivateUtf8File(input,100),
+      error=>error.code==='PRIVATE_FILE_CHANGED_DURING_READ');
+  }finally{handle?.mock.restore();syncBuiltinESMExports();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('file growth during read is bounded to original descriptor size plus one byte',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'imile-private-growth-'));
+  const input=join(dir,'source.json');
+  const initial='{"ok":1}';writeFileSync(input,initial,{mode:0o600});
+  const stat=fs.fstatSync,read=fs.readSync;let changed=false,requested=0,calls=0;
+  let sh,rh;
+  try{
+    sh=test.mock.method(fs,'fstatSync',(...args)=>{
+      const result=stat(...args);
+      if(!changed){changed=true;fs.appendFileSync(input,'x'.repeat(200000));}
+      return result;
+    });
+    rh=test.mock.method(fs,'readSync',(fd,buffer,offset,length,position)=>{
+      requested+=length;calls++;
+      return read(fd,buffer,offset,length,position);
+    });
+    syncBuiltinESMExports();
+    assert.throws(()=>readStrictPrivateUtf8File(input,100),
+      error=>error.code==='PRIVATE_FILE_CHANGED_DURING_READ');
+    assert.ok(calls>0,'must use explicit bounded reads');
+    assert.ok(requested<=Buffer.byteLength(initial)+1,'growth must not cause unbounded allocation/read');
+  }finally{sh?.mock.restore();rh?.mock.restore();syncBuiltinESMExports();rmSync(dir,{recursive:true,force:true});}
 });

@@ -6,7 +6,7 @@
  * NEVER writes, stores, logs, uploads or opens a network connection.
  */
 import {
-  lstatSync,openSync,fstatSync,readFileSync,closeSync,constants
+  lstatSync,openSync,fstatSync,readSync,closeSync,constants
 } from 'node:fs';
 import {TextDecoder} from 'node:util';
 const deny=(code)=>{const e=new Error(code);e.code=code;return e;};
@@ -23,23 +23,32 @@ export function readStrictPrivateUtf8File(path,maxBytes){
     throw deny('PRIVATE_FILE_INVALID_ARGUMENTS');
   let meta,fd;
   try{
-    meta=lstatSync(path);
+    meta=lstatSync(path,{bigint:true});
     if(!meta.isFile()||meta.isSymbolicLink())
       throw deny('PRIVATE_FILE_NOT_REGULAR');
-    if(!Number.isSafeInteger(meta.size)||meta.size<1||meta.size>maxBytes)
+    if(meta.size<1n||meta.size>BigInt(maxBytes)||meta.size>=BigInt(Number.MAX_SAFE_INTEGER))
       throw deny('PRIVATE_FILE_SIZE_DENIED');
     // O_NOFOLLOW is supported on Linux/macOS; lstat/fstat parity also
     // stops path-to-symlink and path-to-inode swaps without following data.
     fd=openSync(path,constants.O_RDONLY|(constants.O_NOFOLLOW||0));
-    const actual=fstatSync(fd);
-    if(!actual.isFile()||actual.isSymbolicLink?.()||
-       !Number.isSafeInteger(actual.size)||actual.size!==meta.size||
-       actual.ino!==meta.ino||actual.dev!==meta.dev||
-       actual.size>maxBytes)
+    const actual=fstatSync(fd,{bigint:true});
+    const same=(a,b)=>['dev','ino','size','mtimeNs','ctimeNs'].every(key=>a[key]===b[key]);
+    if(!actual.isFile()||!same(actual,meta))
       throw deny('PRIVATE_FILE_CHANGED_DURING_READ');
-    const bytes=readFileSync(fd);
-    if(bytes.length!==actual.size||bytes.length<1||bytes.length>maxBytes)
+    // Never read until an untrusted, concurrently growing EOF. The original
+    // descriptor size + one detection byte is the absolute I/O/memory budget.
+    const expected=Number(actual.size),budget=expected+1;
+    const chunks=[];let total=0;
+    while(total<budget){
+      const buffer=Buffer.allocUnsafe(Math.min(65536,budget-total));
+      const n=readSync(fd,buffer,0,buffer.length,total);
+      if(n===0)break;
+      chunks.push(buffer.subarray(0,n));total+=n;
+    }
+    const after=fstatSync(fd,{bigint:true});
+    if(total!==expected||!same(actual,after))
       throw deny('PRIVATE_FILE_CHANGED_DURING_READ');
+    const bytes=Buffer.concat(chunks,total);
     return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
   }catch(e){
     if(e?.code==='PRIVATE_FILE_SIZE_DENIED')throw e;
