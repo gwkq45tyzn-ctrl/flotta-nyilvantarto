@@ -1647,7 +1647,7 @@
     function serviceKmDiff(vehicle) {
       const parseKm = (value,positiveOnly) => {
         if (value === null || value === undefined || String(value).trim() === '') return null;
-        const n=Number(String(value).replace(/[\\s\\u00a0]/g,''));
+        const n=Number(String(value).replace(/[\s\u00a0]/g,''));
         if (!Number.isFinite(n) || n < (positiveOnly ? 1 : 0)) return null;
         return n;
       };
