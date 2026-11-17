@@ -22,6 +22,7 @@
 import {lstatSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {TextDecoder} from 'node:util';
 import {assessPrivateFleetExport} from './v1-owner-readiness-cli.mjs';
 
 const MAX_PRIVATE_BYTES=1_200_000;
@@ -140,7 +141,12 @@ function readPrivate(path){
   if(!s.isFile()||s.isSymbolicLink()||
      !Number.isSafeInteger(s.size)||s.size<1||s.size>MAX_PRIVATE_BYTES)
     throw Error('PRIVATE_INPUT_REFUSED');
-  return readFileSync(path,'utf8');
+  // A lossy UTF-8 decode could replace invalid bytes with U+FFFD and
+  // incorrectly report two different saved files as byte-identical.
+  const bytes=readFileSync(path);
+  if(bytes.length!==s.size||bytes.length>MAX_PRIVATE_BYTES)
+    throw Error('PRIVATE_INPUT_CHANGED_DURING_READ');
+  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
 }
 export function runPrivateAppStateReadback(argv=process.argv.slice(2)){
   const json=argv.includes('--json');
