@@ -19,10 +19,9 @@
  * proof the captures came from the live authoritative Sheet, that concurrent
  * writers were stopped, or that the source was independently backed up.
  */
-import {lstatSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {TextDecoder} from 'node:util';
+import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {assessPrivateFleetExport} from './v1-owner-readiness-cli.mjs';
 
 const MAX_PRIVATE_BYTES=1_200_000;
@@ -137,16 +136,9 @@ export function assessPrivateAppStateReadbacks(firstText,secondText,savedExportT
   });
 }
 function readPrivate(path){
-  const s=lstatSync(path);
-  if(!s.isFile()||s.isSymbolicLink()||
-     !Number.isSafeInteger(s.size)||s.size<1||s.size>MAX_PRIVATE_BYTES)
-    throw Error('PRIVATE_INPUT_REFUSED');
-  // A lossy UTF-8 decode could replace invalid bytes with U+FFFD and
-  // incorrectly report two different saved files as byte-identical.
-  const bytes=readFileSync(path);
-  if(bytes.length!==s.size||bytes.length>MAX_PRIVATE_BYTES)
-    throw Error('PRIVATE_INPUT_CHANGED_DURING_READ');
-  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+  // One read-only, O_NOFOLLOW, exact-fd/size UTF-8 check shared with the
+  // other private Fleet tools. Never accept a symlink changed after lstat.
+  return readStrictPrivateUtf8File(path,MAX_PRIVATE_BYTES);
 }
 export function runPrivateAppStateReadback(argv=process.argv.slice(2)){
   const json=argv.includes('--json');
