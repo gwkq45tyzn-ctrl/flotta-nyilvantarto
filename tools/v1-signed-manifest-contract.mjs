@@ -74,7 +74,7 @@ export class SignedManifestContract {
         });
         if(key.asymmetricKeyType!=='ed25519')throw Error('PUBLIC_ROOT_NOT_ED25519');
         this.#publicKey=key;
-      }catch(e){throw Error('INVALID_ED25519_PUBLIC_ROOT: '+String(e.message||e))}
+      }catch{throw Error('INVALID_ED25519_PUBLIC_ROOT')}
     }
   }
 
@@ -112,7 +112,7 @@ export class SignedManifestContract {
         backup,trustedPinnedSha:payload.sourceSha256,
         expectedRevision:this.#revision
       });
-      if(!proof.ok)return deny('PINNED_RICH_SOURCE_DENIED: '+proof.reason);
+      if(!proof.ok)return deny('PINNED_RICH_SOURCE_DENIED');
       const keys=[
         ...proof.plan.drivers.map(x=>'drivers/'+x.id),
         ...proof.plan.vehicles.map(x=>'vehicles/'+x.id)
@@ -124,8 +124,10 @@ export class SignedManifestContract {
         expectedKeyedMasterCount:keys.length,
         canonicalPlanDigest:payload.canonicalPlanDigest
       });
-    }catch(e){
-      return deny('MALFORMED_SIGNATURE_OR_SOURCE: '+String(e.message||e));
+    }catch{
+      // The exception may contain untrusted nested Fleet data, IDs or
+      // parser fragments. Never surface those through caller-visible results.
+      return deny('MALFORMED_SIGNATURE_OR_SOURCE');
     }
   }
 }
