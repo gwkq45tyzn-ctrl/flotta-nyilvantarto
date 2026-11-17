@@ -13,8 +13,7 @@
  *   --original /private/original.json --candidate /private/reviewed.json \
  *   --decisions /private/owner-decisions.json [--json]
  */
-import {lstatSync,readFileSync} from 'node:fs';
-import {TextDecoder} from 'node:util';
+import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {assessPrivateAppStateReadbacks}
@@ -160,12 +159,7 @@ export function assessPrivateCapacityTransition({
   });
 }
 function readPrivate(path,maxBytes){
-  const st=lstatSync(path);
-  if(!st.isFile()||st.isSymbolicLink()||!Number.isSafeInteger(st.size)||
-     st.size<1||st.size>maxBytes)throw Error('PRIVATE_FILE_DENIED');
-  const b=readFileSync(path);
-  if(b.length!==st.size)throw Error('PRIVATE_FILE_CHANGED');
-  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(b);
+  return readStrictPrivateUtf8File(path,maxBytes);
 }
 function output(r,json){
   if(json){process.stdout.write(JSON.stringify(r,null,2)+'\n');return;}
