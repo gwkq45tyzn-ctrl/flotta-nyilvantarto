@@ -139,6 +139,23 @@ try{
   await shouldReject('same vehicle and driver cannot be booked twice',
     ()=>book('2099-01-01'),/BOOKING_BLOCKED: already_occupied/);
 
+  // A corrupted keyed value must not turn into a real parcel count, even
+  // when both the legacy alias and the approved archive appear usable.
+  for(const value of [true,false,[70],'70',null]){
+    await env.withSecurityRulesDisabled(ctx=>
+      updateDoc(doc(ctx.firestore(),'flottaDrivers','DA0001'),{kapacitas:value,capacity:70}));
+    await shouldReject('malformed keyed capacity cannot create booking or claim',
+      ()=>book('2099-02-19'),/BOOKING_BLOCKED: invalid_capacity/);
+    await absence('2099-02-19');
+  }
+  await env.withSecurityRulesDisabled(ctx=>
+    updateDoc(doc(ctx.firestore(),'flottaDrivers','DA0001'),{kapacitas:63}));
+  await book('2099-02-19');
+  assert.equal((await getDoc(doc(shared,'bookings','2099-02-19__ABC123'))).data().capacity,63);
+  await env.withSecurityRulesDisabled(ctx=>
+    updateDoc(doc(ctx.firestore(),'flottaDrivers','DA0001'),{kapacitas:50}));
+  console.log('PASS [E]: invalid keyed values plus a 70 mirror never booked; explicit 63 persisted');
+
   // Same actual Firestore client, distinct concurrent transactions.
   const concurrent=await Promise.allSettled([
     book('2099-01-02'),book('2099-01-02')

@@ -147,18 +147,34 @@ test('invalid legacy history shape cannot be silently migrated',()=>{
   }),/CANDIDATE_NOT_IMPORT_READY/);
 });
 
-test('clean source with 21 drivers is NOT release-ready under the 20-driver Rules proof window',()=>{
-  const original=syntheticFourBlockSource({
-    drivers:21,vehicles:14,fuelCards:14,contacts:5
-  });
+test('offline candidate uses the same driver window and atomic read budget as the pinned importer',()=>{
+  for(const [drivers,vehicles,window,reason] of [
+    [21,14,true,null],[30,26,true,null],[31,14,false,'PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'],
+    [30,27,true,'PHASE1_ATOMIC_MIGRATION_READ_BOUND_EXCEEDED']
+  ]){
+    const original=syntheticFourBlockSource({drivers,vehicles,fuelCards:2,contacts:1});
+    const audit=auditFleetSourceForImport(original);
+    assert.equal(audit.bookingWindowReady,window);
+    assert.equal(audit.ready,reason===null);
+    if(reason)assert.ok(audit.issues.some(issue=>issue.reason===reason));
+    assert.equal(audit.authorizedForImport,false);
+  }
+});
+
+test('malformed capacity needs an explicit identity-bound repair; original rich history survives',()=>{
+  const original=syntheticFourBlockSource({drivers:1,vehicles:1,fuelCards:1,contacts:1});
+  original.drivers[0].kapacitas=[70];
+  original.drivers[0].capacity=70;
   const audit=auditFleetSourceForImport(original);
-  assert.equal(audit.sourcePreflightReady,true);
-  assert.equal(audit.businessReady,true);
-  assert.equal(audit.projectionReady,true);
-  assert.equal(audit.bookingWindowReady,false);
+  assert.deepEqual(audit.missingCapacityIndices,[0]);
   assert.equal(audit.ready,false);
-  assert.ok(audit.issues.some(i=>i.reason==='BOOKING_RULES_20_DRIVER_WINDOW_EXCEEDED'));
-  assert.equal(audit.authorizedForImport,false);
+  const fixed=buildExplicitFleetRemediationCandidate({
+    original,expectedOriginalSha256:sha256(original),
+    changes:[{index:0,expectedDaCode:original.drivers[0].daCode,capacity:63}]
+  });
+  assert.equal(fixed.candidate.drivers[0].kapacitas,63);
+  assert.deepEqual(original.drivers[0].kapacitas,[70]);
+  assert.deepEqual(fixed.candidate.drivers[0].history,original.drivers[0].history);
 });
 
 test('canonical preflight budget failure cannot be mislabeled as ready',()=>{

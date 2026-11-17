@@ -58,6 +58,9 @@ jobs:
             tools/v1-operational-readiness.test.mjs \
             tools/v1-atomic-migration-budget.test.mjs \
             tools/v1-owner-readiness-cli.test.mjs \
+            features/shared-master-adapter.test.mjs \
+            features/v1-fleet-source-remediation.test.mjs \
+            tools/v1-readonly-backup-validation.test.mjs \
             tools/v1-capacity-remediation.test.mjs \
             tools/v1-trusted-importer-attestation.test.mjs \
             tools/v1-firestore-size-gate.test.mjs \

@@ -18,13 +18,13 @@ const vehicleStatus=s=>{
   return 'Leállított'; // fail-safe, never infer available from unknown status
 };
 const driverActive=s=>['aktiv','aktív'].includes(str(s).toLowerCase());
-const capacityOf=d=>{
-  // Missing courier capacity must remain UNKNOWN, not an approved zero.
-  const raw=d.kapacitas??d.capacity;
-  if(raw===undefined||raw===null||(typeof raw==='string'&&!raw.trim()))return null;
-  const n=Number(raw);
-  return Number.isSafeInteger(n)&&n>=0&&n<=10000?n:null;
-};
+// Old exports sometimes use only 'capacity'. An explicitly present but
+// malformed original value must go back to the operator for review.
+export function recordedFleetCapacity(driver) {
+  if(!driver || typeof driver!=='object')return null;
+  const value=Object.hasOwn(driver,'kapacitas') ? driver.kapacitas : driver.capacity;
+  return Number.isSafeInteger(value)&&value>=0&&value<=10000 ? value : null;
+}
 
 export function fleetVehicleToDepo(v) {
   if(!v||typeof v!=='object'||Array.isArray(v))return null;
@@ -36,7 +36,7 @@ export function fleetDriverToDepo(d) {
   if(!d||typeof d!=='object'||Array.isArray(d))return null;
   // Original Flotta id is an internal generated ID, NOT the business DA code.
   const daCode=code(d.daCode),name=str(d.name||d.nev);
-  const vendor=str(d.agency||d.vendor||d.vallalkozo),capacity=capacityOf(d);
+  const vendor=str(d.agency||d.vendor||d.vallalkozo),capacity=recordedFleetCapacity(d);
   if(!codeOK(daCode)||!name||name.length>160||vendor.length>160||capacity===null)return null;
   return {id:daCode,daCode,name,vendor,capacity,active:driverActive(d.status),flotta:clone(d)};
 }

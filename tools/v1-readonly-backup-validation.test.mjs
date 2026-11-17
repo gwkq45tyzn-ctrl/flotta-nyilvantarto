@@ -84,3 +84,14 @@ test('no fixed source size and required 4 arrays',()=>{
  assert.equal(validateBackup(x).ok,false);
  assert.ok(validateBackup(x).issues.includes('MISSING_OR_INVALID_BLOCK'));
 });
+
+test('a preserved rich backup cannot promote invalid canonical capacities to parcel counts',()=>{
+  for(const invalid of [true,false,[],[70],{},'70','7e1','0x46',null]){
+    const raw=good();
+    Object.assign(raw.drivers[0],{kapacitas:invalid,capacity:70});
+    const check=validateBackup(raw);
+    assert.equal(check.ok,true,'rich backup remains intact for review');
+    assert.equal(check.warnings.driversMissingOrInvalidDailyCapacity,1);
+    assert.equal(check.operationalReady,false);
+  }
+});

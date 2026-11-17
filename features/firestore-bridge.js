@@ -373,11 +373,8 @@
     const drivers = (draft.drivers || []).map(d => {
       const id = code(d.daCode);
       if (!id) return null;
-      const listed=[d.kapacitas,d.capacity];
-      let capacity=null;
-      for(const value of listed){
-        if(Number.isSafeInteger(value)&&value>=0&&value<=10000){capacity=value;break;}
-      }
+      const recorded=Object.prototype.hasOwnProperty.call(d,'kapacitas') ? d.kapacitas : d.capacity;
+      const capacity=Number.isSafeInteger(recorded)&&recorded>=0&&recorded<=10000 ? recorded : null;
       const active=['aktiv','aktív'].includes(String(d.status || '').toLowerCase())&&capacity!==null;
       return { id, data: { name: String(d.name || d.nev || '').trim(), daCode: id, vendor: String(d.agency || d.vendor || '').trim(), capacity, active } };
     }).filter(Boolean);
