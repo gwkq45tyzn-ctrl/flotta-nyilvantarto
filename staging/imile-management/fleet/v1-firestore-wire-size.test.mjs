@@ -29,3 +29,14 @@ test('exact Document limit and one extra byte, with two legal-sized fields', () 
   data.b += 'x';
   assert.throws(() => measureDocumentSet(db, 'c/d', data), /FIRESTORE_DOCUMENT_PROTO_LIMIT/);
 });
+
+
+test('actual SDK accepts slash and dot rich field keys unchanged by size preflight', async()=>{
+  const {checkSizeGate}=await import('../../../tools/v1-firestore-size-gate.mjs');
+  const rich={'vendor/reference':'árvíztűrő','.':{'..':'📦'},'a`b\\c':true};
+  const source={drivers:[],vehicles:[],fuelCards:[],contacts:[],extra:rich};
+  const before=structuredClone(source);
+  assert.ok(measureDocumentSet(db,'c/d',source)>0);
+  assert.equal(checkSizeGate(source).advisoryOk,true);
+  assert.deepEqual(source,before);
+});

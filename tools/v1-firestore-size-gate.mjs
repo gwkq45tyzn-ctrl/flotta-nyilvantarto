@@ -45,7 +45,11 @@ function validateFields(node,depth=0,path=''){
   if(isRecord(node)){
     if(depth+1>MAX_FIELD_DEPTH)throw Error('FIRESTORE_FIELD_DEPTH_EXCEEDED');
     for(const [name,value] of Object.entries(node)){
-      if(!validPart(name))throw Error('FIRESTORE_FIELD_NAME_INVALID');
+      // Field map keys are not document ID/path segments. Rich legacy keys
+      // may contain '/', '.' or '..'; quote them for field-path accounting.
+      if(!name||!name.isWellFormed()||/^__.*__$/.test(name)||
+         Buffer.byteLength(name,'utf8')>1500)
+        throw Error('FIRESTORE_FIELD_NAME_INVALID');
       const segment=/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
         ?name:'`'+name.replace(/[\\`]/g,'\\$&')+'`';
       const fieldPath=path?path+'.'+segment:segment;
