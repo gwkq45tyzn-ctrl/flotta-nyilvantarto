@@ -112,7 +112,11 @@ export class TrustedSignerContract {
       this.#pinnedRootSha=key.fingerprint;
     }
   }
-  verify(input){
+  verify(...args){
+    try{return this.#verify(...args);}
+    catch{return fail('INVALID_OFFLINE_SIGNER_REGISTRY_OR_SOURCE');}
+  }
+  #verify(input){
     if(arguments.length!==1||!exact(input,['registryBundle','manifest','snapshot','backup']))
       return fail('UNTRUSTED_CALLER_AUTHORITY_OR_MISSING_SOURCE_FIELDS');
     if(!this.#root)return fail('NO_EXTERNAL_OWNER_REGISTRY_ROOT');
@@ -224,7 +228,7 @@ export class TrustedSignerContract {
         expectedKeyedMasterCount:sourceProof.expectedKeyedMasterCount
       });
     }catch(e){
-      return fail('INVALID_OFFLINE_SIGNER_REGISTRY_OR_SOURCE: '+String(e.message||e));
+      return fail('INVALID_OFFLINE_SIGNER_REGISTRY_OR_SOURCE');
     }
   }
 }

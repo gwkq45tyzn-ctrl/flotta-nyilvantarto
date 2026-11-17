@@ -38,7 +38,11 @@ export class LocalPrivilegedImporter {
    *   a post-batch parity preview. During BEFORE-import preflight omit it.
    *   backup MUST be a distinct pre-import backup carrying the raw snapshot.
    */
-  async importSource(snapshot,opts={}){
+  async importSource(...args){
+    try{return await this.#importSource(...args);}
+    catch{return denied('PREFLIGHT_EXCEPTION');}
+  }
+  async #importSource(snapshot,opts={}){
     if(!opts||typeof opts!=='object'||Array.isArray(opts))
       return denied('INVALID_OPTIONS');
     // Never let per-request input replace externally pinned authority.
@@ -54,7 +58,7 @@ export class LocalPrivilegedImporter {
     try {
       actualSourceSha=sha256(snapshot);
     } catch(error) {
-      return denied('INVALID_RAW_SOURCE',String(error.message||error));
+      return denied('INVALID_RAW_SOURCE');
     }
     if(actualSourceSha!==pin)return denied('RAW_SOURCE_NOT_TRUSTED_PIN');
     // This separately checks *every* full-rich backup field, sourceIndex,
@@ -70,7 +74,7 @@ export class LocalPrivilegedImporter {
         )
       });
     }catch(error){
-      return denied('PREFLIGHT_EXCEPTION',String(error.message||error));
+      return denied('PREFLIGHT_EXCEPTION');
     }
     if(!verdict.ok)return denied(verdict.reason||'ATTESTATION_FAILED',verdict.details);
     // Critical: we never use local "withSecurityRulesDisabled" or self-

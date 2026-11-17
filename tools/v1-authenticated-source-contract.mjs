@@ -37,7 +37,11 @@ export class AuthenticatedSourceContract {
   }
   // Caller may submit its raw source and independently verified full-rich
   // backup, NEVER claim pin/revision/approval/IAM or override auth fields.
-  verify(snapshot,options={}){
+  verify(...args){
+    try{return this.#verify(...args);}
+    catch{return decision(false,'INVALID_SOURCE_OR_BACKUP');}
+  }
+  #verify(snapshot,options={}){
     if(!isPlain(options))return decision(false,'INVALID_OPTIONS');
     if(Object.keys(options).some(k=>k!=='backup'))
       return decision(false,'UNTRUSTED_CALLER_SUPPLIED_AUTHORITY');
@@ -57,7 +61,7 @@ export class AuthenticatedSourceContract {
         projectedDocumentCount:proof.projectedDocumentCount,
         sourceCounts:proof.counts
       });
-    }catch(e){return decision(false,'INVALID_SOURCE_OR_BACKUP: '+String(e.message||e))}
+    }catch(e){return decision(false,'INVALID_SOURCE_OR_BACKUP')}
   }
 }
 export function createAuthenticatedSourceContract(opts){

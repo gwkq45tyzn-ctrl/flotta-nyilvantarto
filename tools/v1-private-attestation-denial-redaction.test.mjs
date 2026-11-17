@@ -6,12 +6,15 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,sign} from 'node:crypto';
+import {generateKeyPairSync,sign,createHash} from 'node:crypto';
 import {sha256,simulateBackup,buildPlan} from './v1-migration-dryrun.mjs';
 import {verifyPinnedBackupContent,verifyPinnedImportSource}
   from './v1-pinned-backup-trust.mjs';
 import {createSignedManifestContract}
   from './v1-signed-manifest-contract.mjs';
+import {createLocalImporter} from './v1-privileged-importer-local.mjs';
+import {createAuthenticatedSourceContract} from './v1-authenticated-source-contract.mjs';
+import {createTrustedSignerContract} from './v1-trusted-signer-contract.mjs';
 import {canonicalStringify} from '../features/migration-manifest.mjs';
 
 const markers=[
@@ -138,4 +141,37 @@ test('invalid Ed25519 SPKI parser error is redacted to a fixed error code',()=>{
       trustedPublicKeySpkiBase64:Buffer.alloc(90,3).toString('base64')
     });
   },e=>e.message==='INVALID_ED25519_PUBLIC_ROOT');
+});
+
+
+test('local importer and pinned-content wrapper cannot expose throwing source errors',async()=>{
+  const good=source(),pin=sha256(good),saved=simulateBackup(good);
+  const poisoned=structuredClone(good);
+  Object.defineProperty(poisoned,'futurePrivateField',{
+    enumerable:true,get(){throw Error('PRIVATE_RAW_EXCEPTION_CANARY PRIVATE_PHONE_CANARY');}
+  });
+  const importer=createLocalImporter({trustedPinnedSha:pin});
+  const contract=createAuthenticatedSourceContract({externalPin:pin});
+  for(const result of [await importer.importSource(poisoned,{backup:saved}),
+    contract.verify(poisoned,{backup:saved})]){
+    assert.equal(result.ok,false);assert.equal(result.authorizedForImport,false);noLeak(result);
+  }
+});
+
+test('local importer rejects throwing backup option without leaking or throwing',async()=>{
+  const s=source(),pin=sha256(s);
+  const options={get backup(){throw Error('PRIVATE_RAW_EXCEPTION_CANARY');}};
+  const result=await createLocalImporter({trustedPinnedSha:pin}).importSource(s,options);
+  assert.equal(result.ok,false);noLeak(result);
+});
+
+test('trusted root wrapper contains exceptions before signature parsing and never authorizes',()=>{
+  const root=generateKeyPairSync('ed25519');
+  const der=root.publicKey.export({type:'spki',format:'der'});
+  const contract=createTrustedSignerContract({rootPublicKeySpkiBase64:der.toString('base64'),
+    independentlyPinnedRootSha256:createHash('sha256').update(der).digest('hex')});
+  const input={manifest:{},snapshot:source(),backup:simulateBackup(source()),
+    get registryBundle(){throw Error('PRIVATE_RAW_EXCEPTION_CANARY PRIVATE_DA_CANARY');}};
+  const denial=contract.verify(input);
+  assert.equal(denial.ok,false);assert.equal(denial.authorizedForImport,false);noLeak(denial);
 });
