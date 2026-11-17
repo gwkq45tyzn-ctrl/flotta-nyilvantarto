@@ -14,6 +14,23 @@ A Flotta Google Sheet alapú régi backendjében a teljes négytömbös appálla
 
 **SOHA ne másolja be a teljes JSON-t GitHub issue-ba/PR-be, publikus chatbe, CI-ba vagy nyilvános felhőtárhelyre.** A valós adatok tartalmazhatnak neveket, telefonszámokat, rendszámokat, kártyaazonosítókat és beágyazott eseménytörténetet.
 
+## 1/A. Két külön, helyi _APP_STATE kiolvasás + a ténylegesen mentett JSON egyezése
+
+Az előző pontban rögzített, saját jogosultsággal megnyitott forrásból **kétszer külön** jelöld ki az `_APP_STATE` lap `A2:C2` cellatartományát, és másold ki az egy sorba eső három cellát két egymástól független, UTF-8 formátumú **privát** szövegfájlba (`elso.tsv`, `masodik.tsv`). A táblázatot **ne szerkeszd**. A harmadik privát fájl (`flotta-eredeti.json`) a C2 **teljes, változatlan** JSON-tartalma legyen, egyetlen karakter hozzáadása nélkül.
+
+A Google Sheets által automatikusan idézőjelezett TSV JSON-cellát a helyi ellenőrző feldolgozza. Alternatív helyi fájlformátum: egyetlen JSON tömb, amelynek három értéke `[revision, updatedAt, stateJsonString]` (a harmadik **sztring**, a teljes C2). A teljes JSON, a TSV vagy bármely azonosító **nem kerülhet a GitHubra, CI-ba vagy nyilvános beszélgetésbe**.
+
+```bash
+node tools/v1-private-appstate-double-readback.mjs \
+  --first "/privat/elso.tsv" \
+  --second "/privat/masodik.tsv" \
+  --saved "/privat/flotta-eredeti.json" --json
+```
+
+A `localReadbackAndSavedBytesConsistent:true` csak azt igazolja, hogy a **három általad helyben megadott fájl** azonos változatot jelöl, ugyanazt a teljes C2-szöveget tartalmazza, és a külön lementett JSON byte-pontosan megegyezik a C2-vel. Az eltérő verzió, időbélyeg, JSON vagy mentett fájl **STOP**. Az `operationallyReady:false` ettől külön, például hiányzó aktív futárkapacitást jelez; a kapacitás nélküli eredeti mentést **nem szabad eldobni**.
+
+**Fontos:** a két helyi fájl önmagában nem bizonyítja, hogy a táblázat a valódi, hiteles forrás vagy nincs másik éles Apps Script író, helyi függő módosítás, cache vagy jogosulatlan szerkesztő. Az eredeti mentés független tárolása, hashének külső rögzítése és a visszaállítás próbája továbbra is külön feladat. A script **sem mentést nem hoz létre, sem adatot nem tölt fel vagy módosít**.
+
 ## 2. Az eredeti négy adattömb ellenőrzése (adatot nem módosít)
 
 A helyileg mentett privát JSON-nak **mind a négy** tömböt tartalmaznia kell: `vehicles`, `drivers`, `fuelCards`, `contacts`. Ezen felül minden ismeretlen root/nested mezőt és `history` tartalmat meg kell őrizni.
