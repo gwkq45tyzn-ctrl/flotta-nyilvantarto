@@ -4,13 +4,13 @@ import { readFileSync } from 'node:fs';
 
 test('rules use getAfter for Flotta eligibility', () => {
   const rules = readFileSync('depokapacitas/firestore-v1-restricted.rules', 'utf8');
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*drivers\[/);
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*vehicles\[/);
+  assert.match(rules, /getAfter\([^\n]*flottaDrivers\/\$\(data\.driverId\)/);
+  assert.match(rules, /getAfter\([^\n]*flottaVehicles\/\$\(data\.vehicleId\)/);
 });
 
-test('rules check normalizedPlate', () => {
+test('rules check canonical raw plate and its sourceIndex', () => {
   const rules = readFileSync('depokapacitas/firestore-v1-restricted.rules', 'utf8');
-  assert.match(rules, /normalizedPlate == request\.resource\.data\.vehicleId/);
+  assert.match(rules, /vehicle\.rendszam\.replace\([^\n]*\.upper\(\) == data\.vehicleId/);
 });
 
 test('bridge stores normalizedPlate and does not write mirrors', () => {

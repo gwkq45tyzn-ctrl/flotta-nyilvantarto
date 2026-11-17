@@ -11,11 +11,11 @@ test('A1: bridge stores normalizedPlate for rules check', () => {
 });
 
 test('A2: booking normalizes plate for index lookup', () => {
-  assert.match(booking, /norm\(v\.rendszam\)/);
+  assert.match(booking, /normVehicle\(v\.rendszam\)/);
 });
 
-test('A3: booking falls back to Flotta kapacitas', () => {
-  assert.match(booking, /fleetDriver\?\.kapacitas/);
+test('A3: booking requires current keyed Flotta kapacitas without fallback', () => {
+  assert.match(booking, /keyedDriver\.data\(\)\.kapacitas/);
 });
 
 test('A4: booking rule does not require mirror existence', () => {
@@ -35,8 +35,8 @@ test('A6: mirror writes closed after import', () => {
 });
 
 test('A7: rules use getAfter for Flotta eligibility', () => {
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*drivers\[/);
-  assert.match(rules, /getAfter\(.*flottaSharedState\/current\).*vehicles\[/);
+  assert.match(rules, /getAfter\([^\n]*flottaDrivers\/\$\(data\.driverId\)/);
+  assert.match(rules, /getAfter\([^\n]*flottaVehicles\/\$\(data\.vehicleId\)/);
 });
 
 test('A8: bridge has no duplicate const projected', () => {

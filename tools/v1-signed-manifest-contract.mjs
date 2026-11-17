@@ -13,7 +13,7 @@
  */
 import {createPublicKey,verify as cryptoVerify} from 'node:crypto';
 import {sha256} from './v1-migration-dryrun.mjs';
-import {verifyPinnedImportSource} from './v1-pinned-backup-trust.mjs';
+import {verifyPinnedBackupContent} from './v1-pinned-backup-trust.mjs';
 import {canonicalStringify} from '../features/migration-manifest.mjs';
 
 const SCOPE='LOCAL_ED25519_SIGNATURE_INTEGRITY_ONLY_NO_EXTERNAL_TRUST_ROOT_PROVENANCE';
@@ -106,7 +106,9 @@ export class SignedManifestContract {
       const sourceSha256=sha256(snapshot);
       if(sourceSha256!==payload.sourceSha256)
         return deny('SOURCE_SHA_MISMATCH');
-      const proof=verifyPinnedImportSource({
+      // Content-only proof for this explicitly local synthetic drill/signature.
+      // No operational admission, import authority or production seal is granted.
+      const proof=verifyPinnedBackupContent({
         backup,trustedPinnedSha:payload.sourceSha256,
         expectedRevision:this.#revision
       });

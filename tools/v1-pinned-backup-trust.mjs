@@ -11,7 +11,7 @@ import {assessFleetDepotOperationalReadiness} from './v1-operational-readiness.m
 
 const hex64=v=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
-export function verifyPinnedImportSource({
+export function verifyPinnedBackupContent({
   backup, trustedPinnedSha, expectedRevision, observedKeyed
 }={}){
   const deny=(reason,details)=>({
@@ -43,15 +43,9 @@ export function verifyPinnedImportSource({
   // Ensure backup's array counts really correspond to the exact raw source.
   if(Object.entries(pre.counts).some(([k,n])=>backup.counts?.[k]!==n))
     return deny('BACKUP_COUNT_DRIFT');
-  // A valid four-array backup is not necessarily a usable Depot source.
-  // Importing active couriers without integer kapacitas makes every booking
-  // fail after seal; never fill capacities by guessing or by client mirrors.
+  // Content integrity can be measured for an operationally unready backup.
+  // The import admission wrapper below MUST still refuse that source.
   const operational=assessFleetDepotOperationalReadiness(source);
-  if(!operational.ready)
-    return deny('PHASE1_OPERATIONAL_READINESS_DENIED',{
-      reasons:operational.reasons,counts:operational.counts,
-      warnings:operational.warnings
-    });
   let manifest,plan;
   try{
     manifest=createMigrationManifest(source);
@@ -87,5 +81,22 @@ export function verifyPinnedImportSource({
     proofScope:'LOCAL_CONTENT_INTEGRITY_ONLY',
     trustedExternalProvenanceVerified:false,
     authorizedForImport:false,sealed:false
+  };
+}
+
+
+/** Operational admission is deliberately separate from backup/signature integrity.
+ * Callers cannot opt out of bounds or missing-capacity checks through options.
+ * Content-only proof never authorizes import or a production seal.
+ */
+export function verifyPinnedImportSource(input={}){
+  const result=verifyPinnedBackupContent(input);
+  if(!result.ok||result.operationalReadiness.ready)return result;
+  const operational=result.operationalReadiness;
+  return {
+    ok:false,reason:'PHASE1_OPERATIONAL_READINESS_DENIED',
+    details:{reasons:operational.reasons,counts:operational.counts,warnings:operational.warnings},
+    proofScope:'LOCAL_CONTENT_INTEGRITY_ONLY',
+    trustedExternalProvenanceVerified:false,authorizedForImport:false,sealed:false
   };
 }

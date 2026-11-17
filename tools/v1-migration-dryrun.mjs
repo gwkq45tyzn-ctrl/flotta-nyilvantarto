@@ -119,14 +119,16 @@ export function simulateBackup(snapshot) {
   };
 }
 export function restoreDrill(backup,expectedSha) {
-  const blocked=error=>({ok:false,error,historyPreserved:false});
-  if(!plain(backup)||backup.type!=='v1-full-rich-backup'||!hex64(expectedSha))
+  const blocked=error=>({ok:false,error,historyPreserved:false,authorizedForImport:false});
+  if(!plain(backup)||backup.type!=='v1-full-rich-backup'||backup.version!==2||
+     backup.imported!==false||!hex64(expectedSha))
     return blocked('Invalid backup or trusted expected SHA');
   if(backup.sourceSha256!==expectedSha)return blocked('SHA mismatch – refuse restore');
   const pre=preflight(backup.snapshot);
   if(!pre.ok)return blocked('Invalid/tampered backup snapshot: '+pre.errors.join('; '));
   if(pre.sourceSha256!==expectedSha)return blocked('SHA mismatch – backup content tampered');
-  if(backup.counts&&COLLECTIONS.some(k=>backup.counts[k]!==pre.counts[k]))
+  if(!plain(backup.counts)||Object.keys(backup.counts).length!==COLLECTIONS.length||
+     COLLECTIONS.some(k=>!own(backup.counts,k)||backup.counts[k]!==pre.counts[k]))
     return blocked('Backup count mismatch');
   return {
     ok:true,sourceSha256:pre.sourceSha256,restoredCounts:pre.counts,

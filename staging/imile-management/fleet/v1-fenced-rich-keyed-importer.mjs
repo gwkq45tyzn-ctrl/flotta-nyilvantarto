@@ -10,7 +10,7 @@
  */
 import {randomUUID} from 'node:crypto';
 import {doc,getDoc,runTransaction} from 'firebase/firestore';
-import {verifyPinnedImportSource} from '../../../tools/v1-pinned-backup-trust.mjs';
+import {verifyPinnedBackupContent} from '../../../tools/v1-pinned-backup-trust.mjs';
 import {buildPlan,sha256} from '../../../tools/v1-migration-dryrun.mjs';
 
 const LOCK='v1MigrationSyntheticLocks/primary';
@@ -126,7 +126,9 @@ export class LocalFencedRichKeyedImporter {
       if(sha256(raw)!==this.#pin)return bad('RAW_SOURCE_SHA_DRIFT');
       const folded=rejectFoldedSourceKeys(raw);
       if(!folded.ok)return bad(folded.reason);
-      pre=verifyPinnedImportSource({
+      // Content-only proof for this explicitly local synthetic drill/signature.
+      // No operational admission, import authority or production seal is granted.
+      pre=verifyPinnedBackupContent({
         backup,trustedPinnedSha:this.#pin,expectedRevision:this.#revision
       });
       if(!pre.ok)return bad('PRESEAL_SOURCE_ATTESTATION_DENIED: '+pre.reason);
