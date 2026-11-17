@@ -3,7 +3,7 @@
  * node tools/v1-apps-script-cutover-cli.mjs --input /private/sanitized-inventory.json
  * Nothing is uploaded, written or connected to Google/Firebase.
  */
-import {readFileSync,statSync} from 'node:fs';
+import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {assessAppsScriptCutoverEvidence,CUTOVER_SCHEMA}
@@ -42,13 +42,11 @@ export function runLocalAppsScriptCutover(argv=process.argv.slice(2)){
   }
   let text;
   try{
-    const size=statSync(args[1]).size;
-    if(!Number.isSafeInteger(size)||size===0||size>FILE_LIMIT){
-      print(refusal('EMPTY_OR_OVERSIZE_MANIFEST'),json);return 1;
-    }
-    text=readFileSync(args[1],'utf8');
-  }catch{
-    print(refusal('MANIFEST_FILE_UNREADABLE'),json);return 1;
+    text=readStrictPrivateUtf8File(args[1],FILE_LIMIT);
+  }catch(e){
+    print(refusal(e?.code==='PRIVATE_FILE_SIZE_DENIED'
+      ?'EMPTY_OR_OVERSIZE_MANIFEST':'MANIFEST_FILE_UNREADABLE'),json);
+    return 1;
   }
   let source;
   try{source=JSON.parse(text)}
