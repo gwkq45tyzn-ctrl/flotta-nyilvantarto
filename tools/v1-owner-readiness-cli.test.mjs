@@ -56,13 +56,13 @@ test('realistic 12/14/14/5 structure detects six missing active capacities priva
     assert.equal(output.stderr.includes(secret),false);
   }
 });
-test('valid privately prepared source returns 0 but never authorizes import',()=>{
+test('capacities alone with uncertain statuses remain operationally blocked',()=>{
   const data=source();
   for(let i=0;i<6;i++)data.drivers[i].kapacitas=70;
   const output=run(JSON.stringify(data),['--json']);
-  assert.equal(output.status,0,output.stderr);
+  assert.equal(output.status,2,output.stderr);
   const r=JSON.parse(output.stdout);
-  assert.equal(r.operationallyReady,true);
+  assert.equal(r.operationallyReady,false);
   assert.equal(r.sourcePreflightOk,true);
   assert.equal(r.counts.activeWithoutCapacity,0);
   assert.ok(r.warnings.includes('DRIVER_STATUS_NEEDS_OWNER_REVIEW'));

@@ -108,6 +108,8 @@ try{
   const summaryText=readFileSync(await summaryDownload.path(),'utf8');
   const summary=JSON.parse(summaryText);
   assert.equal(summary.authorizedForImport,false);
+  assert.equal(summary.operationallyReady,false);
+  assert.equal(summary.allUncertainStatusesIndividuallyReviewed,false);
   assert.equal(summary.productionIamVerified,false);
   assert.equal(summary.newIndependentBackupRequired,true);
   assert.equal(summary.migrationOwnedReadDocuments,11);
@@ -198,6 +200,8 @@ try{
   assert.equal(shapeSummary.migrationOwnedReadDocuments,56);
   assert.equal(shapeSummary.migrationWithinAtomicReadBound,true);
   assert.equal(shapeSummary.authorizedForImport,false);
+  assert.equal(shapeSummary.operationallyReady,false);
+  assert.equal(shapeSummary.allUncertainStatusesIndividuallyReviewed,false);
   assert.equal(shapeSummary.newIndependentBackupRequired,true);
   assert.deepEqual(network,[],'Realistic shape-only review must remain completely offline');
   console.log('PASS [REAL CHROMIUM]: 12/14 anonymized Fleet shape, six explicit 70 reviews, three unknown kept, full rich roundtrip and 56/120 local bound, zero HTTP');
