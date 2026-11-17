@@ -55,6 +55,7 @@ jobs:
         run: |
           node --test \
             tools/v1-migration-dryrun.test.mjs \
+            tools/v1-migration-dryrun-cli-redaction.test.mjs \
             tools/v1-migration-acceptance.test.mjs \
             tools/v1-pinned-backup-trust.test.mjs \
             tools/v1-operational-readiness.test.mjs \
