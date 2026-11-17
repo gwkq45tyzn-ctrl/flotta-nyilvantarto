@@ -1,3 +1,4 @@
+import {createIndependentRegistryFloor} from './v1-independent-registry-floor.mjs';
 /**
  * Local ED25519 CHAIN proof: pinned root -> root-SIGNED offline registry ->
  * listed signer key -> signer-SIGNED original full-rich source manifest.
@@ -74,6 +75,7 @@ const validTime=n=>Number.isSafeInteger(n)&&n>=0;
 export class TrustedSignerContract {
   #root=null;#pinnedRootSha;#project;#audience;#signer;
   #pin;#revision;#minSequence;#minKeyVersion;
+  #independentFloor;
   #seenSeq=0;#seenRegistryDigest=null;
   constructor({
     rootPublicKeySpkiBase64=null,
@@ -84,7 +86,8 @@ export class TrustedSignerContract {
     independentlyPinnedSourceSha256=null,
     expectedSourceRevision=1,
     minimumTrustedRegistrySequence=1,
-    minimumSignerKeyVersion=1
+    minimumSignerKeyVersion=1,
+    independentRegistryPath,independentlyPinnedRegistrySha256
   }={}){
     if(!PROJECT.test(expectedRegistryAudience)||!PROJECT.test(expectedProjectId)||
       !NAME.test(expectedSignerId)||!Number.isSafeInteger(expectedSourceRevision)||
@@ -92,6 +95,7 @@ export class TrustedSignerContract {
       minimumTrustedRegistrySequence<1||!Number.isSafeInteger(minimumSignerKeyVersion)||
       minimumSignerKeyVersion<1)
       throw Error('DEMO_AUDIENCE_SIGNER_AND_PINNED_VERSION_REQUIRED');
+    this.#independentFloor=createIndependentRegistryFloor({independentRegistryPath,independentlyPinnedRegistrySha256});
     this.#project=expectedProjectId;this.#audience=expectedRegistryAudience;
     this.#signer=expectedSignerId;this.#revision=expectedSourceRevision;
     this.#minSequence=minimumTrustedRegistrySequence;
@@ -120,6 +124,8 @@ export class TrustedSignerContract {
     if(arguments.length!==1||!exact(input,['registryBundle','manifest','snapshot','backup']))
       return fail('UNTRUSTED_CALLER_AUTHORITY_OR_MISSING_SOURCE_FIELDS');
     if(!this.#root)return fail('NO_EXTERNAL_OWNER_REGISTRY_ROOT');
+    try{this.#independentFloor?.assertCurrentRegistry(input.registryBundle);}
+    catch{return fail('INDEPENDENT_REGISTRY_CHECKPOINT_DENIED');}
     if(!exact(input.registryBundle,['algorithm','payload','signatureBase64'])||
       input.registryBundle.algorithm!=='Ed25519')
       return fail('INVALID_OWNER_REGISTRY_ENVELOPE');

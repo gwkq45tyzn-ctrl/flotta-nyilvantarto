@@ -310,3 +310,66 @@ test('unsupported malformed registry type, duplicate signer version and duplicat
   g.registryBundle=signEnvelope(g.registry,g.root);
   denied(execute(g),/DUPLICATE_SIGNER_FINGERPRINT/);
 });
+
+// Checkpoint bytes/config belong to an independent principal in deployment.
+// Fixtures here prove content enforcement, NOT real OS/IAM separation.
+import {mkdtempSync,writeFileSync,rmSync,symlinkSync,unlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {spawnSync} from 'node:child_process';
+function withCheckpoint(fn){
+  const f=make(),dir=mkdtempSync(join(tmpdir(),'imile-floor-'));
+  const path=join(dir,'approved.json'),bytes=JSON.stringify(f.registryBundle);
+  writeFileSync(path,bytes,{mode:0o600});
+  const cfg={independentRegistryPath:path,
+    independentlyPinnedRegistrySha256:createHash('sha256').update(bytes).digest('hex')};
+  try{fn(f,cfg,path)}finally{rmSync(dir,{recursive:true,force:true});}
+}
+test('independent exact checkpoint permits signed current source; unknown newer and same-sequence equivocation deny',()=>withCheckpoint((f,cfg)=>{
+  accepted(execute(f,cfg));
+  for(const sequence of [1,2]){
+    const changed={...f.registry,sequence,expiresAtMs:f.registry.expiresAtMs-1};
+    denied(execute({...f,registryBundle:signEnvelope(changed,f.root)},cfg),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+  }
+  assert.throws(()=>execute(f,{independentRegistryPath:cfg.independentRegistryPath}),/PATH_AND_BYTE_PIN_REQUIRED/);
+  assert.throws(()=>execute(f,{independentlyPinnedRegistrySha256:cfg.independentlyPinnedRegistrySha256}),/PATH_AND_BYTE_PIN_REQUIRED/);
+}));
+test('new process cannot replay old signed registry after independently pinned revocation',()=>withCheckpoint((f,cfg,path)=>{
+  const revoked=signEnvelope({...f.registry,sequence:2,revokedSignerFingerprints:[f.signer.fingerprint]},f.root);
+  const bytes=JSON.stringify(revoked);writeFileSync(path,bytes);
+  const trusted={...f.contractConfig,...cfg,
+    independentlyPinnedRegistrySha256:createHash('sha256').update(bytes).digest('hex')};
+  denied(execute(f,trusted),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+  denied(execute({...f,registryBundle:revoked},trusted),/SIGNER_EXPIRED_DISABLED_OR_REVOKED/);
+  const input={registryBundle:f.registryBundle,manifest:f.signedManifest,snapshot:f.raw,backup:f.backup};
+  const script=`import {createTrustedSignerContract} from ${JSON.stringify(new URL('./v1-trusted-signer-contract.mjs',import.meta.url).href)};\nlet b='';for await(const c of process.stdin)b+=c;const {cfg,input}=JSON.parse(b);console.log(JSON.stringify(createTrustedSignerContract(cfg).verify(input)));`;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',script],{
+    input:JSON.stringify({cfg:trusted,input}),encoding:'utf8',timeout:10000
+  });
+  assert.equal(child.status,0,child.stderr);
+  denied(JSON.parse(child.stdout),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+  // Even a perfectly signed older checkpoint substitution fails the fixed pin.
+  writeFileSync(path,JSON.stringify(f.registryBundle));
+  denied(execute(f,trusted),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+}));
+test('checkpoint deletion, symlink, invalid UTF8 and byte alteration deny without private diagnostics',()=>withCheckpoint((f,cfg,path)=>{
+  const bytes=JSON.stringify(f.registryBundle),target=path+'.other';writeFileSync(target,bytes);
+  unlinkSync(path);denied(execute(f,cfg),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+  symlinkSync(target,path);denied(execute(f,cfg),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+  unlinkSync(path);
+  for(const bad of [bytes+' ',Buffer.from([0xff]),'{PRIVATE_CHECKPOINT_CANARY']){
+    writeFileSync(path,bad);
+    const r=execute(f,cfg);denied(r,/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+    assert.equal(JSON.stringify(r).includes('PRIVATE_CHECKPOINT_CANARY'),false);
+    assert.equal(JSON.stringify(r).includes(path),false);
+  }
+}));
+test('a matching file byte pin never replaces Ed25519 root/signature/context validation',()=>withCheckpoint((f,cfg,path)=>{
+  const forged=structuredClone(f.registryBundle);forged.payload.sourceProjectId='demo-wrong-project';
+  const bytes=JSON.stringify(forged);writeFileSync(path,bytes);
+  const altered={...cfg,independentlyPinnedRegistrySha256:createHash('sha256').update(bytes).digest('hex')};
+  denied(execute({...f,registryBundle:forged},altered),/SIGNED_REGISTRY_CONTEXT_REVISION_OR_REVOCATION_INVALID/);
+  forged.payload.sourceProjectId=project;forged.signatureBase64=Buffer.alloc(64).toString('base64');
+  const bytes2=JSON.stringify(forged);writeFileSync(path,bytes2);
+  denied(execute({...f,registryBundle:forged},{...cfg,independentlyPinnedRegistrySha256:createHash('sha256').update(bytes2).digest('hex')}),/REGISTRY_ED25519_SIGNATURE_INVALID/);
+}));
