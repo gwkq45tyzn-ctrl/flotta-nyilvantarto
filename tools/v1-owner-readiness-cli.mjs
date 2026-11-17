@@ -11,7 +11,7 @@
  * or asserts owner IAM, provenance, signature, independent pin or release GO.
  * It intentionally never prints names, DA IDs, plates, contacts or raw errors.
  */
-import {readFileSync,statSync} from 'node:fs';
+import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {fileURLToPath} from 'node:url';
 import {preflight} from './v1-migration-dryrun.mjs';
 import {assessFleetDepotOperationalReadiness} from './v1-operational-readiness.mjs';
@@ -91,14 +91,10 @@ export function runOwnerPreflight(argv=process.argv.slice(2)){
   }
   let rawText;
   try{
-    const size=statSync(args[1]).size;
-    if(!Number.isSafeInteger(size)||size<1||size>MAX_INPUT_BYTES){
-      report(refuse('INPUT_FILE_EMPTY_OR_TOO_LARGE'),json);
-      return 1;
-    }
-    rawText=readFileSync(args[1],'utf8');
-  }catch{
-    report(refuse('INPUT_FILE_READ_FAILED'),json);
+    rawText=readStrictPrivateUtf8File(args[1],MAX_INPUT_BYTES);
+  }catch(e){
+    report(refuse(e?.code==='PRIVATE_FILE_SIZE_DENIED'
+      ?'INPUT_FILE_EMPTY_OR_TOO_LARGE':'INPUT_FILE_READ_FAILED'),json);
     return 1;
   }
   let source;
