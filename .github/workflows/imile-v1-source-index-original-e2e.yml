@@ -27,7 +27,7 @@ jobs:
           java-version: '21'
       - name: Original full Fleet file pin and local-only controls
         run: |
-          test "$(git rev-parse HEAD:index.html)" = "00773451fbe2d8c23046d195f5d707efd46b3700"
+          test "$(git rev-parse HEAD:index.html)" = "acf57b157804ee9b14026ef388c0a354d66e517f"
           echo "Testing exact PR HEAD $(git rev-parse HEAD), local emulator only"
       - name: Install lockfile-pinned Firebase and free test-only Chromium
         run: |

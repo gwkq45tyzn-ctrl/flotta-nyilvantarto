@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {simulateBackup,sha256,buildPlan} from './v1-migration-dryrun.mjs';
-import {verifyPinnedImportSource} from './v1-pinned-backup-trust.mjs';
+import {verifyPinnedImportSource,verifyPinnedBackupContent} from './v1-pinned-backup-trust.mjs';
 const source=()=>({
   drivers:[
     {id:'d1',daCode:'DA-0001',kapacitas:80,status:'aktiv',history:[{e:'hire',meta:{x:1}}]},
@@ -155,4 +155,25 @@ test('source with more than 30 drivers is blocked by current canonical Rules win
   assert.equal(result.ok,false);
   assert.ok(result.details.reasons.includes('PHASE1_RULES_DRIVER_LIMIT_EXCEEDED'));
   assert.equal(result.details.counts.drivers,31);
+});
+
+
+test('440-record backup integrity remains testable while operational import stays denied',()=>{
+  const raw={drivers:Array.from({length:220},(_,i)=>({id:'d'+i,daCode:'DA'+String(i).padStart(4,'0'),kapacitas:50,status:'aktiv',history:[{note:'árvíztűrő'}]})),
+    vehicles:Array.from({length:220},(_,i)=>({id:'v'+i,rendszam:'PL'+String(i).padStart(4,'0'),status:'aktiv',history:[]})),fuelCards:[],contacts:[]};
+  const input={backup:simulateBackup(raw),trustedPinnedSha:sha256(raw),expectedRevision:1};
+  const proof=verifyPinnedBackupContent(input);
+  assert.equal(proof.ok,true,JSON.stringify(proof));
+  assert.equal(proof.projectedDocumentCount,440);
+  assert.equal(proof.operationalReadiness.ready,false);
+  assert.equal(proof.authorizedForImport,false);
+  assert.equal(proof.sealed,false);
+  for(const options of [{},{requireOperationalReadiness:false},{allowLargeSource:true}]){
+    const admission=verifyPinnedImportSource({...input,...options});
+    assert.equal(admission.ok,false);
+    assert.equal(admission.reason,'PHASE1_OPERATIONAL_READINESS_DENIED');
+    assert.equal(admission.authorizedForImport,false);
+  }
+  input.backup.snapshot.drivers[0].history=[];
+  assert.equal(verifyPinnedBackupContent(input).ok,false);
 });

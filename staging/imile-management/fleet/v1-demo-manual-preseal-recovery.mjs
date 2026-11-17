@@ -14,7 +14,7 @@
  */
 import {randomUUID} from 'node:crypto';
 import {doc,runTransaction} from 'firebase/firestore';
-import {verifyPinnedImportSource} from '../../../tools/v1-pinned-backup-trust.mjs';
+import {verifyPinnedBackupContent} from '../../../tools/v1-pinned-backup-trust.mjs';
 import {sha256,buildPlan} from '../../../tools/v1-migration-dryrun.mjs';
 
 const LOCK='v1MigrationSyntheticLocks/primary';
@@ -82,7 +82,9 @@ export class DemoManualPresealRecovery {
       return deny('EXPLICIT_LOCAL_MANUAL_APPROVAL_AND_EXPECTED_EPOCH_REQUIRED');
     try{
       if(sha256(raw)!==this.#pin)return deny('SOURCE_SHA_DRIFT');
-      const proof=verifyPinnedImportSource({
+      // Content-only proof for this explicitly local synthetic drill/signature.
+      // No operational admission, import authority or production seal is granted.
+      const proof=verifyPinnedBackupContent({
         backup,trustedPinnedSha:this.#pin,expectedRevision:this.#revision
       });
       if(!proof.ok)return deny('PINNED_SOURCE_REFUSED: '+proof.reason);
