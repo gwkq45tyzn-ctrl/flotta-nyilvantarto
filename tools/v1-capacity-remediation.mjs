@@ -66,10 +66,14 @@ export function prepareReviewedCourierCapacities(raw,decisions){
   const post=preflight(candidate);
   if(!post.ok)return denied('REVIEWED_SOURCE_PREFLIGHT_FAILED');
   const operational=assessFleetDepotOperationalReadiness(candidate);
-  if(!operational.ready)
+  // Capacity-only preview can preserve unknown statuses, but MUST report
+  // operationally blocked. It is not an owner status decision.
+  if(operational.reasons.some(r=>r!=='DRIVER_STATUS_NEEDS_OWNER_REVIEW'))
     return denied('OPERATIONAL_READINESS_STILL_BLOCKED',operational.counts);
   return {
     ok:true,
+    operationallyReady:operational.ready,
+    statusReviewRequired:operational.counts.uncertainDriverStatuses>0,
     // Contains PRIVATE full rich data: never write to GitHub or log to CI.
     candidate,
     counts:{activeReviewed:reviewed.size,changed,activeMissingBefore:missing},
@@ -82,4 +86,47 @@ export function prepareReviewedCourierCapacities(raw,decisions){
     productionIamVerified:false,
     previewOnly:true
   };
+}
+
+
+/** Private review plan bound to the COMPLETE original source digest.
+ * All uncertain statuses and ALL resulting active capacities need explicit
+ * individual decisions. This proves content/CAS, never reviewer identity.
+ */
+export function prepareReviewedCourierOperations(raw,review){
+  try{
+    if(!review||typeof review!=='object'||Array.isArray(review)||
+       Object.keys(review).sort().join(',')!=='capacities,sourceSha256,statuses'||
+       typeof review.sourceSha256!=='string'||
+       !/^[a-f0-9]{64}$/.test(review.sourceSha256)||
+       review.sourceSha256!==sha256(raw))
+      return denied('REVIEW_SOURCE_CHANGED_OR_PLAN_INVALID');
+    if(raw?.sealed===true||Object.hasOwn(raw,'migrationSourceSha256')||!preflight(raw).ok)
+      return denied('INVALID_OR_MIGRATED_REVIEW_SOURCE');
+    const known=s=>typeof s==='string'&&['aktiv','aktív','inaktiv','inaktív'].includes(s.trim().toLowerCase());
+    const unknown=raw.drivers.filter(d=>!known(d.status));
+    if(!Array.isArray(review.statuses)||review.statuses.length!==unknown.length)
+      return denied('ALL_UNCERTAIN_STATUSES_REQUIRE_REVIEW');
+    const byId=new Map(unknown.map(d=>[d.id,d])),seen=new Set();
+    const candidate=JSON.parse(JSON.stringify(raw));
+    for(const d of review.statuses){
+      if(!d||typeof d!=='object'||Array.isArray(d)||
+         Object.keys(d).sort().join(',')!=='daCode,id,reviewed,status'||
+         d.reviewed!==true||!['aktiv','inaktiv'].includes(d.status)||
+         !byId.has(d.id)||seen.has(d.id)||da(d.daCode)!==da(byId.get(d.id).daCode))
+        return denied('INVALID_EXPLICIT_STATUS_REVIEW');
+      seen.add(d.id);
+      candidate.drivers.find(row=>row.id===d.id).status=d.status;
+    }
+    const ids=new Set(candidate.drivers.filter(d=>active(d.status)).map(d=>da(d.daCode)));
+    if(!Array.isArray(review.capacities)||review.capacities.length!==ids.size||
+       new Set(review.capacities.map(d=>da(d?.daCode))).size!==ids.size||
+       review.capacities.some(d=>!ids.has(da(d?.daCode))))
+      return denied('ALL_RESULTING_ACTIVE_CAPACITIES_REQUIRE_REVIEW');
+    const prepared=prepareReviewedCourierCapacities(candidate,review.capacities);
+    if(!prepared.ok||!prepared.operationallyReady)
+      return denied('REVIEWED_OPERATIONS_STILL_BLOCKED');
+    return {...prepared,previousSourceSha256:review.sourceSha256,
+      statusDecisionsReviewed:seen.size,reviewedDecisionsAuthenticated:false};
+  }catch{return denied('PRIVATE_OPERATIONS_REVIEW_INVALID');}
 }

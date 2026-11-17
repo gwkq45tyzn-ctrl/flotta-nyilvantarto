@@ -86,3 +86,12 @@ test('no operationally usable vehicles or missing source arrays blocks readiness
   assert.ok(assess({drivers:[]}).reasons.includes('INVALID_SOURCE_ARRAYS'));
   assert.equal(assess(null).authorizedForImport,false);
 });
+
+test('another active reviewed courier cannot mask an unresolved status',()=>{
+  const s=source();s.drivers[1].status='ismeretlen';
+  const r=assess(s);
+  assert.equal(r.counts.activeDrivers,1);
+  assert.equal(r.counts.activeWithoutCapacity,0);
+  assert.equal(r.ready,false);
+  assert.deepEqual(r.reasons,['DRIVER_STATUS_NEEDS_OWNER_REVIEW']);
+});

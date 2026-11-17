@@ -206,7 +206,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     nodes.numbers.hidden=false;nodes.other.hidden=false;
     nodes.other.textContent='Nem aktív futárok: '+details.inactive+
       '. Bizonytalan státuszú futárok: '+details.unknown+
-      '. Ezeket a segéd nem módosítja; a státuszuk tulajdonosi ellenőrzést igényelhet.'+
+      '. Ezeket a segéd nem módosítja. Bizonytalan státusz mellett a működési alkalmasság BLOKKOLT; külön, forráshoz kötött tulajdonosi státuszdöntés kell.'+
       (details.migrationWithinAtomicBound?'':(' VIGYÁZAT: az összes '+details.keyedPairs+
         ' futár- és járműrekord migrációja '+details.migrationOwnedReads+
         ' dokumentumot igényel; a jelenlegi helyi 120-as tranzakciós '+
@@ -273,6 +273,8 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
         vehicles:candidate.vehicles.length,fuelCards:candidate.fuelCards.length,
         contacts:candidate.contacts.length,uncertainStatusDrivers:details.unknown},
       reviewedActiveDrivers:reviewRows.length,
+      allUncertainStatusesIndividuallyReviewed:details.unknown===0,
+      operationallyReady:details.unknown===0&&details.migrationWithinAtomicBound,
       migrationOwnedReadDocuments:details.migrationOwnedReads,
       migrationAtomicReadLimit:MAX_ATOMIC_OWNED_READS,
       migrationWithinAtomicReadBound:details.migrationWithinAtomicBound,

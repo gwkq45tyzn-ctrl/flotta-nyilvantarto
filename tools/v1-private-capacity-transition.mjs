@@ -19,11 +19,11 @@ import {resolve} from 'node:path';
 import {assessPrivateAppStateReadbacks}
   from './v1-private-appstate-double-readback.mjs';
 import {assessPrivateFleetExport} from './v1-owner-readiness-cli.mjs';
-import {prepareReviewedCourierCapacities} from './v1-capacity-remediation.mjs';
+import {prepareReviewedCourierCapacities,prepareReviewedCourierOperations} from './v1-capacity-remediation.mjs';
 import {sha256} from './v1-migration-dryrun.mjs';
 
 const MAX_SOURCE_BYTES=1_200_000,MAX_DECISIONS_BYTES=64*1024;
-export const CAPACITY_TRANSITION_SCHEMA='imile-v1-private-capacity-transition-1';
+export const CAPACITY_TRANSITION_SCHEMA='imile-v1-private-capacity-transition-2';
 const active=s=>typeof s==='string'&&
   ['aktiv','aktív'].includes(s.trim().toLowerCase());
 const normDA=s=>typeof s==='string'?s.trim().toUpperCase():'';
@@ -32,7 +32,9 @@ function verdict(reasons,extra={}){
   const sorted=[...new Set(reasons)].sort();
   return {
     schema:CAPACITY_TRANSITION_SCHEMA,
+    locallyProvenReviewedTransition:sorted.length===0,
     locallyProvenOnlyReviewedCapacitiesChanged:sorted.length===0,
+    locallyProvenOnlyReviewedOperationsChanged:false,
     reasons:sorted,
     readbackStable:false,originalFileMatchesReadback:false,
     allActiveDriversIndividuallyReviewed:false,
@@ -84,6 +86,16 @@ export function assessPrivateCapacityTransition({
     readbackStable:true,originalFileMatchesReadback:true
   });}
 
+  // A digest-bound operations plan additionally reviews every uncertain
+  // status. Legacy arrays remain capacity-only previews, never status approval.
+  const operations=decisions!==null&&typeof decisions==='object'&&!Array.isArray(decisions);
+  let expected;
+  if(operations){
+    expected=prepareReviewedCourierOperations(source,decisions);
+    if(!expected.ok)return verdict([expected.reason],{
+      readbackStable:true,originalFileMatchesReadback:true,counts:readback.counts
+    });
+  }
   // No implicit 70, 80 or any inherited capacity approval: this stronger
   // owner transition gate demands one explicit decision for EVERY active DA,
   // including drivers who already had a valid capacity.
@@ -105,13 +117,12 @@ export function assessPrivateCapacityTransition({
     reviewedDA.add(id);
   }
   if(reviewedDA.size!==expectedDA.size)complete=false;
-  if(!complete)return verdict(['MISSING_OR_INVALID_INDIVIDUAL_ACTIVE_DRIVER_REVIEW'],{
+  if(!complete&&!operations)return verdict(['MISSING_OR_INVALID_INDIVIDUAL_ACTIVE_DRIVER_REVIEW'],{
     readbackStable:true,originalFileMatchesReadback:true,
     allActiveDriversIndividuallyReviewed:false,
     counts:readback.counts
   });
-  let expected;
-  try{expected=prepareReviewedCourierCapacities(source,decisions);}
+  try{if(!operations)expected=prepareReviewedCourierCapacities(source,decisions);}
   catch{return verdict(['CAPACITY_REMEDIATION_PRIVATE_PREFLIGHT_FAILED'],{
     readbackStable:true,originalFileMatchesReadback:true,
     allActiveDriversIndividuallyReviewed:true
@@ -142,14 +153,17 @@ export function assessPrivateCapacityTransition({
   });}
   const reasons=[];
   if(!state.sourcePreflightOk)reasons.push('CANDIDATE_FULL_RICH_PREFLIGHT_DENIED');
-  if(!state.operationallyReady)reasons.push('CANDIDATE_OPERATIONAL_CAPACITY_DENIED');
+  if(!state.operationallyReady)reasons.push('CANDIDATE_OPERATIONAL_REVIEW_DENIED');
   return verdict(reasons,{
+    locallyProvenOnlyReviewedCapacitiesChanged:!operations&&reasons.length===0,
+    locallyProvenOnlyReviewedOperationsChanged:operations&&reasons.length===0,
     readbackStable:true,
     originalFileMatchesReadback:true,
     allActiveDriversIndividuallyReviewed:true,
     fullRichCandidateMatchesExpected:true,
     candidateOperationalReadiness:state.operationallyReady,
     statusReviewWarnings:state.warnings,
+    allUncertainStatusesIndividuallyReviewed:operations&&expected.statusDecisionsReviewed>=0,
     counts:{
       ...state.counts,
       activeReviewed:expected.counts.activeReviewed,
@@ -164,14 +178,14 @@ function readPrivate(path,maxBytes){
 function output(r,json){
   if(json){process.stdout.write(JSON.stringify(r,null,2)+'\n');return;}
   process.stdout.write([
-    'iMile Flotta: PRIVÁT FUTÁRKAPACITÁS-ÁTMENET',
+    'iMile Flotta: PRIVÁT FUTÁRKAPACITÁS ÉS STÁTUSZ ELLENŐRZÉS',
     'Eredeti 2x forrás és a mentés egyezik: '+(r.readbackStable&&
       r.originalFileMatchesReadback?'IGEN':'NEM'),
     'Összes aktív futár egyenként felülvizsgálva: '+
       (r.allActiveDriversIndividuallyReviewed?'IGEN':'NEM'),
-    'Csak jóváhagyott kapacitás változott; rich adatok épek: '+
+    'Csak az egyenként ellenőrzött mezők változtak; rich adatok épek: '+
       (r.fullRichCandidateMatchesExpected?'IGEN':'NEM'),
-    'Helyi adatátmenet: '+(r.locallyProvenOnlyReviewedCapacitiesChanged?'MEGFELEL':'STOP'),
+    'Helyi adatátmenet: '+(r.locallyProvenReviewedTransition?'MEGFELEL':'STOP'),
     'Kizáró okok: '+(r.reasons.join(', ')||'nincs helyi eltérés'),
     'ÉLES IMPORT TILOS: független backup, aktuális éles forrás/írók, IAM, antirollback és kettős audit hiányzik.'
   ].join('\n')+'\n');
@@ -210,7 +224,7 @@ export function runPrivateCapacityTransition(argv=process.argv.slice(2)){
   try{result=assessPrivateCapacityTransition(inputs);}
   catch{result=verdict(['LOCAL_PRIVATE_TRANSITION_FAILED']);}
   output(result,json);
-  return result.locallyProvenOnlyReviewedCapacitiesChanged?0:2;
+  return result.locallyProvenReviewedTransition?0:2;
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))
   process.exitCode=runPrivateCapacityTransition();

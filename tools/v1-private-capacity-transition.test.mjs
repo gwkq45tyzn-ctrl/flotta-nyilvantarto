@@ -75,14 +75,14 @@ function runCLI(inputs){
     return p;
   }finally{rmSync(dir,{recursive:true,force:true});}
 }
-test('12 drivers and 14 cars: six explicit owner 70 reviews, full rich arrays and unknown keys unchanged',()=>{
+test('capacity-only preview preserves full rich fields but three uncertain statuses BLOCK readiness',()=>{
   const src=sample(),r=assessPrivateCapacityTransition(input(src));
-  assert.equal(r.locallyProvenOnlyReviewedCapacitiesChanged,true,r.reasons.join(','));
+  assert.equal(r.locallyProvenOnlyReviewedCapacitiesChanged,false,r.reasons.join(','));
   assert.equal(r.readbackStable,true);
   assert.equal(r.originalFileMatchesReadback,true);
   assert.equal(r.fullRichCandidateMatchesExpected,true);
   assert.equal(r.allActiveDriversIndividuallyReviewed,true);
-  assert.equal(r.candidateOperationalReadiness,true);
+  assert.equal(r.candidateOperationalReadiness,false);
   assert.equal(r.counts.drivers,12);
   assert.equal(r.counts.vehicles,14);
   assert.equal(r.counts.activeReviewed,6);
@@ -97,8 +97,8 @@ test('12 drivers and 14 cars: six explicit owner 70 reviews, full rich arrays an
   assert.equal(src.drivers[0].kapacitas,undefined,'original untouched');
   redacted(JSON.stringify(r));
   const p=runCLI(input(src));
-  assert.equal(p.status,0,p.stderr);
-  assert.equal(JSON.parse(p.stdout).locallyProvenOnlyReviewedCapacitiesChanged,true);
+  assert.equal(p.status,2,p.stderr);
+  assert.equal(JSON.parse(p.stdout).locallyProvenOnlyReviewedCapacitiesChanged,false);
 });
 test('unreviewed active driver is DENIED even if its old capacity was valid',()=>{
   const src=sample(),review=decisions();
@@ -191,4 +191,68 @@ test('owner CLI refuses unrecognized/duplicate flags and never accepts cloud/dep
   assert.equal(p.status,1);
   assert.deepEqual(JSON.parse(p.stdout).reasons,['INVALID_ARGUMENTS']);
   redacted(p.stdout+p.stderr);
+});
+
+import {prepareReviewedCourierOperations} from './v1-capacity-remediation.mjs';
+import {sha256} from './v1-migration-dryrun.mjs';
+function operationsInput(){
+  const src=sample(),plan={sourceSha256:sha256(src),capacities:decisions(),
+    statuses:src.drivers.slice(9).map((d,i)=>({id:d.id,daCode:d.daCode,
+      status:i===0?'aktiv':'inaktiv',reviewed:true}))};
+  plan.capacities.push({daCode:src.drivers[9].daCode,kapacitas:43,reviewed:true});
+  const prepared=prepareReviewedCourierOperations(src,plan);
+  assert.equal(prepared.ok,true,prepared.reason);
+  const capture=row(src);
+  return {src,plan,candidate:prepared.candidate,inputs:{
+    firstText:capture,secondText:capture,originalText:JSON.stringify(src),
+    candidateText:JSON.stringify(prepared.candidate),decisionsText:JSON.stringify(plan)}};
+}
+test('complete digest-bound status/capacity decisions preserve every other field; private CLI PASS without authority',()=>{
+  const {src,candidate,inputs}=operationsInput(),before=JSON.stringify(src);
+  const r=assessPrivateCapacityTransition(inputs);
+  assert.equal(r.locallyProvenOnlyReviewedOperationsChanged,true,JSON.stringify(r));
+  assert.equal(r.locallyProvenReviewedTransition,true);
+  assert.equal(r.locallyProvenOnlyReviewedCapacitiesChanged,false);
+  assert.equal(r.candidateOperationalReadiness,true);
+  assert.equal(r.allUncertainStatusesIndividuallyReviewed,true);
+  assert.equal(r.reviewedDecisionsAuthenticated,false);
+  assert.equal(r.authorizedForImport,false);
+  for(const key of ['vehicles','fuelCards','contacts','futureMeta'])assert.deepEqual(candidate[key],src[key]);
+  candidate.drivers.forEach((d,i)=>{
+    const a=structuredClone(d),b=structuredClone(src.drivers[i]);
+    delete a.kapacitas;delete b.kapacitas;
+    if(i>=9){delete a.status;delete b.status;}
+    assert.deepEqual(a,b);
+  });
+  assert.equal(JSON.stringify(src),before);
+  const cli=runCLI(inputs);assert.equal(cli.status,0,cli.stderr);redacted(cli.stdout+cli.stderr);
+});
+test('review plans deny stale whole-source pins, missing/duplicate/unreviewed status or resulting active capacity',()=>{
+  for(const mutate of [
+    p=>p.sourceSha256='a'.repeat(64),p=>p.statuses.pop(),
+    p=>p.statuses[1]=structuredClone(p.statuses[0]),
+    p=>p.statuses[0].reviewed=false,p=>p.statuses[0].status='ismeretlen',
+    p=>p.statuses[0].daCode='DA9999',p=>p.statuses[0].id='foreign',
+    p=>p.capacities.pop(),p=>p.capacities[6].kapacitas=null,
+    p=>p.capacities[6].kapacitas='70',p=>p.capacities[6].reviewed=false,
+    p=>p.capacities.push(structuredClone(p.capacities[0])),
+    p=>p.authorizedForImport=true
+  ]){
+    const {inputs,plan}=operationsInput();mutate(plan);inputs.decisionsText=JSON.stringify(plan);
+    const r=assessPrivateCapacityTransition(inputs);
+    assert.equal(r.locallyProvenReviewedTransition,false,JSON.stringify(r));
+    assert.equal(r.authorizedForImport,false);redacted(JSON.stringify(r));
+  }
+});
+test('unreviewed rich history change and source drift cannot hide behind owner status decisions',()=>{
+  const {inputs,candidate}=operationsInput();
+  candidate.fuelCards[0].history.push({nested:'PRIVATE_TAMPER_CANARY'});
+  inputs.candidateText=JSON.stringify(candidate);
+  const r=assessPrivateCapacityTransition(inputs);
+  assert.equal(r.locallyProvenOnlyReviewedCapacitiesChanged,false);
+  assert.equal(r.fullRichCandidateMatchesExpected,false);
+  const fresh=operationsInput();fresh.src.contacts[0].unknown.deep.i=999;
+  fresh.inputs.originalText=JSON.stringify(fresh.src);
+  fresh.inputs.firstText=row(fresh.src);fresh.inputs.secondText=row(fresh.src);
+  assert.ok(assessPrivateCapacityTransition(fresh.inputs).reasons.includes('REVIEW_SOURCE_CHANGED_OR_PLAN_INVALID'));
 });
