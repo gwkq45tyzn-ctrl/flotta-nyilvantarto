@@ -484,6 +484,7 @@
           <div class="form-group">
             <label>Következő szerviz (km)</label>
             <input type="number" id="kovetkezoSzervizKm" min="0">
+            <small id="serviceKmPreview" role="status" aria-live="polite" style="display:block;margin-top:.35rem;font-weight:650;"></small>
           </div>
           <div class="form-group">
             <label>Következő szerviz (dátum és idő)</label>
@@ -1641,6 +1642,24 @@
       refresh();
     }
 
+
+    // Km-based service warnings use the same source data and refresh cycle as other alerts.
+    function serviceKmDiff(vehicle) {
+      const parseKm = (value,positiveOnly) => {
+        if (value === null || value === undefined || String(value).trim() === '') return null;
+        const n=Number(String(value).replace(/[\\s\\u00a0]/g,''));
+        if (!Number.isFinite(n) || n < (positiveOnly ? 1 : 0)) return null;
+        return n;
+      };
+      const current=parseKm(vehicle.km,false);
+      const next=parseKm(vehicle.kovetkezoSzervizKm,true);
+      return current===null || next===null ? null :
+        {current,next,remaining:next-current};
+    }
+    function formatFleetKm(value) {
+      return Math.round(value).toLocaleString(currentLang==='en'?'en-GB':'hu-HU');
+    }
+
     function renderAlerts() {
       const items = [];
       const LONG_DAYS = 14;
@@ -1669,6 +1688,21 @@
             });
           }
         });
+
+        // The mileage threshold is independent from service dates and vehicle status.
+        const kmService=serviceKmDiff(v);
+        if(kmService && kmService.remaining <= 1000) {
+          items.push({
+            type: 'mileage',
+            id: v.id, rendszam: v.rendszam,
+            currentKm: kmService.current,
+            serviceKm: kmService.next,
+            remaining: kmService.remaining,
+            priority: kmService.remaining <= 0
+              ? -100000 + kmService.remaining
+              : -10000 + kmService.remaining
+          });
+        }
 
         // Szerviz azonnal feladatot jelent; operációra váltva megszűnik.
         if(v.status==='szerviz'||(v.status==='leallitott'&&v.statusSince)){
@@ -1730,6 +1764,30 @@
           </select></div>`;
       };
       container.innerHTML = items.map((i,alertIndex) => {
+        if (i.type === 'mileage') {
+          const overdue = i.remaining <= 0;
+          const label = overdue
+            ? (currentLang==='en'?'Oil change / mandatory service due':'Olajcsere / kötelező szerviz esedékes')
+            : (currentLang==='en'?'Oil change / service approaching':'Olajcsere / szerviz közeleg');
+          const distance = overdue
+            ? (currentLang==='en'?'Over by: ':'Túllépés: ') + formatFleetKm(Math.max(0,-i.remaining)) + ' km'
+            : (currentLang==='en'?'Remaining: ':'Hátralévő: ') + formatFleetKm(i.remaining) + ' km';
+          return `<div class="alert-item" data-service-km-vehicle="${i.id}"
+            style="background:${overdue?'#fff1f2':'#fffbeb'};border-left:4px solid ${overdue?'#dc2626':'#d97706'};">
+            <div style="flex:1;min-width:200px;">
+              <strong>${i.rendszam}</strong> — ${label}
+              <span class="badge ${overdue?'overdue':'soon'}" style="margin-left:.45rem;">${distance}</span>
+              <div style="font-size:.85rem;color:#475569;margin-top:.35rem;">
+                ${currentLang==='en'?'Current':'Aktuális'}: ${formatFleetKm(i.currentKm)} km
+                · ${currentLang==='en'?'Next service':'Következő szerviz'}: ${formatFleetKm(i.serviceKm)} km
+              </div>
+            </div>
+            <div class="actions" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+              ${alertStatusSelect(i.id,alertIndex)}
+              <button onclick="editVehicle('${i.id}')">${currentLang==='en'?'Edit service mileage':'Szerviz km módosítása'}</button>
+            </div>
+          </div>`;
+        }
         if (i.type === 'downtime') {
           return `<div class="alert-item" style="background:#fff7ed;">
             <div style="flex:1;">
@@ -2366,6 +2424,29 @@
       if (e.target.id === 'historyModal') closeHistoryModal();
     });
 
+    function updateServiceKmPreview() {
+      const preview=document.getElementById('serviceKmPreview');
+      if(!preview)return;
+      const result=serviceKmDiff({
+        km:document.getElementById('km')?.value,
+        kovetkezoSzervizKm:document.getElementById('kovetkezoSzervizKm')?.value
+      });
+      if(!result){preview.textContent='';return;}
+      if(result.remaining<=0) {
+        preview.textContent=(currentLang==='en'?'Service overdue by ':'Szerviz esedékes, túllépés: ')+
+          formatFleetKm(Math.max(0,-result.remaining))+' km';
+        preview.style.color='#b91c1c';
+      } else if(result.remaining<=1000) {
+        preview.textContent=(currentLang==='en'?'Service due in ':'Szerviz esedékes ')+
+          formatFleetKm(result.remaining)+' km'+(currentLang==='en'?'':' múlva');
+        preview.style.color='#b45309';
+      } else {
+        preview.textContent=(currentLang==='en'?'Next service in ':'Következő szerviz ')+
+          formatFleetKm(result.remaining)+' km'+(currentLang==='en'?'':' múlva');
+        preview.style.color='#64748b';
+      }
+    }
+
     function refresh() {
       renderStats();
       renderTable();
@@ -2381,6 +2462,7 @@
       document.getElementById('vehicleForm').reset();
       document.getElementById('editId').value = '';
       document.getElementById('modalTitle').textContent = 'Új jármű';
+      updateServiceKmPreview();
       if (id) {
         const v = vehicles.find(x => x.id === id);
         if (!v) return;
@@ -2405,6 +2487,7 @@
         document.getElementById('berletiSzerzodesLejarat').value = v.berletiSzerzodesLejarat || '';
         document.getElementById('currentDriver').value = v.currentDriver || '';
         document.getElementById('megjegyzes').value = v.megjegyzes || '';
+        updateServiceKmPreview();
       }
     }
 
@@ -2586,6 +2669,8 @@
     else document.getElementById('flottaUsername').focus();
     // Re-lock an expired session without requiring a page reload.
     setInterval(()=>fleetGateDisplay(),60000);
+    ['km','kovetkezoSzervizKm'].forEach(id =>
+      document.getElementById(id)?.addEventListener('input',updateServiceKmPreview));
     document.getElementById('search').addEventListener('input', () => {
       currentStatFilter = null;
       renderTable();
@@ -2600,6 +2685,5 @@
   <script src="features/active-driver-assignment-v25.js"></script>
   <script src="features/wide-layout-v24.js"></script>
   <script src="features/vehicle-groups-v27.js"></script>
-  <script src="features/service-mileage-alerts-v28.js"></script>
 </body>
 </html>
