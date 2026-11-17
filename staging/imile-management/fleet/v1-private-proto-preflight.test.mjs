@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,symlinkSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -148,4 +148,27 @@ test('stricter normalized-identity duplicate source rejects even if small',()=>{
   assert.equal(result.reason,'SOURCE_PREFLIGHT_OR_ADVISORY_DENIED');
   assert.equal(result.measuredDocuments,0);
   assert.equal(result.authorizedForImport,false);
+});
+
+test('pinned Firebase SDK lane: local private protobuf CLI denies symlink and invalid UTF-8 before encoding',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'imile-proto-private-file-boundary-'));
+  try{
+    const real=join(dir,'PRIVATE_PROTO_PATH_CANARY-real.json');
+    const sym=join(dir,'PRIVATE_PROTO_PATH_CANARY-symbolic.json');
+    const invalid=join(dir,'PRIVATE_PROTO_PATH_CANARY-invalid.json');
+    writeFileSync(real,JSON.stringify(original()),{mode:0o600});
+    symlinkSync(real,sym);
+    writeFileSync(invalid,Buffer.from([123,34,120,34,58,34,0x80,34,125]),
+      {mode:0o600});
+    for(const input of [sym,invalid]){
+      const p=spawnSync(process.execPath,[cli,'--input',input,'--json'],
+        {cwd:resolve('.'),encoding:'utf8',timeout:30000});
+      assert.equal(p.status,1,p.stderr);
+      const res=JSON.parse(p.stdout);
+      assert.equal(res.reason,'SOURCE_FILE_UNREADABLE_OR_INVALID_JSON');
+      assert.equal(res.authorizedForImport,false);
+      assert.equal(res.localSdkProtoEncodedSizeVerified,false);
+      assert.doesNotMatch(p.stdout+p.stderr,/PRIVATE_PROTO_PATH_CANARY|SYNTHETIC COURIER|DA0001/);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

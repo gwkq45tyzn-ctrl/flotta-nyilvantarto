@@ -55,6 +55,9 @@ jobs:
         run: |
           node --test \
             tools/v1-migration-dryrun.test.mjs \
+            tools/v1-migration-dryrun-cli-redaction.test.mjs \
+            tools/v1-private-utf8-read.test.mjs \
+            tools/v1-private-owner-file-boundary-integration.test.mjs \
             tools/v1-migration-acceptance.test.mjs \
             tools/v1-pinned-backup-trust.test.mjs \
             tools/v1-operational-readiness.test.mjs \
@@ -67,6 +70,8 @@ jobs:
             tools/v1-apps-script-cutover-evidence.test.mjs \
             tools/v1-apps-script-cutover-cli.test.mjs \
             tools/v1-source-cutover-bound-preflight.test.mjs \
+            tools/v1-private-appstate-double-readback.test.mjs \
+            tools/v1-private-capacity-transition.test.mjs \
             tools/v1-owner-capacity-review.static.test.mjs \
             docs/v1-apps-script-inventory-static.test.mjs
   signed-in-restricted-rules:

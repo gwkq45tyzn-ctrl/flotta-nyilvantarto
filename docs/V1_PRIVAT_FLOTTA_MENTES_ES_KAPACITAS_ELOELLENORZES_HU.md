@@ -14,6 +14,23 @@ A Flotta Google Sheet alapú régi backendjében a teljes négytömbös appálla
 
 **SOHA ne másolja be a teljes JSON-t GitHub issue-ba/PR-be, publikus chatbe, CI-ba vagy nyilvános felhőtárhelyre.** A valós adatok tartalmazhatnak neveket, telefonszámokat, rendszámokat, kártyaazonosítókat és beágyazott eseménytörténetet.
 
+## 1/A. Két külön, helyi _APP_STATE kiolvasás + a ténylegesen mentett JSON egyezése
+
+Az előző pontban rögzített, saját jogosultsággal megnyitott forrásból **kétszer külön** jelöld ki az `_APP_STATE` lap `A2:C2` cellatartományát, és másold ki az egy sorba eső három cellát két egymástól független, UTF-8 formátumú **privát** szövegfájlba (`elso.tsv`, `masodik.tsv`). A táblázatot **ne szerkeszd**. A harmadik privát fájl (`flotta-eredeti.json`) a C2 **teljes, változatlan** JSON-tartalma legyen, egyetlen karakter hozzáadása nélkül.
+
+A Google Sheets által automatikusan idézőjelezett TSV JSON-cellát a helyi ellenőrző feldolgozza. Alternatív helyi fájlformátum: egyetlen JSON tömb, amelynek három értéke `[revision, updatedAt, stateJsonString]` (a harmadik **sztring**, a teljes C2). A teljes JSON, a TSV vagy bármely azonosító **nem kerülhet a GitHubra, CI-ba vagy nyilvános beszélgetésbe**.
+
+```bash
+node tools/v1-private-appstate-double-readback.mjs \
+  --first "/privat/elso.tsv" \
+  --second "/privat/masodik.tsv" \
+  --saved "/privat/flotta-eredeti.json" --json
+```
+
+A `localReadbackAndSavedBytesConsistent:true` csak azt igazolja, hogy a **három általad helyben megadott fájl** azonos változatot jelöl, ugyanazt a teljes C2-szöveget tartalmazza, és a külön lementett JSON byte-pontosan megegyezik a C2-vel. Az eltérő verzió, időbélyeg, JSON vagy mentett fájl **STOP**. Az `operationallyReady:false` ettől külön, például hiányzó aktív futárkapacitást jelez; a kapacitás nélküli eredeti mentést **nem szabad eldobni**.
+
+**Fontos:** a két helyi fájl önmagában nem bizonyítja, hogy a táblázat a valódi, hiteles forrás vagy nincs másik éles Apps Script író, helyi függő módosítás, cache vagy jogosulatlan szerkesztő. Az eredeti mentés független tárolása, hashének külső rögzítése és a visszaállítás próbája továbbra is külön feladat. A script **sem mentést nem hoz létre, sem adatot nem tölt fel vagy módosít**.
+
 ## 2. Az eredeti négy adattömb ellenőrzése (adatot nem módosít)
 
 A helyileg mentett privát JSON-nak **mind a négy** tömböt tartalmaznia kell: `vehicles`, `drivers`, `fuelCards`, `contacts`. Ezen felül minden ismeretlen root/nested mezőt és `history` tartalmat meg kell őrizni.
@@ -35,6 +52,34 @@ A `tools/v1-owner-capacity-review.html` fájl a saját számítógépen, **offli
 - A program csak akkor engedi az új privát JSON exportját, ha az összes aktív futárnál megtörtént a tudatos áttekintés.
 - A letöltött új JSON-t **külön újra ki kell választani** a helyi SHA-256 és teljes tartalmi egyezéshez. Csak ezután tölthető le az **azonosítóktól megtisztított összesítő**.
 - A változtatás kizárólag a privát új fájlban történik. A régi, teljes forrás és a Google Sheet **változatlan** marad. A két fájl forrásazonosítója eltérő: az eredeti forrást semmiképpen sem szabad az újjal csendben felcserélni.
+
+### A tényleges régi → új Flotta-adatok külön ellenőrzése
+
+A 70 csomagos javaslat futáronkénti jóváhagyása után az **eredeti** és az **új** Flotta-export közötti eltérést is kötelező megvizsgálni. A meglévő két `elso.tsv`, `masodik.tsv` kiolvasást és az eredeti `flotta-eredeti.json` fájlt tartsd meg. Hozz létre **csak a saját gépeden** egy `futar-jovahagyasok.json` fájlt, például:
+
+```json
+[
+  {"daCode":"DA0001","kapacitas":70,"reviewed":true},
+  {"daCode":"DA0002","kapacitas":80,"reviewed":true}
+]
+```
+
+*A példában minden azonosító fiktív.* A tényleges fájlban minden **aktív futár** saját DA-azonosítóját és a tőle megerősített kapacitást add meg, **minden aktív futárhoz külön egy sort**, akkor is, ha a korábbi kapacitása érvényes. Ne változtasd automatikusan a 70-et mindenkinél.
+
+A privát összehasonlításhoz:
+
+```bash
+node tools/v1-private-capacity-transition.mjs \
+  --first "/privat/elso.tsv" \
+  --second "/privat/masodik.tsv" \
+  --original "/privat/flotta-eredeti.json" \
+  --candidate "/privat/flotta-kapacitas-ellenorzott.json" \
+  --decisions "/privat/futar-jovahagyasok.json" --json
+```
+
+A `locallyProvenOnlyReviewedCapacitiesChanged:true` azt jelenti, hogy az új fájlban csak az egyenként jóváhagyott **aktív futárkapacitások** térnek el az eredetitől. A járművek, km-ek, státuszok, történetek, tankolókártyák, kapcsolatok és az ismeretlen beágyazott mezők változatlanok. Bármilyen más eltérésnél **STOP**. A három bizonytalan státusz külön tulajdonosi felülvizsgálata továbbra is szükséges.
+
+Ez **nem élesítés**, nem jelenti a különálló jóváhagyások hiteles ellenőrzését, és nem állítja át a Google Sheetet vagy a Firebase-t. Az új kapacitásos forrást új, külön ellenőrzött privát mentésként kell kezelni, a korábbi forrásmentést nem szabad felülírni.
 
 Új előellenőrzés az **új** privát JSON-on:
 

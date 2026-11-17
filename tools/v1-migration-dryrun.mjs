@@ -195,24 +195,36 @@ function cli() {
     else if(command==='dry-run')result=buildPlan(snapshot);
     else if(command==='backup')result=simulateBackup(snapshot);
     else result=restoreDrill(snapshot,opts['expected-sha']);
+    // Programmatic preflight may return duplicate raw DA/plate values,
+    // local paths or nested exception details. NEVER echo those into a
+    // terminal/CI log or a saved failed-preflight report.
+    const safeErrors=command==='preflight'&&!result.ok
+      ?['PRIVATE_SOURCE_PREFLIGHT_DENIED']
+      :command==='restore-drill'&&!result.ok
+        ?['PRIVATE_BACKUP_RESTORE_DENIED']:null;
+    const safeResult=safeErrors?{...result,
+      ...(command==='preflight'?{errors:safeErrors}:{error:safeErrors[0]})}
+      :result;
     if(opts.output) {
       // Local file only; never overwrite an existing backup or audit artifact.
-      writeFileSync(opts.output,JSON.stringify(result,null,2)+'\n',
+      writeFileSync(opts.output,JSON.stringify(safeResult,null,2)+'\n',
         {encoding:'utf8',flag:'wx',mode:0o600});
     }
-    // No personal record or full plan in CLI output by default.
+    // No personal record, file path, invalid field, or full plan in stdout.
     console.log(JSON.stringify({
       ok:command==='preflight'?result.ok:command==='restore-drill'?result.ok:true,
       sourceSha256:result.sourceSha256||null,
       counts:result.counts||result.restoredCounts||result.sourceCounts||null,
       outputWritten:Boolean(opts.output),
       authorizedForImport:false,
-      errors:result.errors||result.error||null
+      errors:safeErrors
     },null,2));
     if((command==='preflight'||command==='restore-drill')&&!result.ok)
       process.exitCode=2;
-  }catch(e){
-    console.error('V1 local migration drill BLOCKED: '+String(e.message||e));
+  }catch{
+    // Syntax and filesystem errors often include the caller's path or a
+    // fragment of the private input. Never stringify raw exceptions here.
+    console.error('V1 local migration drill BLOCKED: PRIVATE_INPUT_OR_ARGUMENTS_DENIED');
     process.exitCode=2;
   }
 }
