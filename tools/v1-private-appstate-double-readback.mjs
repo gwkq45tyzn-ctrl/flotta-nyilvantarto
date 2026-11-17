@@ -60,8 +60,9 @@ function unquoteTsvCell(x){
   if(x.startsWith('"')){
     if(x.length<2||!x.endsWith('"'))throw Error('ROW_INVALID');
     const body=x.slice(1,-1);
-    if(/"(?!")/.test(body))throw Error('ROW_INVALID');
-    return body.replaceAll('""','"');
+    const decoded=body.replaceAll('""','"');
+    if(decoded.replaceAll('"','""')!==body)throw Error('ROW_INVALID');
+    return decoded;
   }
   return x;
 }
