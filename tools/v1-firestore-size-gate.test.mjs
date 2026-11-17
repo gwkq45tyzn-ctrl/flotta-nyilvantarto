@@ -110,3 +110,17 @@ test('quoted UTF-8 field paths, malformed UTF-16 and directly nested arrays fail
   assert.match(check([['x']]),/FIRESTORE_NESTED_ARRAY/);
   assert.equal(checkSizeGate({...raw,extra:[{items:['árvíz']}]},{}).advisoryOk,true);
 });
+
+
+test('rich map field names are not document path segments; retain slash and dot keys',()=>{
+  const rich={'vendor/reference':'árvíztűrő','.':{'..':'📦'},'a`b\\c':true};
+  const raw=generateLargeFixture(1,1);
+  raw.drivers[0].history[0].extra=rich;
+  const before=structuredClone(raw);
+  const result=checkSizeGate(raw,{'flottaDrivers/DA0000':raw.drivers[0]});
+  assert.equal(result.advisoryOk,true,result.reason);
+  assert.equal(result.authorizedForImport,false);
+  assert.deepEqual(raw,before);
+  for(const path of ['flottaDrivers/.','flottaDrivers/..','flottaDrivers/a/b'])
+    assert.equal(checkSizeGate(raw,{[path]:rich}).advisoryOk,false,path);
+});

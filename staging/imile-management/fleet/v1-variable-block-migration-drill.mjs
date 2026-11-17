@@ -541,6 +541,9 @@ async function main(){
     // These are valid, independent business keys in different collections.
     smallSource.vehicles[0].rendszam=smallSource.drivers[10].daCode;
     smallSource.extra={future:{preserve:'árvíztűrő'}};
+    smallSource.drivers[0].history[0].extra={
+      'vendor/reference':'árvíztűrő','.' : {'..':'📦'},'a`b\\c':true
+    };
     const smallPrepared=projectBlockPairs(smallSource);
     assert.equal(smallPrepared.pairs.length,26);
     assert.equal(smallPrepared.firestoreEncodedSizeVerified,false);
@@ -587,6 +590,11 @@ async function main(){
     assert.equal(step.committed,1);
     session=new VariableBlockSession(db,smallSource);
     assert.equal((await session.verifyCommitted()).committed,1);
+    assert.deepEqual((await getDoc(doc(db,smallPrepared.pairs[0].masterPath))).data(),
+      smallPrepared.pairs[0].master,'rich map keys survive actual Firestore roundtrip');
+    assert.deepEqual((await getDoc(session.sourceRef)).data().drivers[0].history[0].extra,
+      smallSource.drivers[0].history[0].extra);
+    console.log('PASS [E+SDK]: slash/dot/escaped rich history keys survive archive and keyed readback');
     // Two independently constructed sessions both finish complete readback at
     // committedChunks=1 BEFORE either is allowed to start its transaction.
     // The old writeBatch path accepted both stale writers; the loser must
