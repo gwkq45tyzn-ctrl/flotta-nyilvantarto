@@ -42,7 +42,7 @@ jobs:
       - name: Existing Flotta contract tests
         run: node features/firestore-bridge.test.mjs
       - name: Existing runtime regressions
-        run: node --test features/firestore-bridge.runtime-regressions.test.cjs
+        run: node --test features/firestore-bridge.runtime-regressions.test.cjs features/firestore-bridge.driver-edit-guard.test.cjs
       - name: Existing cutover safety
         run: node --test features/firestore-bridge.cutover-safety.test.cjs
       - name: Existing pre-import protection

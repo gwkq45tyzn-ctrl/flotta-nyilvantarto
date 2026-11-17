@@ -515,6 +515,39 @@ try{
     null,{timeout:25000});
   console.log('PASS [B+E]: original driver capacity 80→70 reaches ACTUAL Depot shared Fleet UI automatically');
 
+  // Leave the first genuine driver form open while another authenticated
+  // Fleet browser changes capacity. onSnapshot updates the array, but must
+  // never make the still-open stale inputs safe to overwrite that new value.
+  await editDriverButton.click();
+  await flottaPage.locator('#driverModal.active #driverCapacity').fill('75');
+  await secondFleetPage.locator('#driverTable button[onclick^="editDriver"]').first().click();
+  await secondFleetPage.locator('#driverModal.active #driverCapacity').fill('65');
+  await secondFleetPage.locator('#driverModal.active #driverForm button[type="submit"]').click();
+  await flottaPage.waitForFunction(()=>drivers.some(d=>d.daCode==='DA0001'&&d.kapacitas===65),
+    null,{timeout:20000});
+  const beforeStaleDriver=await serverRead('flottaDrivers/DA0001');
+  assert.equal(beforeStaleDriver.kapacitas,65);
+  await flottaPage.locator('#driverModal.active #driverForm button[type="submit"]').click();
+  assert.equal(await flottaPage.locator('#driverModal.active').count(),1,
+    'Conflict must preserve the original open form');
+  assert.equal(await flottaPage.locator('#driverCapacity').inputValue(),'75');
+  const driverDraft=await flottaPage.evaluate(()=>JSON.parse(
+    localStorage.getItem('flotta_stale_driver_draft_v1')));
+  assert.equal(driverDraft.fields.driverCapacity,'75');
+  assert.match(await flottaPage.locator('#syncStatus').textContent(),/Ütközés/);
+  assert.deepEqual(await serverRead('flottaDrivers/DA0001'),beforeStaleDriver,
+    'Stale original driver form cannot overwrite second browser or rich history');
+  // Explicitly close and reopen, then perform the reviewed capacity edit.
+  await flottaPage.evaluate(()=>closeDriverModal());
+  await editDriverButton.click();
+  assert.equal(await flottaPage.locator('#driverCapacity').inputValue(),'65');
+  await flottaPage.locator('#driverCapacity').fill('70');
+  await flottaPage.locator('#driverForm button[type="submit"]').click();
+  await secondFleetPage.waitForFunction(()=>drivers.some(d=>d.daCode==='DA0001'&&d.kapacitas===70),
+    null,{timeout:20000});
+  console.log('PASS [REAL CHROMIUM]: stale driver form cannot overwrite second-browser capacity 65; input 75 preserved separately; reopen and reviewed 70 succeeds');
+
+
   // An existing future booking stores its original 80, but next-day planning
   // must recalculate against today's LIVE driver master (70), without
   // mutating the previously committed Firestore booking.
