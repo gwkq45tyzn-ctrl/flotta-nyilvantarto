@@ -9,7 +9,7 @@ A Flotta Google Sheet alapú régi backendjében a teljes négytömbös appálla
 
 1. A jogosult tulajdonos azonosítsa a valós, jelenleg használt eredeti Flotta-fájlt és a hozzá tartozó telepített Apps Script-írókat. A fájl neve önmagában **nem igazolja a kanonikus forrásvoltát**.
 2. Rögzítse privát helyen az eredeti verziót és módosítási időt, majd mentse el a C2 teljes JSON karakterláncát **változtatás nélkül**, UTF-8 kódolással `.json` fájlba. Ne szerkessze a Google Sheet celláit; ne állítson át semmit az éles rendszeren.
-3. Újbóli kiolvasáskor ellenőrizze, hogy a verzió, az időbélyeg **és az eredeti teljes JSON** azonos maradt. Ha a központi forrás közben megváltozott, a mentési kör **érvénytelen**, az új állapotból kell újrakezdeni.
+3. Újbóli kiolvasáskor ellenőrizze, hogy a verzió, a második cella változatlan kérésazonosítója/tokenje **és az eredeti teljes JSON** azonos maradt. Ha a központi forrás közben megváltozott, a mentési kör **érvénytelen**, az új állapotból kell újrakezdeni.
 4. Egy **külön**, tulajdonosi mentési eljárás keretében őrizze meg az eredeti forrás független, visszaállítható példányát és külsőleg rögzített SHA-256-át. Egy saját magából újra kiszámított hash nem független hitelesítés.
 
 **SOHA ne másolja be a teljes JSON-t GitHub issue-ba/PR-be, publikus chatbe, CI-ba vagy nyilvános felhőtárhelyre.** A valós adatok tartalmazhatnak neveket, telefonszámokat, rendszámokat, kártyaazonosítókat és beágyazott eseménytörténetet.
@@ -18,7 +18,7 @@ A Flotta Google Sheet alapú régi backendjében a teljes négytömbös appálla
 
 Az előző pontban rögzített, saját jogosultsággal megnyitott forrásból **kétszer külön** jelöld ki az `_APP_STATE` lap `A2:C2` cellatartományát, és másold ki az egy sorba eső három cellát két egymástól független, UTF-8 formátumú **privát** szövegfájlba (`elso.tsv`, `masodik.tsv`). A táblázatot **ne szerkeszd**. A harmadik privát fájl (`flotta-eredeti.json`) a C2 **teljes, változatlan** JSON-tartalma legyen, egyetlen karakter hozzáadása nélkül.
 
-A Google Sheets által automatikusan idézőjelezett TSV JSON-cellát a helyi ellenőrző feldolgozza. Alternatív helyi fájlformátum: egyetlen JSON tömb, amelynek három értéke `[revision, updatedAt, stateJsonString]` (a harmadik **sztring**, a teljes C2). A teljes JSON, a TSV vagy bármely azonosító **nem kerülhet a GitHubra, CI-ba vagy nyilvános beszélgetésbe**.
+A Google Sheets által automatikusan idézőjelezett TSV JSON-cellát a helyi ellenőrző feldolgozza. Alternatív helyi fájlformátum: egyetlen JSON tömb, amelynek három értéke `[revision, requestIdOrCaptureToken, stateJsonString]` (a harmadik **sztring**, a teljes C2). A teljes JSON, a TSV vagy bármely azonosító **nem kerülhet a GitHubra, CI-ba vagy nyilvános beszélgetésbe**.
 
 ```bash
 node tools/v1-private-appstate-double-readback.mjs \
@@ -27,7 +27,7 @@ node tools/v1-private-appstate-double-readback.mjs \
   --saved "/privat/flotta-eredeti.json" --json
 ```
 
-A `localReadbackAndSavedBytesConsistent:true` csak azt igazolja, hogy a **három általad helyben megadott fájl** azonos változatot jelöl, ugyanazt a teljes C2-szöveget tartalmazza, és a külön lementett JSON byte-pontosan megegyezik a C2-vel. Az eltérő verzió, időbélyeg, JSON vagy mentett fájl **STOP**. Az `operationallyReady:false` ettől külön, például hiányzó aktív futárkapacitást jelez; a kapacitás nélküli eredeti mentést **nem szabad eldobni**.
+A `localReadbackAndSavedBytesConsistent:true` csak azt igazolja, hogy a **három általad helyben megadott fájl** azonos változatot jelöl, ugyanazt a teljes C2-szöveget tartalmazza, és a külön lementett JSON byte-pontosan megegyezik a C2-vel. Az eltérő verzió, kérésazonosító/token, JSON vagy mentett fájl **STOP**. Az `operationallyReady:false` ettől külön, például hiányzó aktív futárkapacitást jelez; a kapacitás nélküli eredeti mentést **nem szabad eldobni**.
 
 **Fontos:** a két helyi fájl önmagában nem bizonyítja, hogy a táblázat a valódi, hiteles forrás vagy nincs másik éles Apps Script író, helyi függő módosítás, cache vagy jogosulatlan szerkesztő. Az eredeti mentés független tárolása, hashének külső rögzítése és a visszaállítás próbája továbbra is külön feladat. A script **sem mentést nem hoz létre, sem adatot nem tölt fel vagy módosít**.
 
@@ -119,3 +119,8 @@ node tools/v1-source-cutover-bound-preflight.mjs \
 - Független audit és a tulajdonos **külön, konkrét release artifactra vonatkozó engedélye**.
 
 **A teljes V1 addig NO-GO.** A különleges rendszerhozzáférés vagy vezetői/IT-jóváhagyás hiányát sosem szabad megkerülni. A halasztott OFD, In-Hub, Excel, Attendance és PWA funkciók nem részei az első Flotta+Depó kiadásnak.
+
+
+## A második cella nem hiteles időbélyeg
+
+Az aktuális `_APP_STATE` fejlécében a B oszlop neve **Request ID**. Ezt átlátszatlan tokenként hasonlítjuk össze; belőle nem következtetünk mentési időre vagy frissességre. A 2-es readback-séma `captureTokenMatched` mezője jelzi az egyezést. A kompatibilitási `timestampMatched` csak két érvényes, azonos ISO dátumszövegnél igaz; ettől még a `freshLiveSourceVerified` és az importengedély mindig hamis. A régi objektumos `updatedAt` bemeneti név továbbra is elfogadott alias, nem idő-hitelesítés.
