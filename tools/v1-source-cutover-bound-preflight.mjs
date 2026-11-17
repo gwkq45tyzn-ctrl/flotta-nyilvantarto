@@ -18,7 +18,7 @@
  * files. Never prints fleet fields, IDs, aliases, contacts, URLs, file paths,
  * raw errors, or owner inventory reference names.
  */
-import {lstatSync,readFileSync} from 'node:fs';
+import {readStrictPrivateUtf8File} from './v1-private-utf8-read.mjs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {assessPrivateFleetExport} from './v1-owner-readiness-cli.mjs';
@@ -102,10 +102,7 @@ function output(result,json){
 }
 
 function readPrivateJson(path,maxBytes){
-  const st=lstatSync(path);
-  if(!st.isFile()||st.isSymbolicLink()||!Number.isSafeInteger(st.size)||
-     st.size<1||st.size>maxBytes)throw Error('PRIVATE_INPUT_DENIED');
-  return JSON.parse(readFileSync(path,'utf8'));
+  return JSON.parse(readStrictPrivateUtf8File(path,maxBytes));
 }
 
 export function runBoundOwnerPreflight(argv=process.argv.slice(2)){
