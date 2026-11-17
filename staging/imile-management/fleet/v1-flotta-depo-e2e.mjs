@@ -498,6 +498,14 @@ try{
   // sees it, then the booking server stores the CURRENT keyed capacity.
   const editDriverButton=flottaPage.locator('#driverTable button[onclick^="editDriver"]').first();
   await editDriverButton.click();
+  const beforeEmptyCapacity=await serverRead('flottaDrivers/DA0001');
+  await flottaPage.locator('#driverModal.active #driverCapacity').fill('');
+  await flottaPage.locator('#driverModal.active #driverForm button[type="submit"]').click();
+  assert.equal(await flottaPage.locator('#driverModal.active').count(),1);
+  assert.equal(await flottaPage.locator('#driverCapacity').evaluate(el=>el.validity.valueMissing),true);
+  assert.deepEqual(await serverRead('flottaDrivers/DA0001'),beforeEmptyCapacity,
+    'Blank capacity cannot become an automatic zero in real browser');
+  console.log('PASS [REAL CHROMIUM]: blank daily capacity rejected without write or default; explicit reviewed capacity required');
   await flottaPage.locator('#driverModal.active #driverCapacity').fill('70');
   await flottaPage.locator('#driverModal.active #driverForm button[type="submit"]').click();
   let currentDriver;

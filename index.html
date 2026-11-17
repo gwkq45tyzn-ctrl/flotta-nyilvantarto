@@ -547,7 +547,7 @@
           </div>
           <div class="form-group">
             <label data-i18n="driverCapacity">Napi csomagkapacitás</label>
-            <input type="number" id="driverCapacity" min="0" max="10000" step="1" value="0" required>
+            <input type="number" id="driverCapacity" min="0" max="10000" step="1" required>
           </div>
           <div class="form-group">
             <label>Jogosítvány lejárat</label>
@@ -1877,7 +1877,8 @@
         document.getElementById('driverDaCode').value = d.daCode || '';
         document.getElementById('driverAgency').value = d.agency || '';
         document.getElementById('driverPhone').value = d.phone || '';
-        document.getElementById('driverCapacity').value = String(d.kapacitas ?? d.capacity ?? 0);
+        document.getElementById('driverCapacity').value = Number.isSafeInteger(d.kapacitas) && d.kapacitas >= 0 && d.kapacitas <= 10000
+          ? String(d.kapacitas) : '';
         document.getElementById('driverLicenseExpiry').value = d.licenseExpiry || '';
         document.getElementById('driverStatus').value = d.status || 'ismeretlen';
         document.getElementById('driverSince').value = d.since || '';
@@ -1893,8 +1894,9 @@
       e.preventDefault();
       const id = document.getElementById('driverEditId').value || uid();
       const existing = drivers.find(d => d.id === id);
-      const kapacitas = Number(document.getElementById('driverCapacity').value);
-      if (!Number.isSafeInteger(kapacitas) || kapacitas < 0 || kapacitas > 10000) {
+      const rawCapacity = document.getElementById('driverCapacity').value.trim();
+      const kapacitas = Number(rawCapacity);
+      if (!rawCapacity || !Number.isSafeInteger(kapacitas) || kapacitas < 0 || kapacitas > 10000) {
         alert(t('invalidDriverCapacity'));
         return;
       }

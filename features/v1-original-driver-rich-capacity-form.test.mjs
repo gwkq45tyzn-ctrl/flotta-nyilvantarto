@@ -76,7 +76,7 @@ test('invalid capacity cannot silently change original source or call save',()=>
     id:'rich-driver-1',daCode:'DA0001',status:'aktiv',kapacitas:80,
     history:[{id:'old',note:'unchanged'}],revision:10
   };
-  for(const raw of ['10001','-1','3.14','not-a-number']){
+  for(const raw of ['','   ','10001','-1','3.14','not-a-number']){
     const {ctx,calls,submit}=form(original,{driverCapacity:raw});
     submit();
     assert.equal(calls.save,0,'invalid capacity '+raw+' must not persist');
@@ -84,4 +84,21 @@ test('invalid capacity cannot silently change original source or call save',()=>
     assert.equal(calls.alerts.length,1);
     assert.equal(ctx.drivers[0],original,'invalid input must not mutate record');
   }
+});
+
+
+test('driver form opens missing or invalid canonical capacity blank, never uses a fallback',()=>{
+  const start=html.indexOf('    function openDriverModal(');
+  const end=html.indexOf('    function closeDriverModal(',start);
+  assert.ok(start>0&&end>start);
+  for(const [kapacitas,expected] of [[undefined,''],[null,''],['70',''],[-1,''],[0,'0'],[95,'95']]){
+    const fields={};
+    const ctx=vm.createContext({drivers:[{id:'d1',capacity:70,kapacitas}],
+      document:{getElementById:id=>fields[id]??=({value:'',reset(){},classList:{add(){}}})}});
+    vm.runInContext(html.slice(start,end),ctx);
+    ctx.openDriverModal('d1');
+    assert.equal(fields.driverCapacity.value,expected);
+  }
+  const field=html.match(/<input[^>]*id="driverCapacity"[^>]*>/)[0];
+  assert.doesNotMatch(field,/value="[0-9]+"/,'new driver has no preset capacity');
 });

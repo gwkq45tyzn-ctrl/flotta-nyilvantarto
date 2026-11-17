@@ -116,7 +116,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Assert unchanged actual original full Fleet HTML
-        run: test "$(git rev-parse HEAD:index.html)" = "f04cc399f3ed91199ab2f7a2a904f6077d69fb62"
+        run: test "$(git rev-parse HEAD:index.html)" = "acf57b157804ee9b14026ef388c0a354d66e517f"
       - name: Free local browser & pinned Firebase dependencies
         run: |
           npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund

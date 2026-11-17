@@ -42,7 +42,7 @@ test('ORIGINAL complete Fleet remains intact with rich features and guarded clou
   const blob=crypto.createHash('sha1')
     .update(Buffer.from('blob '+bytes.length+'\0','utf8'))
     .update(bytes).digest('hex');
-  assert.equal(blob,'f04cc399f3ed91199ab2f7a2a904f6077d69fb62');
+  assert.equal(blob,'acf57b157804ee9b14026ef388c0a354d66e517f');
   assert.match(bridge,/function ensureUnifiedNavigation\(/);
   assert.match(bridge,/oldSetup.hidden=true/);
   assert.match(bridge,/PRESEAL_FLEET_READ_ONLY_UNTIL_TRUSTED_IMPORT/);
