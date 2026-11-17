@@ -53,6 +53,34 @@ A `tools/v1-owner-capacity-review.html` fájl a saját számítógépen, **offli
 - A letöltött új JSON-t **külön újra ki kell választani** a helyi SHA-256 és teljes tartalmi egyezéshez. Csak ezután tölthető le az **azonosítóktól megtisztított összesítő**.
 - A változtatás kizárólag a privát új fájlban történik. A régi, teljes forrás és a Google Sheet **változatlan** marad. A két fájl forrásazonosítója eltérő: az eredeti forrást semmiképpen sem szabad az újjal csendben felcserélni.
 
+### A tényleges régi → új Flotta-adatok külön ellenőrzése
+
+A 70 csomagos javaslat futáronkénti jóváhagyása után az **eredeti** és az **új** Flotta-export közötti eltérést is kötelező megvizsgálni. A meglévő két `elso.tsv`, `masodik.tsv` kiolvasást és az eredeti `flotta-eredeti.json` fájlt tartsd meg. Hozz létre **csak a saját gépeden** egy `futar-jovahagyasok.json` fájlt, például:
+
+```json
+[
+  {"daCode":"DA0001","kapacitas":70,"reviewed":true},
+  {"daCode":"DA0002","kapacitas":80,"reviewed":true}
+]
+```
+
+*A példában minden azonosító fiktív.* A tényleges fájlban minden **aktív futár** saját DA-azonosítóját és a tőle megerősített kapacitást add meg, **minden aktív futárhoz külön egy sort**, akkor is, ha a korábbi kapacitása érvényes. Ne változtasd automatikusan a 70-et mindenkinél.
+
+A privát összehasonlításhoz:
+
+```bash
+node tools/v1-private-capacity-transition.mjs \
+  --first "/privat/elso.tsv" \
+  --second "/privat/masodik.tsv" \
+  --original "/privat/flotta-eredeti.json" \
+  --candidate "/privat/flotta-kapacitas-ellenorzott.json" \
+  --decisions "/privat/futar-jovahagyasok.json" --json
+```
+
+A `locallyProvenOnlyReviewedCapacitiesChanged:true` azt jelenti, hogy az új fájlban csak az egyenként jóváhagyott **aktív futárkapacitások** térnek el az eredetitől. A járművek, km-ek, státuszok, történetek, tankolókártyák, kapcsolatok és az ismeretlen beágyazott mezők változatlanok. Bármilyen más eltérésnél **STOP**. A három bizonytalan státusz külön tulajdonosi felülvizsgálata továbbra is szükséges.
+
+Ez **nem élesítés**, nem jelenti a különálló jóváhagyások hiteles ellenőrzését, és nem állítja át a Google Sheetet vagy a Firebase-t. Az új kapacitásos forrást új, külön ellenőrzött privát mentésként kell kezelni, a korábbi forrásmentést nem szabad felülírni.
+
 Új előellenőrzés az **új** privát JSON-on:
 
 ```bash
