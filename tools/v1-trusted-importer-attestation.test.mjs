@@ -52,21 +52,24 @@ test('full-rich keyed mismatch DENY: mutated nested history',()=>{
   const out=check(raw,keyed);
   assert.equal(out.ok,false);
   assert.equal(out.reason,'KEYED_PARITY_OR_PARTIAL');
-  assert.ok(out.details.mismatched.includes('vehicles/ABC123'));
+  assert.equal(out.details.mismatchedCount,1);
+  assert.equal(Object.hasOwn(out.details,'mismatched'),false);
 });
 test('extra canonical keyed document must DENY',()=>{
   const raw=clean(),keyed=trustedKeyed(raw);
   keyed.drivers.ROGUE999={daCode:'ROGUE999',status:'aktiv'};
   const out=check(raw,keyed);
   assert.equal(out.ok,false);
-  assert.ok(out.details.unexpected.includes('drivers/ROGUE999'));
+  assert.equal(out.details.unexpectedCount,1);
+  assert.equal(Object.hasOwn(out.details,'unexpected'),false);
 });
 test('missing original keyed driver must DENY',()=>{
   const raw=clean(),keyed=trustedKeyed(raw);
   delete keyed.drivers.DA0001;
   const out=check(raw,keyed);
   assert.equal(out.ok,false);
-  assert.ok(out.details.missing.includes('drivers/DA0001'));
+  assert.equal(out.details.missingCount,1);
+  assert.equal(Object.hasOwn(out.details,'missing'),false);
 });
 test('missing keyed namespace must not be interpreted as complete',()=>{
   const raw=clean(),keyed={drivers:trustedKeyed(raw).drivers};
@@ -80,7 +83,7 @@ test('even a sourceIndex equal to the original array position DENY before import
     raw[kind][idx].sourceIndex=idx;
     const out=attestBeforeSeal(raw,{},sha256(raw));
     assert.equal(out.ok,false,kind);
-    assert.match(out.errors.join(' '),/sourceIndex/i);
+    assert.deepEqual(out.errors,['PRIVATE_SOURCE_PREFLIGHT_DENIED']);
     assert.equal(refusePoisonedSeal(raw).sealed,false);
   }
 });
@@ -89,7 +92,7 @@ test('duplicate DA, including mixed-case normalized variant DENY',()=>{
   raw.drivers.push({id:'d2',daCode:'da0001',status:'aktiv',kapacitas:50});
   const out=attestBeforeSeal(raw,{},sha256(raw));
   assert.equal(out.ok,false);
-  assert.match(out.errors.join(' '),/Duplicate DA/);
+  assert.deepEqual(out.errors,['PRIVATE_SOURCE_PREFLIGHT_DENIED']);
   assert.equal(refusePoisonedSeal(raw).sealed,false);
 });
 test('duplicate normalized license plate DENY, regardless of separator',()=>{
@@ -97,7 +100,7 @@ test('duplicate normalized license plate DENY, regardless of separator',()=>{
   raw.vehicles.push({id:'v2',rendszam:'abc 123',status:'aktiv'});
   const out=attestBeforeSeal(raw,{},sha256(raw));
   assert.equal(out.ok,false);
-  assert.match(out.errors.join(' '),/Duplicate plate/);
+  assert.deepEqual(out.errors,['PRIVATE_SOURCE_PREFLIGHT_DENIED']);
   assert.equal(refusePoisonedSeal(raw).sealed,false);
 });
 test('changed source after trusted backup SHA must DENY, including contact metadata',()=>{
@@ -111,4 +114,34 @@ test('refusePoisonedSeal never seals even a valid snapshot (no privilege bridge)
   const raw=clean(),out=refusePoisonedSeal(raw);
   assert.equal(out.sealed,false);
   assert.match(out.reason,/UNATTESTED/);
+});
+
+test('hostile malformed preseal source denial never discloses private DA/plate or exception',()=>{
+  const source=clean();
+  source.drivers[0].daCode='PRIVATE_DA_CANARY';
+  source.vehicles[0].rendszam='PRIVATE-PLATE-CANARY';
+  source.drivers.push({id:'d3',daCode:'private_da_canary',status:'aktiv',kapacitas:70});
+  const pre=attestBeforeSeal(source,{},sha256(source));
+  assert.equal(pre.ok,false);
+  assert.equal(pre.reason,'PREFLIGHT_FAILED');
+  assert.deepEqual(pre.errors,['PRIVATE_SOURCE_PREFLIGHT_DENIED']);
+  assert.equal(pre.authorizedForImport,false);
+  assert.equal(pre.sealed,false);
+  const denied=refusePoisonedSeal(source);
+  assert.equal(denied.sealed,false);
+  for(const value of ['PRIVATE_DA_CANARY','PRIVATE_PLATE_CANARY']){
+    assert.equal(JSON.stringify([pre,denied]).includes(value),false);
+  }
+});
+test('hostile getter errors fail closed without raw exception or private field',()=>{
+  const source=clean();
+  Object.defineProperty(source.drivers[0],'daCode',{
+    enumerable:true,get(){throw Error('PRIVATE_GETTER_EXCEPTION_CANARY')}
+  });
+  const r=attestBeforeSeal(source,{},'a'.repeat(64));
+  assert.equal(r.ok,false);
+  assert.equal(r.authorizedForImport,false);
+  assert.equal(r.reason,'PREFLIGHT_FAILED');
+  assert.equal(JSON.stringify(r).includes('PRIVATE_GETTER_EXCEPTION_CANARY'),false);
+  assert.equal(refusePoisonedSeal(source).sealed,false);
 });
