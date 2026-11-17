@@ -23,10 +23,11 @@ const cliFiles=[
   {path:resolve('tools/v1-owner-readiness-cli.mjs'),
     reason:'INPUT_FILE_READ_FAILED'},
   {path:resolve('tools/v1-apps-script-cutover-cli.mjs'),
-    reason:'MANIFEST_FILE_UNREADABLE'},
-  {path:resolve('staging/imile-management/fleet/v1-private-proto-preflight.mjs'),
-    reason:'SOURCE_FILE_UNREADABLE_OR_INVALID_JSON'}
+    reason:'MANIFEST_FILE_UNREADABLE'}
 ];
+// The protobuf CLI imports pinned Firebase SDK from the staging dependency
+// lane; test its symlink/UTF-8 denial in the mandatory Firebase SDK lane,
+// NOT by silently skipping missing modules in the pure offline runner.
 test('valid private UTF-8 includes every original accented and nested character byte-identically',()=>{
   const dir=mkdtempSync(join(tmpdir(),'imile-local-private-utf8-'));
   try{
@@ -68,7 +69,7 @@ test('malformed UTF-8 cannot turn into a valid JSON with U+FFFD replacement',()=
       e=>e.code==='PRIVATE_FILE_UNREADABLE_OR_BAD_UTF8');
   }finally{rmSync(dir,{force:true,recursive:true});}
 });
-test('all three private owner CLIs DENY symlink and malformed UTF-8, without paths in output',()=>{
+test('both dependency-free private owner CLIs DENY symlink and malformed UTF-8, without paths in output',()=>{
   const dir=mkdtempSync(join(tmpdir(),'imile-PRIVATE_SOURCE_PATH_CANARY-'));
   try{
     const input=join(dir,'actual-PRIVATE_SOURCE_PATH_CANARY.json');
