@@ -14,8 +14,13 @@ const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 export function verifyPinnedBackupContent({
   backup, trustedPinnedSha, expectedRevision, observedKeyed
 }={}){
-  const deny=(reason,details)=>({
-    ok:false,reason,details,
+  // Never return raw source-derived diagnostic details to callers that may
+  // display or log an attestation refusal: preflight errors can include DA IDs,
+  // plate numbers, nested error messages and keyed-path identity references.
+  // Keep only a fixed code. Detailed internal diagnostics belong solely in
+  // isolated, explicitly synthetic test fixtures.
+  const deny=(reason)=>({
+    ok:false,reason,details:null,
     proofScope:'LOCAL_CONTENT_INTEGRITY_ONLY',
     trustedExternalProvenanceVerified:false,
     authorizedForImport:false,sealed:false
@@ -27,11 +32,15 @@ export function verifyPinnedBackupContent({
   if(backup.imported!==false)return deny('BACKUP_NOT_PREIMPORT');
   if(backup.sourceSha256!==trustedPinnedSha)
     return deny('UNTRUSTED_BACKUP_DIGEST');
-  const restored=restoreDrill(backup,trustedPinnedSha);
-  if(!restored.ok)return deny('BACKUP_CONTENT_TAMPER',restored.error);
+  let restored;
+  try{restored=restoreDrill(backup,trustedPinnedSha);}
+  catch{return deny('BACKUP_CONTENT_TAMPER');}
+  if(!restored.ok)return deny('BACKUP_CONTENT_TAMPER');
   const source=backup.snapshot;
-  const pre=preflight(source);
-  if(!pre.ok)return deny('SOURCE_PREFLIGHT_DENIED',pre.errors);
+  let pre;
+  try{pre=preflight(source);}
+  catch{return deny('SOURCE_PREFLIGHT_DENIED');}
+  if(!pre.ok)return deny('SOURCE_PREFLIGHT_DENIED');
   if(pre.sourceSha256!==trustedPinnedSha||sha256(source)!==trustedPinnedSha)
     return deny('SOURCE_PIN_DRIFT');
   if(own(source,'revision')&&source.revision!==expectedRevision)
@@ -50,7 +59,7 @@ export function verifyPinnedBackupContent({
   try{
     manifest=createMigrationManifest(source);
     plan=buildPlan(source,pre);
-  }catch(e){return deny('CANNOT_CANONICALIZE_SOURCE',String(e));}
+  }catch{return deny('CANNOT_CANONICALIZE_SOURCE');}
   if(manifest.sourceHash!==trustedPinnedSha||!manifest.withinConservativeJsonBudget)
     return deny('MANIFEST_PIN_OR_SIZE_MISMATCH');
   // Cover source rich trees, unknown fields, all original order and claim-free
@@ -62,15 +71,15 @@ export function verifyPinnedBackupContent({
   for(const kind of ['drivers','vehicles']){
     for(const item of plan[kind]){
       const path=(kind==='drivers'?'flottaDrivers/':'flottaVehicles/')+item.id;
-      if(own(projected,path))return deny('DUPLICATE_PLAN_ID',path);
+      if(own(projected,path))return deny('DUPLICATE_PLAN_ID');
       projected[path]=item.data;
     }
   }
   const size=checkSizeGate(source,projected);
-  if(!size.advisoryOk)return deny('FIRESTORE_ADVISORY_OR_SCHEMA_DENIED',size.reason);
+  if(!size.advisoryOk)return deny('FIRESTORE_ADVISORY_OR_SCHEMA_DENIED');
   if(observedKeyed!==undefined){
     const state=detectPartial(plan,observedKeyed);
-    if(!state.complete)return deny('KEYED_PARITY_DENIED',state);
+    if(!state.complete)return deny('KEYED_PARITY_DENIED');
   }
   return {
     ok:true,sourceSha256:trustedPinnedSha,expectedRevision,
