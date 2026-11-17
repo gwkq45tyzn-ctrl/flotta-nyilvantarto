@@ -56,6 +56,9 @@
   // Firestore snapshot. A stale open form must never overwrite a later,
   // independently committed field from another browser.
   let vehicleEditGuardPatched = false;
+  let driverEditGuardPatched = false;
+  let openDriverEdit = null;
+  const STALE_DRIVER_DRAFT = 'flotta_stale_driver_draft_v1';
   let openVehicleEdit = null;
   const STALE_VEHICLE_DRAFT = 'flotta_stale_vehicle_draft_v1';
   let requeueCount = 0;
@@ -648,6 +651,52 @@
     vehicleEditGuardPatched = true;
   }
 
+  function patchDriverEditGuard() {
+    if (driverEditGuardPatched || typeof window.openDriverModal !== 'function' ||
+        typeof window.closeDriverModal !== 'function') return;
+    const form = document.getElementById('driverForm');
+    if (!form) return;
+    const originalOpen = window.openDriverModal;
+    const originalClose = window.closeDriverModal;
+    window.openDriverModal = function (id) {
+      const current = snapshot().drivers.find(row => row.id === id);
+      openDriverEdit = current
+        ? {id, record:JSON.stringify(current), revision:currentRevision} : null;
+      return originalOpen.apply(this,arguments);
+    };
+    window.closeDriverModal = function () {
+      openDriverEdit = null;
+      return originalClose.apply(this,arguments);
+    };
+    form.addEventListener('submit',function (event) {
+      const id = document.getElementById('driverEditId')?.value;
+      if (!id) return;
+      const current = snapshot().drivers.find(row => row.id === id);
+      if (openDriverEdit?.id === id && current &&
+          JSON.stringify(current) === openDriverEdit.record) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      // Keep uncommitted input separate from the legacy replay queue. Never
+      // mutate the live Fleet or close the user's form on conflict.
+      const fields = {};
+      for (const input of form.querySelectorAll('input,select,textarea')) {
+        if (input.id) fields[input.id] = input.value;
+      }
+      let saved = false;
+      try {
+        localStorage.setItem(STALE_DRIVER_DRAFT,JSON.stringify({
+          id,fields,openedRevision:openDriverEdit?.revision ?? null,
+          savedAt:new Date().toISOString()
+        }));
+        saved = true;
+      } catch (_) {}
+      status(saved
+        ? 'Ütközés: ezt a futárt másik gépen módosították. A mentés letiltva; az űrlap és a helyi piszkozat megőrizve. Egyeztesd az adatokat újranyitás előtt.'
+        : 'Ütközés: ezt a futárt másik gépen módosították. A mentés letiltva; ne zárd be az űrlapot, másold ki a beírt adatokat.',true);
+    },true);
+    driverEditGuardPatched = true;
+  }
+
   // Original Fleet's inline handlers mutate in-memory objects BEFORE
   // calling save(). Block them at the user-event boundary, so a preseal
   // editor cannot silently change local records or accidentally persist a
@@ -699,6 +748,7 @@
 
   function patchSave() {
     patchVehicleEditGuard();
+    patchDriverEditGuard();
     patchPresealEditGuard();
     if (savePatched || typeof save !== 'function') return;
     const originalSave = save;
