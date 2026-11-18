@@ -115,3 +115,11 @@ checks the swapping highwater and hostile chunk/aggregate inputs do not change
 the persisted highwater. Existing privileged database-only reset acceptance is
 retained as the required production-boundary counterexample. All live authority,
 IAM, independent deployment ownership and production import flags remain false.
+
+The highwater denial formatter also snapshots only an own DATA `message`
+property, then emits only exact whitelisted constant codes. Previously it read
+`error.message` twice: a hostile SDK error accessor could return a whitelisted
+code first and private text second, or throw while formatting the denial and
+reject the public promise. Synthetic SDK errors reproduce both variants; both
+now return generic denial without executing the accessor. Ordinary own-data
+state-machine errors retain their existing precise, safe reason codes.
