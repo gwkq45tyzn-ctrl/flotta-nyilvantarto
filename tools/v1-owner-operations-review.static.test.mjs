@@ -22,7 +22,9 @@ test('no private source persists or leaves the browser, regardless of values',()
     /\blocalStorage\b/,/\bsessionStorage\b/,/\bindexedDB\b/,
     /serviceWorker/,/\.innerHTML\s*=/,/\bnew Function\s*\(/,/\beval\s*\(/
   ])assert.doesNotMatch(script,pattern);
-  assert.match(script,/file\.text\(\)/);
+  assert.match(script,/file\.arrayBuffer\(\)/);
+  assert.match(script,/new TextDecoder\('utf-8',\{fatal:true,ignoreBOM:true\}\)/);
+  assert.doesNotMatch(script,/await file\.text\(\)/);
   assert.match(script,/new Blob\(/);
   assert.match(script,/URL\.createObjectURL/);
   assert.match(script,/crypto\.subtle\.digest\('SHA-256'/);
