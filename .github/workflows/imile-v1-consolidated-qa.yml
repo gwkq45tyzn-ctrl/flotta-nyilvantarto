@@ -108,6 +108,14 @@ jobs:
             --only firestore --project demo-imile-restricted-v1 \
             --config firebase.depo-qa.json \
             "node staging/imile-management/fleet/v1-canonical-booking-emulator.mjs"
+      - name: Mandatory signed-registry highwater redaction and genuine 3-OS-process rollback test
+        run: |
+          node --check staging/imile-management/fleet/v1-local-durable-signed-registry.mjs
+          node --check staging/imile-management/fleet/v1-local-durable-signed-registry.test.mjs
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-v1-registry-highwater \
+            --config firebase.depo-qa.json \
+            "node --test staging/imile-management/fleet/v1-local-durable-signed-registry.test.mjs"
   actual-original-fleet-depo-chromium:
     runs-on: ubuntu-24.04
     timeout-minutes: 19

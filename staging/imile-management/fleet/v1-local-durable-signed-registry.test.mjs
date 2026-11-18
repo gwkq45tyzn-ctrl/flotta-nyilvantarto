@@ -158,6 +158,40 @@ async function withWorkers(fn){
   }
 }
 try {
+  await test('hostile signed-registry getter cannot leak raw exception or private IDs through denial',async()=>{
+    await env.clearFirestore();
+    const keys=makeKeys();
+    await env.withSecurityRulesDisabled(async ctx=>{
+      const db=ctx.firestore();
+      const gate=createLocalSignedRegistryHighwater({db,projectId,
+        rootPublicKeySpkiBase64:keys.rootSpki,independentlyPinnedRootSha256:keys.rootPin});
+      const bundle=registry(keys,1,[]);
+      Object.defineProperty(bundle,'signatureBase64',{
+        enumerable:true,get(){throw Error('PRIVATE_RUNTIME_CANARY PRIVATE_DA_CANARY')}
+      });
+      const out=await gate.adoptRootSignedRegistry(bundle);
+      reject(out,/^REGISTRY_CANONICALIZATION_ERROR$/);
+      assert.equal(JSON.stringify(out).includes('PRIVATE_RUNTIME_CANARY'),false);
+      assert.equal(JSON.stringify(out).includes('PRIVATE_DA_CANARY'),false);
+    });
+  });
+  await test('synthetic SDK transaction errors reveal no private runtime details',async()=>{
+    const keys=makeKeys();
+    const fakeDb=new Proxy({app:{options:{projectId}}},{
+      get(target,key){
+        if(key==='app')return target.app;
+        throw Error('PRIVATE_RUNTIME_CANARY PRIVATE_PATH_CANARY');
+      }
+    });
+    // The local-only constructor accepts this synthetic demo project shape;
+    // Firestore SDK doc()/transaction must reject the invalid database object.
+    const gate=createLocalSignedRegistryHighwater({db:fakeDb,projectId,
+      rootPublicKeySpkiBase64:keys.rootSpki,independentlyPinnedRootSha256:keys.rootPin});
+    const out=await gate.adoptRootSignedRegistry(registry(keys,1,[]));
+    reject(out,/^SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED$/);
+    assert.equal(JSON.stringify(out).includes('PRIVATE_RUNTIME_CANARY'),false);
+    assert.equal(JSON.stringify(out).includes('PRIVATE_PATH_CANARY'),false);
+  });
   await test('caller mutation during async adoption cannot detach high-water from the signed payload',async()=>{
     await env.clearFirestore();
     const keys=makeKeys();
