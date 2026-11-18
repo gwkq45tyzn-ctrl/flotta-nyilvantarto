@@ -236,7 +236,7 @@ function render(s,shape){
     ui.statusRows.append(tr);
     statusControls.push({index:item.index,code:item.id,id:item.row.id,
       select,confirm:check});
-    select.addEventListener('change',renderCapacities);
+    select.addEventListener('change',()=>{check.checked=false;renderCapacities();});
     check.addEventListener('change',updateReady);
   }
   ui.statusPanel.hidden=shape.unknown.length===0;
