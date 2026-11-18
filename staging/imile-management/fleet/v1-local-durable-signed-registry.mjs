@@ -1,3 +1,4 @@
+import {snapshotJsonData} from '../../../tools/v1-json-data-snapshot.mjs';
 import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * DEMO ONLY: one real Firestore transaction advances/checks a ROOT-SIGNED
@@ -135,6 +136,8 @@ export class LocalSignedRegistryHighwater {
     }catch{return denied('REGISTRY_CANONICALIZATION_ERROR')}
   }
   async #transaction(signed,mutate){
+    try{signed=snapshotJsonData(signed);}
+    catch{return denied('INVALID_SIGNED_REGISTRY_ENVELOPE');}
     const proof=this.#validate(signed);
     if(!proof.ok)return proof;
     try{

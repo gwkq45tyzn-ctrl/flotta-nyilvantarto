@@ -1,3 +1,4 @@
+import {snapshotJsonData} from '../../../tools/v1-json-data-snapshot.mjs';
 import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * LOCAL SYNTHETIC FIRESTORE ONLY. A single real read/write transaction
@@ -65,10 +66,12 @@ export class LocalSignedSourceEpochBinding {
     this.#revision=expectedRevision;
   }
 
-  async inspectAndBind({
-    registryBundle,manifest,snapshot,backup,expectedEpoch,
-    independentlyPinnedSourceSha256
-  }={}){
+  async inspectAndBind(input={}){
+    let data;
+    try{data=snapshotJsonData(input);}
+    catch{return fail('INVALID_SIGNED_SOURCE_DATA');}
+    const {registryBundle,manifest,snapshot,backup,expectedEpoch,
+      independentlyPinnedSourceSha256}=data;
     if(!Number.isSafeInteger(expectedEpoch)||expectedEpoch<1||
        !HASH.test(independentlyPinnedSourceSha256||''))
       return fail('EXPECTED_EPOCH_AND_INDEPENDENT_SOURCE_PIN_REQUIRED');

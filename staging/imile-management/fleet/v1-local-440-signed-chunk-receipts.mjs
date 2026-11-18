@@ -1,3 +1,4 @@
+import {snapshotJsonData} from '../../../tools/v1-json-data-snapshot.mjs';
 import {createIndependentRegistryFloor} from '../../../tools/v1-independent-registry-floor.mjs';
 /**
  * DEMO-ONLY source-signed 440 FULL-RICH master+claim attestation.
@@ -76,8 +77,9 @@ export class Local440SignedChunkReceipts {
     this.#rootSha=independentlyPinnedRootSha256;this.#audience=expectedRegistryAudience;
     this.#signer=expectedSignerId;this.#revision=expectedRevision;
   }
-  #preflight({registryBundle,manifest,snapshot,backup,expectedEpoch,
-    independentlyPinnedSourceSha256}={}){
+  #preflight(input={}){
+    const {registryBundle,manifest,snapshot,backup,expectedEpoch,
+      independentlyPinnedSourceSha256}=snapshotJsonData(input);
     if(!Number.isSafeInteger(expectedEpoch)||expectedEpoch<1||
       !HASH.test(independentlyPinnedSourceSha256||''))
       throw Error('SOURCE_PIN_AND_EPOCH_REQUIRED');

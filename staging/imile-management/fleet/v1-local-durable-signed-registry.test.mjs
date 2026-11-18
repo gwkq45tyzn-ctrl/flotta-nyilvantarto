@@ -166,11 +166,13 @@ try {
       const gate=createLocalSignedRegistryHighwater({db,projectId,
         rootPublicKeySpkiBase64:keys.rootSpki,independentlyPinnedRootSha256:keys.rootPin});
       const bundle=registry(keys,1,[]);
+      let getterCalls=0;
       Object.defineProperty(bundle,'signatureBase64',{
-        enumerable:true,get(){throw Error('PRIVATE_RUNTIME_CANARY PRIVATE_DA_CANARY')}
+        enumerable:true,get(){getterCalls++;throw Error('PRIVATE_RUNTIME_CANARY PRIVATE_DA_CANARY')}
       });
       const out=await gate.adoptRootSignedRegistry(bundle);
-      reject(out,/^REGISTRY_CANONICALIZATION_ERROR$/);
+      reject(out,/^INVALID_SIGNED_REGISTRY_ENVELOPE$/);
+      assert.equal(getterCalls,0,'accessor code is never executed');
       assert.equal(JSON.stringify(out).includes('PRIVATE_RUNTIME_CANARY'),false);
       assert.equal(JSON.stringify(out).includes('PRIVATE_DA_CANARY'),false);
     });
