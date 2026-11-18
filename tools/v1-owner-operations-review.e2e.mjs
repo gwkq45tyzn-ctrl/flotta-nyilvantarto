@@ -202,7 +202,26 @@ try{
     assert.equal(await page.locator('#summaryDownload').isDisabled(),true,label);
     assert.match(await page.locator('#sourceMessage').innerText(),/elutasítva/i,label);
   }
+  // Lossy browser File.text() would turn the next invalid UTF-8 byte into
+  // U+FFFD and falsely accept a "valid" rewritten private source. Fatal
+  // TextDecoder must deny it before any review/source hash is generated.
+  const invalidUtf8=Buffer.from(JSON.stringify(source()),'utf8');
+  const marker=Buffer.from('PRIVATE_ROOT_CANARY','utf8');
+  const at=invalidUtf8.indexOf(marker);
+  assert.ok(at>0);
+  invalidUtf8[at]=0xff;
+  await page.locator('#sourceFile').setInputFiles({
+    name:'malformed-utf8-private-source.json',mimeType:'application/json',
+    buffer:invalidUtf8
+  });
+  await page.waitForFunction(()=>!document.querySelector('#sourceMessage')
+    .textContent.includes('vizsgálata…'));
+  assert.equal(await page.locator('#statusPanel').isHidden(),true,
+    'lossy UTF-8 replacement must not yield a reviewed source');
+  assert.equal(await page.locator('#prepareButton').isDisabled(),true);
+  assert.match(await page.locator('#sourceMessage').innerText(),/elutasítva/i);
   assert.deepEqual(http,[]);
+  console.log('PASS DENY [REAL CHROMIUM]: malformed UTF-8 private source bytes, no replacement-character canonical hash');
   console.log('PASS DENY [REAL CHROMIUM]: duplicate identities, inherited sourceIndex, seal, oversized migration, rich tamper and invalid JSON; zero HTTP');
 }finally{
   await browser.close();
