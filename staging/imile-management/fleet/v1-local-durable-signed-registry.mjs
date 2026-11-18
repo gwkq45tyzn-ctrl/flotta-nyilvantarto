@@ -36,6 +36,23 @@ const denied=reason=>({
 const allowed=(reason,fields)=>({
   ...denied(reason),...fields,ok:true,reason
 });
+// Firestore errors and untrusted object getters can include private source
+// fragments, document paths or deployment details. Only explicitly authored,
+// static gate reasons may cross this public test-only API boundary.
+const SAFE_TRANSACTION_DENIALS=new Set([
+  'INDEPENDENT_REGISTRY_CHECKPOINT_DENIED',
+  'SIGNED_REGISTRY_EXPIRED_OR_NOT_YET_VALID',
+  'PERSISTED_HIGHWATER_TAMPERED_OR_UNTRUSTED',
+  'STALE_SIGNED_REGISTRY_AFTER_DURABLE_ADVANCE',
+  'SAME_SEQUENCE_SIGNED_REGISTRY_EQUIVOCATION',
+  'SIGNED_REVOCATION_SET_ROLLBACK_DENIED',
+  'NO_DURABLE_HIGHWATER',
+  'CANDIDATE_NOT_CURRENT_DURABLE_REGISTRY'
+]);
+const safeTransactionDenial=e=>
+  SAFE_TRANSACTION_DENIALS.has(e?.message)
+    ?'SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED: '+e.message
+    :'SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED';
 const keyOf=b64=>{
   if(typeof b64!=='string'||b64.length<40||b64.length>1024||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)||
@@ -115,7 +132,7 @@ export class LocalSignedRegistryHighwater {
       if(now<p.notBeforeMs||now>=p.expiresAtMs)
         return denied('SIGNED_REGISTRY_EXPIRED_OR_NOT_YET_VALID');
       return {ok:true,payload:p,digest:sha(p)};
-    }catch(e){return denied('REGISTRY_CANONICALIZATION_ERROR: '+String(e.message||e))}
+    }catch{return denied('REGISTRY_CANONICALIZATION_ERROR')}
   }
   async #transaction(signed,mutate){
     const proof=this.#validate(signed);
@@ -178,7 +195,7 @@ export class LocalSignedRegistryHighwater {
         'DEMO_SIGNED_REGISTRY_PERSISTED_TRANSACTIONALLY_ONLY':
         'DEMO_SIGNED_REGISTRY_MATCHES_PERSISTED_HIGHWATER_ONLY',result);
     }catch(e){
-      return denied('SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED: '+String(e.message||e));
+      return denied(safeTransactionDenial(e));
     }
   }
   async adoptRootSignedRegistry(bundle){return this.#transaction(bundle,true)}
