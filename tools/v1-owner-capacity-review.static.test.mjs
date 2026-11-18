@@ -26,7 +26,9 @@ test('does not persist, transmit or load private Fleet data over a network',()=>
   assert.doesNotMatch(script[1],/\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b/);
   assert.doesNotMatch(script[1],/\bnavigator\.sendBeacon\b|\bserviceWorker\b/);
   assert.doesNotMatch(script[1],/\.innerHTML\s*=|\beval\s*\(|\bnew Function\b/);
-  assert.match(script[1],/file\.text\(\)/);
+  assert.match(script[1],/file\.arrayBuffer\(\)/);
+  assert.match(script[1],/new TextDecoder\('utf-8',\{fatal:true,ignoreBOM:true\}\)/);
+  assert.doesNotMatch(script[1],/await file\.text\(\)/);
   assert.match(script[1],/new Blob\(/);
   assert.match(script[1],/URL\.createObjectURL/);
   assert.match(script[1],/crypto\.subtle\.digest\('SHA-256'/);

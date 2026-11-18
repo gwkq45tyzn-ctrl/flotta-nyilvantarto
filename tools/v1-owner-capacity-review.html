@@ -183,6 +183,14 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
       throw Error('TÚL_NAGY_ADATÁLLOMÁNY');
     return str;
   }
+  // File.text() silently replaces malformed UTF-8 with U+FFFD. A rich
+  // source whose bytes were corrupted must not be canonicalized and approved.
+  async function strictFileText(file){
+    if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('INVALID_PRIVATE_FILE_SIZE');
+    const bytes=await file.arrayBuffer();
+    if(bytes.byteLength!==file.size)throw Error('PRIVATE_FILE_CHANGED_DURING_READ');
+    return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+  }
   async function digest(text){
     if(!globalThis.crypto||!crypto.subtle)throw Error('SHA256_NEM_ELÉRHETŐ');
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
@@ -293,7 +301,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     if(!file){reset();return;}
     if(file.size<1||file.size>MAX_FILE_BYTES){reset('Elutasítva: üres vagy túl nagy fájl.',true);return;}
     try{
-      const source=JSON.parse(await file.text());
+      const source=JSON.parse(await strictFileText(file));
       if(version!==candidateVersion)return; // another source was chosen
       const details=normalizedSource(source);
       canonicalBytes(source); // same conservative budget as existing local preflight
@@ -349,7 +357,7 @@ footer{margin-top:18px;color:#536077;font-size:.85rem}
     nodes.checkStatus.className='message';
     try{
       if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('SAVED_FILE_SIZE_INVALID');
-      const candidate=JSON.parse(await file.text());
+      const candidate=JSON.parse(await strictFileText(file));
       // Reject changes in any driver, vehicle, card, contact, history,
       // metadata or unknown nested property—not only courier capacity.
       const actualCanonical=canonicalBytes(candidate);
