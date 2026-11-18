@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>iMile Flotta – offline státusz és kapacitás jóváhagyás</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#203047;background:#f1f5fa}
+*{box-sizing:border-box}body{margin:0;padding:20px 14px 65px}
+main{max-width:1020px;margin:auto}h1{font-size:1.8rem;margin:15px 0 7px}
+h2{font-size:1.12rem;margin:0 0 12px}p{line-height:1.5}
+.panel{background:white;border:1px solid #dbe4f0;border-radius:12px;padding:20px;margin-top:17px}
+.muted{color:#52647b}.small{font-size:.87rem}
+label{display:block;margin-bottom:9px;font-weight:600}
+input[type=file]{max-width:100%}input[type=number],select{font:inherit;border:1px solid #9fb1cb;padding:8px;border-radius:7px}
+input[type=number]{width:110px}select{min-width:150px}
+input[type=checkbox]{width:18px;height:18px;vertical-align:middle}
+table{border-collapse:collapse;width:100%;min-width:550px}
+th,td{border-bottom:1px solid #e5ebf4;padding:10px;text-align:left}
+.table{overflow-x:auto}.state{padding:12px;border-radius:8px;background:#eff6ff;color:#1c416b}
+.state.bad{background:#fff1f1;color:#8c2531}
+button{padding:11px 15px;border:0;border-radius:8px;background:#1763b2;color:white;font:inherit;font-weight:650;cursor:pointer}
+button:disabled{background:#dbe4ed;color:#657487;cursor:not-allowed}
+button.alt{background:#ecf3fb;color:#1b4d85;border:1px solid #bbcee3}
+.buttons{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.notice{border-left:4px solid #a7bdd9;padding-left:12px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Flotta – tulajdonosi státusz- és kapacitásdöntések</h1>
+<p class="muted">Privát, offline előkészítés. Nincs hálózati kapcsolat, adatimport, automatikus 70 csomagos beállítás vagy tulajdonosi személyazonosság-igazolás.</p>
+</header>
+<section class="panel">
+<h2>1. Eredeti teljes Flotta JSON-fájl</h2>
+<p>A négy tömbnek (drivers, vehicles, fuelCards, contacts), az előzményeknek és minden ismeretlen mezőnek változatlanul meg kell maradnia. A forrásnál külön, pontos A2:C2 visszaolvasás és független mentés szükséges.</p>
+<label for="sourceFile">Privát eredeti JSON</label>
+<input id="sourceFile" type="file" accept=".json,application/json">
+<p id="sourceMessage" class="state" role="status">Még nincs kiválasztott forrás.</p>
+<p id="shape" class="muted small" hidden></p>
+</section>
+<section id="statusPanel" class="panel" hidden>
+<h2>2. Bizonytalan futárstátuszok</h2>
+<p>Valamennyi bizonytalan státuszt külön ellenőrizni kell. A program egyiket sem aktiválja automatikusan.</p>
+<div class="table"><table><thead><tr><th>DA</th><th>Eredeti státusz</th><th>Jóváhagyott státusz</th><th>Felülvizsgáltam</th></tr></thead><tbody id="statusRows"></tbody></table></div>
+</section>
+<section id="capacityPanel" class="panel" hidden>
+<h2>3. Minden aktív futár kapacitása</h2>
+<p>A már megadott érvényes kapacitásokat is egyenként meg kell erősíteni. A 70 csomag csak lehetséges tervezési érték, nem alapértelmezés.</p>
+<div class="table"><table><thead><tr><th>DA</th><th>Eredeti kapacitás</th><th>Jóváhagyott kapacitás</th><th>Felülvizsgáltam</th></tr></thead><tbody id="capacityRows"></tbody></table></div>
+<p id="reviewMessage" class="state" role="status">Hiányzó döntések.</p>
+<div class="buttons"><button id="prepareButton" disabled>Két privát fájl előkészítése</button></div>
+</section>
+<section id="filesPanel" class="panel" hidden>
+<h2>4. A két fájl mentése és visszaolvasása</h2>
+<p>A döntési terv és a teljes, javított Flotta JSON külön fájl. A mentés után mindkettőt újra válaszd ki: csak pontos bájtegyezés esetén készíthető összesítő.</p>
+<div class="buttons">
+<button id="decisionDownload" class="alt">Döntési terv mentése</button>
+<button id="candidateDownload" class="alt">Teljes módosított Flotta mentése</button>
+</div>
+<label for="decisionVerify">Ténylegesen lementett döntési terv (.json)</label>
+<input id="decisionVerify" type="file" accept=".json,application/json">
+<label for="candidateVerify">Ténylegesen lementett módosított Flotta (.json)</label>
+<input id="candidateVerify" type="file" accept=".json,application/json">
+<p id="verificationMessage" class="state" role="status">Mindkét lementett fájlt újra kell olvasni.</p>
+<button id="summaryDownload" disabled>Ellenőrzési összesítő mentése</button>
+</section>
+<section class="panel">
+<h2>Fontos korlát</h2>
+<p class="notice">A JSON <code>reviewed:true</code> jelzője nem hitelesíti a tulajdonos személyazonosságát. A helyi egyezés nem teszi lehetővé az éles importot. A későbbi ellenőrzést a két valódi A2:C2 rögzítéssel, független mentéssel, élő Apps Script/IAM és aláírógyökér-bizonyítékkal külön kell elvégezni.</p>
+</section>
+</main>
+<script>
+(()=>{
+'use strict';
+const MAX_FILE_BYTES=1200000,MAX_CANONICAL_BYTES=800*1024,MAX_DRIVER_ROWS=30;
+const MAX_OWNED_READS=120,MIGRATION_PAIR_CHUNK=8;
+const $=name=>document.getElementById(name);
+const ui={sourceFile:$('sourceFile'),sourceMessage:$('sourceMessage'),shape:$('shape'),
+  statusPanel:$('statusPanel'),statusRows:$('statusRows'),
+  capacityPanel:$('capacityPanel'),capacityRows:$('capacityRows'),
+  reviewMessage:$('reviewMessage'),prepare:$('prepareButton'),
+  filesPanel:$('filesPanel'),decisionDownload:$('decisionDownload'),
+  candidateDownload:$('candidateDownload'),decisionVerify:$('decisionVerify'),
+  candidateVerify:$('candidateVerify'),verificationMessage:$('verificationMessage'),
+  summaryDownload:$('summaryDownload')};
+const active=s=>typeof s==='string'&&['aktiv','aktív'].includes(s.trim().toLowerCase());
+const inactive=s=>typeof s==='string'&&['inaktiv','inaktív'].includes(s.trim().toLowerCase());
+const cap=n=>Number.isSafeInteger(n)&&n>=1&&n<=10000;
+const da=s=>typeof s==='string'&&/^[A-Za-z0-9_-]{4,40}$/.test(s.trim())
+  ?s.trim().toUpperCase():'';
+const plate=s=>typeof s==='string'&&/^[A-Za-z0-9 -]{4,40}$/.test(s)
+  ?s.replace(/[ -]/g,'').toUpperCase():'';
+const obj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+const own=(v,k)=>Object.prototype.hasOwnProperty.call(v,k);
+let original=null,sourceVersion=0,revision=0,statusControls=[],capacityControls=[];
+let prepared=null,verifiedDecision=false,verifiedCandidate=false,readVersion=0;
+function notice(node,message,bad=false){
+  node.textContent=message;
+  node.className='state'+(bad?' bad':'');
+}
+function clearPrepared(){
+  revision++;readVersion++;
+  prepared=null;verifiedDecision=false;verifiedCandidate=false;
+  ui.filesPanel.hidden=true;ui.decisionVerify.value='';ui.candidateVerify.value='';
+  ui.summaryDownload.disabled=true;
+  notice(ui.verificationMessage,'Mindkét lementett fájlt újra kell olvasni.');
+}
+function reset(){
+  sourceVersion++;original=null;statusControls=[];capacityControls=[];
+  ui.statusPanel.hidden=true;ui.capacityPanel.hidden=true;ui.shape.hidden=true;
+  ui.statusRows.replaceChildren();ui.capacityRows.replaceChildren();
+  ui.prepare.disabled=true;clearPrepared();
+}
+function canonical(x){
+  if(x===null)return 'null';
+  if(typeof x==='boolean'||typeof x==='string'||
+     typeof x==='number'&&Number.isFinite(x))return JSON.stringify(x);
+  if(Array.isArray(x))return '['+x.map(canonical).join(',')+']';
+  if(obj(x))return '{'+Object.keys(x).sort()
+    .map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';
+  throw Error('INVALID_STRICT_JSON');
+}
+function canonicalBytes(value){
+  const text=canonical(value);
+  if(new TextEncoder().encode(text).byteLength>MAX_CANONICAL_BYTES)
+    throw Error('SOURCE_OVER_BUDGET');
+  return text;
+}
+// File.text() silently replaces malformed UTF-8. Strict original-file
+// decoding is required before any source digest or rich-history comparison.
+async function strictFileText(file){
+  if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('FILE_SIZE_DENIED');
+  const bytes=await file.arrayBuffer();
+  if(bytes.byteLength!==file.size)throw Error('FILE_CHANGED_DURING_READ');
+  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+}
+async function digest(input){
+  if(!crypto.subtle)throw Error('CRYPTO_UNAVAILABLE');
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(bytes))
+    .map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function sourceShape(s){
+  if(!obj(s)||!['drivers','vehicles','fuelCards','contacts'].every(k=>Array.isArray(s[k]))||
+     s.sealed===true||own(s,'migrationSourceSha256')||
+     s.drivers.length>MAX_DRIVER_ROWS)
+    throw Error('SOURCE_SCHEMA_OR_SEAL_DENIED');
+  for(const kind of ['drivers','vehicles','fuelCards','contacts']){
+    const ids=new Set();
+    for(const row of s[kind]){
+      if(!obj(row)||(own(row,'history')&&!Array.isArray(row.history))||
+        own(row,'revision')&&(!Number.isSafeInteger(row.revision)||row.revision<1))
+        throw Error('INVALID_RICH_RECORD');
+      if(kind==='drivers'||kind==='vehicles'){
+        if(typeof row.id!=='string'||!row.id.trim()||ids.has(row.id)||
+           own(row,'sourceIndex'))throw Error('INVALID_SOURCE_IDENTITIES');
+        ids.add(row.id);
+      }
+    }
+  }
+  const das=new Set(),plates=new Set();
+  for(const row of s.drivers){
+    const id=da(row.daCode);
+    if(!id||das.has(id))throw Error('DUPLICATE_OR_INVALID_DA');
+    das.add(id);
+  }
+  for(const row of s.vehicles){
+    const id=plate(row.rendszam);
+    if(id.length<4||id.length>40||plates.has(id))
+      throw Error('DUPLICATE_OR_INVALID_PLATE');
+    plates.add(id);
+  }
+  if(!s.vehicles.some(row=>active(row.status)))throw Error('NO_ACTIVE_VEHICLES');
+  const pairs=s.drivers.length+s.vehicles.length;
+  const reads=2*pairs+Math.ceil(pairs/MIGRATION_PAIR_CHUNK);
+  if(reads>MAX_OWNED_READS)throw Error('MIGRATION_READ_BOUND_EXCEEDED');
+  canonicalBytes(s);
+  return {pairs,reads,unknown:s.drivers
+    .map((row,index)=>({row,index,id:da(row.daCode)}))
+    .filter(item=>!active(item.row.status)&&!inactive(item.row.status))};
+}
+function cell(text){
+  const td=document.createElement('td');td.textContent=text;return td;
+}
+function checkbox(label){
+  const input=document.createElement('input');input.type='checkbox';
+  input.setAttribute('aria-label',label);return input;
+}
+function updateReady(){
+  clearPrepared();
+  if(!original)return;
+  const statusesComplete=statusControls.every(x=>x.select.value&&x.confirm.checked);
+  const capacitiesComplete=capacityControls.length>0&&capacityControls.every(x=>
+    x.confirm.checked&&/^[0-9]+$/.test(x.number.value)&&
+    cap(Number(x.number.value)));
+  ui.prepare.disabled=!(statusesComplete&&capacitiesComplete);
+  notice(ui.reviewMessage,statusesComplete&&capacitiesComplete
+    ?'Minden érintett futár egyenként ellenőrizve. Csak privát fájlok készíthetők.'
+    :'Hiányzó státusz- vagy kapacitásjóváhagyás: a mentés még tiltott.');
+}
+function renderCapacities(){
+  ui.capacityRows.replaceChildren();capacityControls=[];
+  for(const [index,row] of original.drivers.entries()){
+    const unknown=statusControls.find(x=>x.index===index);
+    const approvedStatus=unknown?unknown.select.value:row.status;
+    if(!active(approvedStatus))continue;
+    const code=da(row.daCode),tr=document.createElement('tr');
+    const number=document.createElement('input');number.type='number';
+    number.min='1';number.max='10000';number.step='1';
+    number.placeholder='Nincs alapérték';
+    number.setAttribute('aria-label',code+' jóváhagyott kapacitása');
+    if(cap(row.kapacitas))number.value=String(row.kapacitas);
+    const check=checkbox(code+' kapacitását ellenőriztem');
+    const field=document.createElement('td'),confirm=document.createElement('td');
+    field.append(number);confirm.append(check);
+    tr.append(cell(code),cell(cap(row.kapacitas)?String(row.kapacitas):'Hiányzik'),
+      field,confirm);
+    ui.capacityRows.append(tr);
+    capacityControls.push({index,code,number,confirm:check});
+    number.addEventListener('input',updateReady);
+    check.addEventListener('change',updateReady);
+  }
+  updateReady();
+}
+function render(s,shape){
+  ui.statusRows.replaceChildren();statusControls=[];
+  for(const item of shape.unknown){
+    const tr=document.createElement('tr'),select=document.createElement('select');
+    select.setAttribute('aria-label',item.id+' jóváhagyott státusza');
+    for(const [value,label] of [
+      ['','Válassz státuszt'],['aktiv','Aktív'],['inaktiv','Inaktív']
+    ]){
+      const option=document.createElement('option');option.value=value;
+      option.textContent=label;select.append(option);
+    }
+    const check=checkbox(item.id+' státuszát ellenőriztem');
+    const selectCell=document.createElement('td'),checkCell=document.createElement('td');
+    selectCell.append(select);checkCell.append(check);
+    tr.append(cell(item.id),cell(String(item.row.status??'Hiányzik')),selectCell,checkCell);
+    ui.statusRows.append(tr);
+    statusControls.push({index:item.index,code:item.id,id:item.row.id,
+      select,confirm:check});
+    select.addEventListener('change',()=>{check.checked=false;renderCapacities();});
+    check.addEventListener('change',updateReady);
+  }
+  ui.statusPanel.hidden=shape.unknown.length===0;
+  ui.capacityPanel.hidden=false;
+  renderCapacities();
+}
+function stringifyFile(v){return JSON.stringify(v,null,2)+'\n';}
+function download(name,body){
+  const blob=new Blob([body],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');anchor.download=name;anchor.href=url;
+  document.body.append(anchor);anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+async function build(){
+  if(!original||ui.prepare.disabled)throw Error('REVIEWS_INCOMPLETE');
+  const source=original,localRevision=revision;
+  const statuses=statusControls.map(x=>({
+    id:x.id,daCode:x.code,status:x.select.value,reviewed:x.confirm.checked
+  }));
+  if(statuses.some(x=>!x.status||x.reviewed!==true))
+    throw Error('ALL_UNCERTAIN_STATUSES_REQUIRE_REVIEW');
+  const candidate=JSON.parse(JSON.stringify(source));
+  const decided=new Map(statuses.map(x=>[x.id,x.status]));
+  for(const row of candidate.drivers){
+    if(decided.has(row.id))row.status=decided.get(row.id);
+  }
+  const capacities=capacityControls.map(x=>({
+    daCode:x.code,kapacitas:Number(x.number.value),reviewed:x.confirm.checked
+  }));
+  if(!capacities.length||capacities.some(x=>!cap(x.kapacitas)||x.reviewed!==true))
+    throw Error('ALL_ACTIVE_CAPACITIES_REQUIRE_REVIEW');
+  const expected=candidate.drivers.filter(x=>active(x.status));
+  if(expected.length!==capacities.length)throw Error('RESULTING_ACTIVE_SET_DRIFT');
+  const byDA=new Map(capacityControls.map(x=>[x.code,x.index]));
+  for(const decision of capacities){
+    const index=byDA.get(decision.daCode);
+    if(index===undefined||da(candidate.drivers[index].daCode)!==decision.daCode)
+      throw Error('ACTIVE_DA_ROW_MISMATCH');
+    candidate.drivers[index].kapacitas=decision.kapacitas;
+  }
+  const shape=sourceShape(candidate);
+  if(shape.unknown.length)throw Error('UNCERTAIN_DRIVER_REMAINING');
+  const plan={sourceSha256:await digest(canonicalBytes(source)),capacities,statuses};
+  const candidateDigest=await digest(canonicalBytes(candidate));
+  if(localRevision!==revision||source!==original||ui.prepare.disabled)
+    throw Error('REVIEW_CHANGED_DURING_DIGEST');
+  return {plan,candidate,decisionText:stringifyFile(plan),
+    candidateText:stringifyFile(candidate),candidateDigest,shape};
+}
+function verification(){
+  ui.summaryDownload.disabled=!(verifiedDecision&&verifiedCandidate);
+  notice(ui.verificationMessage,verifiedDecision&&verifiedCandidate
+    ?'Mindkét fájl mentett bájtjai egyeznek. Ez csak helyi tartalmi bizonyítás.'
+    :'A mentett döntési tervet és a teljes módosított Flotta-fájlt is vissza kell olvasni.');
+}
+async function verify(which){
+  const current=prepared,version=revision,token=++readVersion;
+  const input=which==='decision'?ui.decisionVerify:ui.candidateVerify;
+  const file=input.files&&input.files[0];
+  if(which==='decision')verifiedDecision=false;else verifiedCandidate=false;
+  verification();
+  if(!current||!file)return;
+  try{
+    if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('INVALID_SAVED_FILE_SIZE');
+    const bytes=await strictFileText(file);
+    if(bytes!==(which==='decision'?current.decisionText:current.candidateText))
+      throw Error('SAVED_FILE_BYTES_DIFFER');
+    const parsed=JSON.parse(bytes);
+    if(canonicalBytes(parsed)!==canonicalBytes(
+      which==='decision'?current.plan:current.candidate))
+      throw Error('SAVED_FILE_RICH_CONTENT_DIFFERS');
+    if(which==='candidate'&&
+       await digest(canonicalBytes(parsed))!==current.candidateDigest)
+      throw Error('SAVED_CANDIDATE_HASH_DIFFERS');
+    if(version!==revision||current!==prepared||token!==readVersion)return;
+    if(which==='decision')verifiedDecision=true;else verifiedCandidate=true;
+    verification();
+  }catch{
+    if(version!==revision||current!==prepared||token!==readVersion)return;
+    notice(ui.verificationMessage,'A lementett fájl elutasítva. Az összesítő továbbra tiltott.',true);
+  }
+}
+ui.sourceFile.addEventListener('change',async()=>{
+  reset();
+  notice(ui.sourceMessage,'Helyi forrás vizsgálata…');
+  const version=sourceVersion,file=ui.sourceFile.files&&ui.sourceFile.files[0];
+  if(!file){notice(ui.sourceMessage,'Nincs kiválasztott fájl.',true);return;}
+  try{
+    if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('SOURCE_SIZE_DENIED');
+    const s=JSON.parse(await strictFileText(file));
+    if(version!==sourceVersion)return;
+    const shape=sourceShape(s);
+    original=s;
+    ui.shape.hidden=false;
+    ui.shape.textContent='Futárok: '+s.drivers.length+' · járművek: '+s.vehicles.length+
+      ' · kártyák: '+s.fuelCards.length+' · kapcsolatok: '+s.contacts.length+
+      ' · tranzakciós olvasás: '+shape.reads+'/'+MAX_OWNED_READS+
+      ' · külön tulajdonosi státuszdöntés: '+shape.unknown.length;
+    render(s,shape);
+    notice(ui.sourceMessage,'A forrás helyben feldolgozva. Éles import TILOS.');
+  }catch{
+    if(version!==sourceVersion)return;
+    reset();
+    notice(ui.sourceMessage,'A forrás elutasítva: hibás JSON, azonosító, rich mező, lezárt forrás vagy migrációs korlát.',true);
+  }
+});
+ui.prepare.addEventListener('click',async()=>{
+  if(ui.prepare.disabled)return;
+  const version=revision,source=original;
+  try{
+    const result=await build();
+    if(version!==revision||source!==original||ui.prepare.disabled)return;
+    clearPrepared();
+    prepared=result;
+    ui.filesPanel.hidden=false;
+    notice(ui.verificationMessage,'A két fájl letölthető. Mindkettőt újra kell nyitni.');
+  }catch{
+    if(version!==revision||source!==original)return;
+    clearPrepared();
+    notice(ui.reviewMessage,'A helyi döntési terv nem állítható elő biztonságosan.',true);
+  }
+});
+ui.decisionDownload.addEventListener('click',()=>{
+  if(prepared)download('imile-privat-tulajdonosi-dontesek.json',prepared.decisionText);
+});
+ui.candidateDownload.addEventListener('click',()=>{
+  if(prepared)download('imile-privat-ellenorzott-flotta.json',prepared.candidateText);
+});
+ui.decisionVerify.addEventListener('change',()=>verify('decision'));
+ui.candidateVerify.addEventListener('change',()=>verify('candidate'));
+ui.summaryDownload.addEventListener('click',()=>{
+  if(!prepared||!verifiedDecision||!verifiedCandidate||ui.summaryDownload.disabled)return;
+  download('imile-privat-tulajdonosi-ellenorzes.json',stringifyFile({
+    schema:'imile-v1-private-owner-operations-review-1',
+    reviewedUncertainStatuses:prepared.plan.statuses.length,
+    reviewedActiveDriverCapacities:prepared.plan.capacities.length,
+    fullRichCandidateSaveReadbackVerified:true,
+    decisionPlanSaveReadbackVerified:true,
+    migrationOwnedReadDocuments:prepared.shape.reads,
+    sourceSha256:prepared.plan.sourceSha256,
+    candidateSha256:prepared.candidateDigest,
+    ownerIdentityAuthenticated:false,actualLiveSourceAuthorityVerified:false,
+    independentRestorableBackupVerified:false,
+    originalBrowserPendingWritesReconciled:false,
+    productionIamVerified:false,productionReleaseAuthorized:false,
+    authorizedForImport:false
+  }));
+});
+reset();
+})();
+</script>
+</body>
+</html>

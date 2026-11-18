@@ -173,9 +173,10 @@ jobs:
             --only auth,firestore --project demo-imile-qa \
             --config firebase.depo-qa.json \
             "node staging/imile-management/fleet/v1-original-fleet-browser.e2e.mjs"
-      - name: Offline owner four-array capacity review in real Chromium (NO CLOUD)
+      - name: Offline owner four-array capacity and source-bound status review in real Chromium (NO CLOUD)
         run: |
           node tools/v1-owner-capacity-review.e2e.mjs
+          node tools/v1-owner-operations-review.e2e.mjs
   p0-poisoned-privileged-source-hardstop:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

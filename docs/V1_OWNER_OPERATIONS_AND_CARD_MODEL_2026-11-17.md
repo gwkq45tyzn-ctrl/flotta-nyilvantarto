@@ -62,6 +62,47 @@ rich histories/cards/contacts/root preservation, stale source hash, source
 readback drift, duplicate/foreign/unreviewed decisions and rich candidate tamper.
 Private originals and decision inputs are never changed by the checker.
 
+## Magyar offline űrlap mindkét döntéshez (2026-11-18)
+
+A `tools/v1-owner-operations-review.html` a régi, csak kapacitásos űrlap
+mellett külön, teljesen offline segéd (helyi `file://` megnyitás). A négy
+tömbös, eredeti teljes JSON fájlt a böngésző lokálisan olvassa. Az
+**összes bizonytalan státuszú** futárt külön aktiválni/inaktiválni és
+ellenőrzöttnek jelölni kell; ha ez új aktív futárt eredményez, annak külön
+**jóváhagyott kapacitás** is szükséges. Az **összes** eredményül aktív futár
+kapacitását ellenőrizni kell, a már érvényes számokat is. A 70 csak javaslat,
+nem tölthető be hallgatólagosan. A választás módosítása érvényteleníti a
+korábbi ellenőrzést.
+
+Az űrlap két PRIVÁT JSON-t készít:
+- `imile-privat-tulajdonosi-dontesek.json`: pontos
+  `{sourceSha256,capacities,statuses}` objektum, amelyet a létező
+  `prepareReviewedCourierOperations` és
+  `v1-private-capacity-transition.mjs --decisions` képes helyileg
+  ellenőrizni; a `reviewed:true` NEM bizonyít valódi tulajdonosi azonosságot.
+- `imile-privat-ellenorzott-flotta.json`: a teljes, eredetivel
+  pontosan egyező rich adatokból és csak a megjelölt státusz-/kapacitás
+  változásokból álló jelölt. Nincs közvetlen éles Firestore / Apps Script írás.
+
+A felület a privát forrás és mindkét mentett fájl UTF-8-ját szigorú, `fatal:true` dekódolással olvassa: a böngésző `File.text()` lossy helyettesítő karakteres feldolgozása nem fogadható el hiteles rich forrásegyezésnek.
+
+A két letöltött fájlt **külön-külön újra ki kell választani** az űrlapon:
+az összesítő gomb csak bájtpontos, teljes JSON- és SHA-256-egyezés esetén
+válik aktívvá. A redaktált összesítő nem tartalmaz nevet, DA-t, rendszámot,
+telefonszámot, kártyaadatot vagy előzményt; a valódi forrás- és jelölt
+SHA-256-ot kizárólag a privát helyi fájl tartalmazza. Az eredeti forrást,
+jelöltet, döntési tervet, forráshash-t és mentést SOHA ne töltsd GitHubra/CI-ba.
+A korábbi két A2:C2-pillanatkép, az eredeti C2 mentett bájtjai, a
+független mentés és a tényleges owner hitelesítés külön kötelezők.
+
+A teljesen szintetikus, 12 futáros / 14 autós, 6 hiányzó aktív
+kapacitásos és 3 bizonytalan státuszú **valódi Chromium** QA teszt
+ellenőrzi az explicit döntéseket, az újonnan aktivált futár külön
+kapacitását, az eredeti teljes rich megőrzését, a visszaolvasásos
+támper-denyt, a változtatás miatti visszavonást és a nulla HTTP-kérést.
+Ez csak offline kezelhetőségi javítás, nem tulajdonosi jóváhagyás vagy
+élesítési bizonyíték.
+
 ## Card archive and authenticated CRUD: reviewed design, NOT implemented parity
 
 Keep imported `fuelCards` and their source attestations immutable. Do not restore
