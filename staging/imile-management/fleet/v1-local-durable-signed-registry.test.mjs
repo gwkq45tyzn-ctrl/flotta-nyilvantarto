@@ -194,6 +194,27 @@ try {
     assert.equal(JSON.stringify(out).includes('PRIVATE_RUNTIME_CANARY'),false);
     assert.equal(JSON.stringify(out).includes('PRIVATE_PATH_CANARY'),false);
   });
+  await test('SDK error message accessors cannot swap a safe reason for private text or reject the public promise',async()=>{
+    const keys=makeKeys();
+    for(const mode of ['swap','throw']){
+      let reads=0;const hostile={};
+      Object.defineProperty(hostile,'message',{get(){
+        reads++;
+        if(mode==='throw')throw Error('PRIVATE_ERROR_GETTER_THROW_CANARY');
+        return reads===1?'NO_DURABLE_HIGHWATER':'PRIVATE_ERROR_SWAP_CANARY';
+      }});
+      const fakeDb=new Proxy({app:{options:{projectId}}},{get(target,key){
+        if(key==='app')return target.app;
+        throw hostile;
+      }});
+      const gate=createLocalSignedRegistryHighwater({db:fakeDb,projectId,
+        rootPublicKeySpkiBase64:keys.rootSpki,independentlyPinnedRootSha256:keys.rootPin});
+      const out=await gate.adoptRootSignedRegistry(registry(keys,1,[]));
+      reject(out,/^SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED$/);
+      assert.equal(reads,0,'untrusted message accessor is not executed');
+      assert.equal(JSON.stringify(out).includes('PRIVATE_ERROR_'),false);
+    }
+  });
   await test('caller mutation during async adoption cannot detach high-water from the signed payload',async()=>{
     await env.clearFirestore();
     const keys=makeKeys();

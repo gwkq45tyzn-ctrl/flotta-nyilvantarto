@@ -50,10 +50,19 @@ const SAFE_TRANSACTION_DENIALS=new Set([
   'NO_DURABLE_HIGHWATER',
   'CANDIDATE_NOT_CURRENT_DURABLE_REGISTRY'
 ]);
-const safeTransactionDenial=e=>
-  SAFE_TRANSACTION_DENIALS.has(e?.message)
-    ?'SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED: '+e.message
+const safeTransactionDenial=e=>{
+  let message=null;
+  try{
+    if(e!==null&&(typeof e==='object'||typeof e==='function')){
+      const descriptor=Object.getOwnPropertyDescriptor(e,'message');
+      if(descriptor&&Object.hasOwn(descriptor,'value')&&typeof descriptor.value==='string')
+        message=descriptor.value;
+    }
+  }catch{} // A hostile SDK/proxy error must never escape this denial boundary.
+  return SAFE_TRANSACTION_DENIALS.has(message)
+    ?'SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED: '+message
     :'SIGNED_REGISTRY_HIGHWATER_TRANSACTION_DENIED';
+};
 const keyOf=b64=>{
   if(typeof b64!=='string'||b64.length<40||b64.length>1024||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)||
