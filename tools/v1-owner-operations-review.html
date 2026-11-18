@@ -130,6 +130,14 @@ function canonicalBytes(value){
     throw Error('SOURCE_OVER_BUDGET');
   return text;
 }
+// File.text() silently replaces malformed UTF-8. Strict original-file
+// decoding is required before any source digest or rich-history comparison.
+async function strictFileText(file){
+  if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('FILE_SIZE_DENIED');
+  const bytes=await file.arrayBuffer();
+  if(bytes.byteLength!==file.size)throw Error('FILE_CHANGED_DURING_READ');
+  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+}
 async function digest(input){
   if(!crypto.subtle)throw Error('CRYPTO_UNAVAILABLE');
   const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(input));
@@ -302,7 +310,7 @@ async function verify(which){
   if(!current||!file)return;
   try{
     if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('INVALID_SAVED_FILE_SIZE');
-    const bytes=await file.text();
+    const bytes=await strictFileText(file);
     if(bytes!==(which==='decision'?current.decisionText:current.candidateText))
       throw Error('SAVED_FILE_BYTES_DIFFER');
     const parsed=JSON.parse(bytes);
@@ -327,7 +335,7 @@ ui.sourceFile.addEventListener('change',async()=>{
   if(!file){notice(ui.sourceMessage,'Nincs kiválasztott fájl.',true);return;}
   try{
     if(file.size<1||file.size>MAX_FILE_BYTES)throw Error('SOURCE_SIZE_DENIED');
-    const s=JSON.parse(await file.text());
+    const s=JSON.parse(await strictFileText(file));
     if(version!==sourceVersion)return;
     const shape=sourceShape(s);
     original=s;
