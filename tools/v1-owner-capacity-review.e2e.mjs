@@ -262,7 +262,26 @@ try{
       label+' must invalidate previous summary');
     assert.match(await page.locator('#message').innerText(),/elutasítva/i);
   }
+  // A lossy File.text() would replace this single invalid UTF-8 byte
+  // inside otherwise valid source metadata, silently changing the rich
+  // original before SHA/review. Strict decoding must DENY before rendering.
+  const invalidUtf8=Buffer.from(JSON.stringify(source()),'utf8');
+  const marker=Buffer.from('LOCAL_PRIVATE_CONTACT_CANARY','utf8');
+  const pos=invalidUtf8.indexOf(marker);
+  assert.ok(pos>0);
+  invalidUtf8[pos]=0xff;
+  await page.locator('#sourceFile').setInputFiles({
+    name:'corrupt-private-rich-source.json',mimeType:'application/json',
+    buffer:invalidUtf8
+  });
+  await page.waitForFunction(()=>!document.querySelector('#message')
+    .textContent.includes('ellenőrzése…'));
+  assert.equal(await page.locator('#reviewPanel').isHidden(),true,
+    'invalid UTF-8 private source must not be rendered or hashed');
+  assert.equal(await page.locator('#exportButton').isDisabled(),true);
+  assert.match(await page.locator('#message').innerText(),/elutasítva/i);
   assert.deepEqual(network,[],'hostile inputs must not cause network calls');
+  console.log('PASS DENY [REAL CHROMIUM]: corrupt UTF-8 private source fails before rich canonical SHA');
   console.log('PASS DENY [REAL CHROMIUM]: duplicate DA/plate, sealed/migrated, no active car, 30+ drivers, invalid history/JSON, reserved field; zero HTTP');
 }finally{
   await browser.close();
