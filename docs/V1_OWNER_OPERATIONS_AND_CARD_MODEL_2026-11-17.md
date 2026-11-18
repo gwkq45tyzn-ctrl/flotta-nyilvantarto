@@ -84,6 +84,8 @@ Az űrlap két PRIVÁT JSON-t készít:
   pontosan egyező rich adatokból és csak a megjelölt státusz-/kapacitás
   változásokból álló jelölt. Nincs közvetlen éles Firestore / Apps Script írás.
 
+A felület a privát forrás és mindkét mentett fájl UTF-8-ját szigorú, `fatal:true` dekódolással olvassa: a böngésző `File.text()` lossy helyettesítő karakteres feldolgozása nem fogadható el hiteles rich forrásegyezésnek.
+
 A két letöltött fájlt **külön-külön újra ki kell választani** az űrlapon:
 az összesítő gomb csak bájtpontos, teljes JSON- és SHA-256-egyezés esetén
 válik aktívvá. A redaktált összesítő nem tartalmaz nevet, DA-t, rendszámot,
