@@ -1,3 +1,4 @@
+import {snapshotJsonData} from './v1-json-data-snapshot.mjs';
 import {createIndependentRegistryFloor} from './v1-independent-registry-floor.mjs';
 /**
  * Local ED25519 CHAIN proof: pinned root -> root-SIGNED offline registry ->
@@ -117,7 +118,7 @@ export class TrustedSignerContract {
     }
   }
   verify(...args){
-    try{return this.#verify(...args);}
+    try{return args.length===1?this.#verify(snapshotJsonData(args[0])):this.#verify(...args);}
     catch{return fail('INVALID_OFFLINE_SIGNER_REGISTRY_OR_SOURCE');}
   }
   #verify(input){

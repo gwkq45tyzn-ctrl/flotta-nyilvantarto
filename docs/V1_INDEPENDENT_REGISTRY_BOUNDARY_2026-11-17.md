@@ -90,3 +90,28 @@ still selects the explicitly legacy demo; it MUST NOT be an admission service.
 The public release/import gates remain denied. No live Rules/IAM/script change,
 production import, deploy or merge is included. #83 independent Grok and ChatGPT
 same-version GO and subsequent explicit owner authorization remain mandatory.
+
+## 2026-11-18: one immutable data observation across the verifier chain
+
+Reproduced on #393 `6561490eed7973d4b18d64763c022e6674b5e1f6`:
+a programmatic input accessor returned the approved revoked sequence-2 registry
+to the checkpoint comparison, then the correctly signed older active sequence-1
+registry to signature/source verification. Both outer-envelope and nested
+payload/signature variants incorrectly returned `ok:true`. This is a local
+JavaScript API input-consistency bypass, not proof that Firestore JSON can store
+executable accessors or that production IAM has been resolved.
+
+The verifier now snapshots JSON DATA before any gate. Own enumerable data
+properties only; no getters, functions, symbols, cycles, custom prototypes or
+sparse arrays. The bounded deep copy is frozen. Checkpoint equality, signature,
+revocation, source preflight and transactional retries consume this same private
+snapshot. The highwater adopter, small source/epoch binder and 440 chunk/aggregate
+paths all capture their public input before destructuring or asynchronous work.
+No caller data is executed to decide which signed bytes to trust.
+
+Existing valid Ed25519 fixtures still pass; new outer/nested swapping attacks
+must deny without invoking the getter. The real 440-pair emulator additionally
+checks the swapping highwater and hostile chunk/aggregate inputs do not change
+the persisted highwater. Existing privileged database-only reset acceptance is
+retained as the required production-boundary counterexample. All live authority,
+IAM, independent deployment ownership and production import flags remain false.

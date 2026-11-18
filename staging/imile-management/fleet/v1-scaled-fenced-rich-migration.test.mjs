@@ -357,6 +357,21 @@ test('440 ACTUAL rich keyed masters + 440 immutable claims under epoch fencing, 
           accepted(await strictGate.adoptRootSignedRegistry(revokedSignedRegistry));
           await setDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'),olderHighwater);
           denied(await strictGate.adoptRootSignedRegistry(bundle),/INDEPENDENT_REGISTRY_CHECKPOINT_DENIED/);
+          let payloadReads=0;
+          const swapping={algorithm:'Ed25519'};
+          Object.defineProperties(swapping,{
+            payload:{enumerable:true,get(){return ++payloadReads===1?bundle.payload:revokedSignedRegistry.payload;}},
+            signatureBase64:{enumerable:true,get(){return payloadReads<=1?bundle.signatureBase64:revokedSignedRegistry.signatureBase64;}}
+          });
+          denied(await strictGate.adoptRootSignedRegistry(swapping),/INVALID_SIGNED_REGISTRY_ENVELOPE/);
+          assert.equal(payloadReads,0,'untrusted getter never executed');
+          assert.deepEqual((await getDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'))).data(),olderHighwater);
+          const hostileEvidence={...evidence};
+          Object.defineProperty(hostileEvidence,'registryBundle',{enumerable:true,get(){throw Error('PRIVATE_REGISTRY_SWAP_CANARY');}});
+          const strictAttestor=createLocal440SignedChunkReceipts({db:dbB,projectId,...strictOptions});
+          denied(await strictAttestor.recordChunk(hostileEvidence,0),/SIGNED_440_SOURCE_PREFLIGHT_DENIED/);
+          denied(await strictAttestor.aggregate(hostileEvidence),/SIGNED_440_SOURCE_PREFLIGHT_DENIED/);
+          console.log('PASS DENY [E+SDK 440]: swapping registry accessors never execute; highwater and chunk/aggregate evidence share one immutable JSON snapshot');
           for(const removeHighwater of [false,true]){
             if(removeHighwater)await deleteDoc(doc(dbA,'v1SyntheticOwnerRegistryHighwater','current'));
             const restarted=createLocal440SignedChunkReceipts({db:dbB,projectId,...strictOptions});

@@ -373,3 +373,32 @@ test('a matching file byte pin never replaces Ed25519 root/signature/context val
   const bytes2=JSON.stringify(forged);writeFileSync(path,bytes2);
   denied(execute({...f,registryBundle:forged},{...cfg,independentlyPinnedRegistrySha256:createHash('sha256').update(bytes2).digest('hex')}),/REGISTRY_ED25519_SIGNATURE_INVALID/);
 }));
+
+test('checkpoint and signature verification cannot observe different envelopes through an input accessor',()=>withCheckpoint((f,cfg,path)=>{
+  const revoked=signEnvelope({...f.registry,sequence:2,revokedSignerFingerprints:[f.signer.fingerprint]},f.root);
+  const bytes=JSON.stringify(revoked);writeFileSync(path,bytes);
+  const trusted={...f.contractConfig,...cfg,
+    independentlyPinnedRegistrySha256:createHash('sha256').update(bytes).digest('hex')};
+  let reads=0;
+  const input={manifest:f.signedManifest,snapshot:f.raw,backup:f.backup};
+  Object.defineProperty(input,'registryBundle',{enumerable:true,
+    get(){return ++reads===1?revoked:f.registryBundle;}});
+  const r=createTrustedSignerContract(trusted).verify(input);
+  denied(r);
+  assert.equal(reads,0,'untrusted getter not invoked');
+}));
+test('checkpoint and signature verification cannot observe different nested registry payload/signature getters',()=>withCheckpoint((f,cfg,path)=>{
+  const revoked=signEnvelope({...f.registry,sequence:2,revokedSignerFingerprints:[f.signer.fingerprint]},f.root);
+  const bytes=JSON.stringify(revoked);writeFileSync(path,bytes);
+  const trusted={...f.contractConfig,...cfg,
+    independentlyPinnedRegistrySha256:createHash('sha256').update(bytes).digest('hex')};
+  let reads=0;
+  const bundle={algorithm:'Ed25519'};
+  Object.defineProperties(bundle,{
+    payload:{enumerable:true,get(){return ++reads===1?revoked.payload:f.registryBundle.payload;}},
+    signatureBase64:{enumerable:true,get(){return reads<=1?revoked.signatureBase64:f.registryBundle.signatureBase64;}}
+  });
+  denied(createTrustedSignerContract(trusted).verify({registryBundle:bundle,
+    manifest:f.signedManifest,snapshot:f.raw,backup:f.backup}));
+  assert.equal(reads,0,'nested untrusted getter not invoked');
+}));
