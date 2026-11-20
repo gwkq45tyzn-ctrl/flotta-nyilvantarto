@@ -1,0 +1,143 @@
+// ISOLATED Rules v2 synthetic capability proof. NOT iMile production Rules.
+// Demonstrate a possible rigorous base + bounded-list-step identity invariant:
+// empty source CREATE, exactly one row mutation, trusted map deltas, monotonic
+// revisions, and unique-driver/plate booking on each resulting snapshot.
+// A production integration additionally needs original Fleet HTML migration,
+// history/parity/restore, rules call budgets and legacy/Admin SDK writer stop.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function editor() {
+      return request.auth != null && request.auth.uid == 'synthetic-v1-editor';
+    }
+    function rawDA(s) {
+      return s is string && s.matches('^[A-Za-z0-9_-]{2,20}$');
+    }
+    function rawPlate(s) {
+      return s is string && s.matches('^[A-Za-z0-9 -]{3,20}$');
+    }
+    function normDA(s) { return s.upper(); }
+    function normPlate(s) { return s.replace('[ -]', '').upper(); }
+    function keyOf(row, field) {
+      let raw = row.get(field, '');
+      return field == 'daCode'
+        ? (rawDA(raw) ? normDA(raw) : '')
+        : (rawPlate(raw) ? normPlate(raw) : '');
+    }
+    function unchangedPrefix(oldRows,newRows,i) {
+      return i == 0 || oldRows[0:i] == newRows[0:i];
+    }
+    function unchangedTail(oldRows,oldStart,newRows,newStart) {
+      return oldRows.size() - oldStart == newRows.size() - newStart
+        && (oldRows.size() == oldStart
+          || oldRows[oldStart:oldRows.size()] == newRows[newStart:newRows.size()]);
+    }
+    function countDelta(oldCount,newCount,oldKey,newKey) {
+      return (oldKey == newKey && oldCount == newCount)
+        || (oldKey != newKey
+          && newCount.diff(oldCount).affectedKeys().hasOnly([oldKey,newKey])
+          && (oldKey == '' || (oldCount.get(oldKey,0) == 1 && newCount.get(oldKey,0) == 0))
+          && (newKey == '' || (oldCount.get(newKey,0) == 0 && newCount.get(newKey,0) == 1)));
+    }
+    function editOk(oldRows,newRows,oldCount,newCount,i,field) {
+      return i is int && i >= 0 && i < oldRows.size()
+        && oldRows.size() == newRows.size()
+        && unchangedPrefix(oldRows,newRows,i)
+        && unchangedTail(oldRows,i+1,newRows,i+1)
+        && keyOf(oldRows[i],field) != ''
+        && keyOf(newRows[i],field) != ''
+        && countDelta(oldCount,newCount,keyOf(oldRows[i],field),keyOf(newRows[i],field));
+    }
+    function insertOk(oldRows,newRows,oldCount,newCount,i,field) {
+      return i is int && i >= 0 && i <= oldRows.size()
+        && newRows.size() == oldRows.size()+1
+        && unchangedPrefix(oldRows,newRows,i)
+        && unchangedTail(oldRows,i,newRows,i+1)
+        && keyOf(newRows[i],field) != ''
+        && countDelta(oldCount,newCount,'',keyOf(newRows[i],field));
+    }
+    function deleteOk(oldRows,newRows,oldCount,newCount,i,field) {
+      return i is int && i >= 0 && i < oldRows.size()
+        && newRows.size() == oldRows.size()-1
+        && unchangedPrefix(oldRows,newRows,i)
+        && unchangedTail(oldRows,i+1,newRows,i)
+        && keyOf(oldRows[i],field) != ''
+        && countDelta(oldCount,newCount,keyOf(oldRows[i],field),'');
+    }
+    function singleStep(oldRows,newRows,oldCount,newCount,change,field) {
+      return change.op == 'none'
+        ? (oldRows == newRows && oldCount == newCount)
+        : change.op == 'edit'
+        ? editOk(oldRows,newRows,oldCount,newCount,change.get('index',-1),field)
+        : change.op == 'insert'
+        ? insertOk(oldRows,newRows,oldCount,newCount,change.get('index',-1),field)
+        : change.op == 'delete'
+        ? deleteOk(oldRows,newRows,oldCount,newCount,change.get('index',-1),field)
+        : false;
+    }
+    function validFields(d) {
+      return d.keys().hasOnly(['vehicles','drivers','identity','lastChange','sealed','revision'])
+        && d.keys().hasAll(['vehicles','drivers','identity','lastChange','sealed','revision'])
+        && d.identity is map
+        && d.identity.keys().hasOnly(['plateCnt','daCnt'])
+        && d.identity.keys().hasAll(['plateCnt','daCnt'])
+        && d.identity.plateCnt is map && d.identity.daCnt is map
+        && d.drivers is list && d.vehicles is list
+        && d.lastChange is map
+        && d.lastChange.keys().hasOnly(['drivers','vehicles'])
+        && d.lastChange.keys().hasAll(['drivers','vehicles'])
+        && d.sealed is bool && d.revision is int;
+    }
+    function sourceValidChange(oldValue,newValue) {
+      return validFields(newValue)
+        && newValue.revision == oldValue.revision + 1
+        && newValue.diff(oldValue).affectedKeys().hasOnly(
+          ['vehicles','drivers','identity','lastChange','sealed','revision'])
+        // At most one record across BOTH arrays changes per write.
+        && (newValue.lastChange.drivers.op == 'none'
+          || newValue.lastChange.vehicles.op == 'none')
+        && singleStep(oldValue.drivers,newValue.drivers,
+            oldValue.identity.daCnt,newValue.identity.daCnt,
+            newValue.lastChange.drivers,'daCode')
+        && singleStep(oldValue.vehicles,newValue.vehicles,
+            oldValue.identity.plateCnt,newValue.identity.plateCnt,
+            newValue.lastChange.vehicles,'rendszam')
+        // If caller wants an editable change, booking must be unsealed.
+        && (!newValue.sealed || (
+          newValue.lastChange.drivers.op == 'none'
+          && newValue.lastChange.vehicles.op == 'none'));
+    }
+    function emptyBaseline(value) {
+      return validFields(value)
+        && value.revision == 1 && value.sealed == false
+        && value.drivers.size() == 0 && value.vehicles.size() == 0
+        && value.identity.daCnt.size() == 0
+        && value.identity.plateCnt.size() == 0
+        && value.lastChange.drivers.op == 'none'
+        && value.lastChange.vehicles.op == 'none';
+    }
+    match /countedFleet/{docId} {
+      allow read: if editor();
+      allow create: if editor() && docId == 'current' && emptyBaseline(request.resource.data);
+      allow update: if editor() && docId == 'current'
+        && sourceValidChange(resource.data,request.resource.data);
+      allow delete: if false;
+    }
+    match /countedBookings/{id} {
+      allow read: if editor();
+      allow create: if editor()
+        && request.resource.data.keys().hasOnly(['driverId','vehicleId','driverIndex','vehicleIndex'])
+        && request.resource.data.keys().hasAll(['driverId','vehicleId','driverIndex','vehicleIndex'])
+        && getAfter(/databases/$(database)/documents/countedFleet/current).data.sealed == true
+        && request.resource.data.driverIndex is int
+        && request.resource.data.driverIndex >= 0
+        && request.resource.data.vehicleIndex is int
+        && request.resource.data.vehicleIndex >= 0
+        && getAfter(/databases/$(database)/documents/countedFleet/current).data.identity.daCnt.get(request.resource.data.driverId,0) == 1
+        && getAfter(/databases/$(database)/documents/countedFleet/current).data.identity.plateCnt.get(request.resource.data.vehicleId,0) == 1
+        && keyOf(getAfter(/databases/$(database)/documents/countedFleet/current).data.drivers[request.resource.data.driverIndex],'daCode') == request.resource.data.driverId
+        && keyOf(getAfter(/databases/$(database)/documents/countedFleet/current).data.vehicles[request.resource.data.vehicleIndex],'rendszam') == request.resource.data.vehicleId;
+      allow update, delete: if false;
+    }
+  }
+}
