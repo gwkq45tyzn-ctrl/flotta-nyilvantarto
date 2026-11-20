@@ -6,6 +6,7 @@ on:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'staging/imile-management/fleet/v1-canonical-booking-emulator.mjs'
+      - 'staging/imile-management/fleet/v1-integrated-real-rules-adversarial.mjs'
       - 'depokapacitas/canonical-booking*.mjs'
       - 'features/migration-manifest*'
       - 'features/fleet-migration-dryrun*'
@@ -18,6 +19,7 @@ on:
       - 'depokapacitas/firestore-v1-restricted.rules'
       - 'staging/imile-management/fleet/v1-restricted-rules-emulator.mjs'
       - 'staging/imile-management/fleet/v1-canonical-booking-emulator.mjs'
+      - 'staging/imile-management/fleet/v1-integrated-real-rules-adversarial.mjs'
       - 'depokapacitas/canonical-booking*.mjs'
       - 'features/migration-manifest*'
       - 'features/fleet-migration-dryrun*'
@@ -64,3 +66,24 @@ jobs:
         run: |
           test "$(git rev-parse HEAD:depokapacitas/firestore.rules)" = "0b9eba640f1ccdf33c92100d90205753548f6bb3"
           test "$(git rev-parse HEAD:index.html)" = "4d51c5ff768fc7fb27480ba19fc6eac9a1d11e88"
+
+  s7-integrated-independent-adversarial:
+    runs-on: ubuntu-latest
+    name: P0 #114 real SDK+Rules emulator positive/negative atomic booking
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned local Firebase SDK dependencies
+        run: npm ci --prefix staging/imile-management/fleet --ignore-scripts --no-audit --no-fund
+      - name: Real SDK and real #114 security Rules on synthetic local emulator
+        run: |
+          npx --yes firebase-tools@15.34.2 emulators:exec \
+            --only firestore --project demo-imile-restricted-v1 \
+            --config firebase.staging-emulator.json \
+            "node staging/imile-management/fleet/v1-integrated-real-rules-adversarial.mjs"
