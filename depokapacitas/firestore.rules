@@ -172,14 +172,21 @@ service cloud.firestore {
       allow create, update: if editor()
         // Existing 16-column Attendance events remain valid. The optional
         // vehicleId appears only after the Google source adds car selection.
-        && (exactFields(request.resource.data,[
+        && request.resource.data.keys().hasAll([
           'eventTime','eventDate','timeKnown','daCode','driverName','vendor',
           'type','status','photoFront','photoLeft','photoRight','photoBack','source'])
-          || exactFields(request.resource.data,[
+        && request.resource.data.keys().hasOnly([
           'eventTime','eventDate','timeKnown','daCode','driverName','vendor',
-          'type','status','photoFront','photoLeft','photoRight','photoBack','source','vehicleId']))
+          'type','status','photoFront','photoLeft','photoRight','photoBack','source',
+          'vehicleId','pickupOdometer','returnOdometer'])
         && (!('vehicleId' in request.resource.data)
             || validVehiclePlate(request.resource.data.vehicleId))
+        && (!('pickupOdometer' in request.resource.data)
+            || (request.resource.data.type == 'Log In'
+              && nonNegative(request.resource.data.pickupOdometer,100000000)))
+        && (!('returnOdometer' in request.resource.data)
+            || (request.resource.data.type == 'Log Out'
+              && nonNegative(request.resource.data.returnOdometer,100000000)))
         && validDay(request.resource.data.eventDate)
         && validEventTime(request.resource.data.eventTime,request.resource.data.eventDate)
         && request.resource.data.timeKnown is bool
