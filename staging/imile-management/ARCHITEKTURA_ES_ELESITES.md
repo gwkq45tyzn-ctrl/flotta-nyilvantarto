@@ -1,0 +1,154 @@
+# iMile Management – közös törzsadatok, két külön modul (STAGING)
+
+**Állapot: fejlesztés alatt; élesítés tiltva.** A `main` ág, a Flotta Nyilvántartó éles `index.html` fájlja és a meglévő Apps Script háttér **változatlan**.
+
+## Modulok és adattulajdonlás
+
+- **Közös törzsadat:** `drivers` (azonosító: DA-kód); `vehicles` (azonosító: normalizált rendszám, később stabil belső ID); `vendors` (vállalkozók); `users` (szerepkörök).
+- **Flotta saját adatai:** jármű okmányok, biztosítások, műszaki, szerviz, km-óra, tankolókártyák, átadások, előzmények.
+- **DepóKapacitás saját adatai:** napi foglalások, kerület, csomagigény, Attendance, autófotó-linkek, teljesítmény, riportok.
+- A közös törzs *egyetlen hiteles, verziózott forrásból* származik; a modulok nem tartanak fenn külön módosítható futár- és autótörzset.
+
+## Biztonságos átállási lépések
+
+1. **Fagyasztott éles flotta:** a jelenlegi alkalmazás és a Google Apps Script tovább működik. Minden átállás előtt exportálható JSON-mentés és független, visszaállítható központi mentés szükséges.
+2. **Csak olvasó migráció:** a flotta JSON-adatainak feldolgozása külön staging környezetben, automatikus személyesadat-feltöltés nélkül. Az eredeti adatforráshoz nem írunk.
+3. **Azonosító-egyeztetés:** futárnál DA-kód, autónál rendszám normalizálása; hiányzó/ütköző/duplikált azonosítók kézi felülvizsgálata. Nem történik automatikus felülírás.
+4. **Központi adatbázis + szerepkörök:** külön, védett Firebase-projekt; minden adat szerveroldali Firestore Rules-védelemmel; külön admin/editor/viewer jogosultságok.
+5. **Párhuzamos, csak olvasó kipróbálás:** mindkét felület ugyanazokat a közös törzsadatokat *olvassa*, de éles flottaírás továbbra is a régi rendszeren történik. Stagingben ellenőrizzük a rekordegyezőséget.
+6. **Ütközésmentes írás bevezetése:** tranzakciós jármű-foglalás és jogosultságkezelés; nem elég a böngészőoldali ellenőrzés.
+7. **Teljes regressziós teszt:** biztosítások, szerviz, tankolókártyák, flottaelőzmények, mentés, szinkron, Attendance és csomag-KPI-k.
+8. **Kézi GO/NO-GO:** csak céges jóváhagyás és explicit felhasználói élesítési engedély után lehet a `main` ág felületét módosítani. Ha nem sikeres, az éles flotta a régi háttérrel marad.
+
+## Élesítési kapuk (mind teljesüljön)
+
+- [ ] Az éles Flotta Nyilvántartó minden meglévő funkciója és adata változatlanul működik.
+- [ ] A teljes flottaadatbázis mentése és próbavisszaállítása igazolt.
+- [ ] Firebase Authentication és Firestore Rules élesben, szerepkörönként ellenőrizve.
+- [ ] A migrált futárok, járművek, azonosítók és előzmények egyeznek; duplikációk rendezve.
+- [ ] Az autófoglalás párhuzamos szerkesztéskor sem ütközik.
+- [ ] Az Attendance szinkron és fotóhozzáférés adatszivárgás nélkül működik.
+- [ ] Napi, heti és havi kapacitás- és teljesítményriportok helyesek.
+- [ ] Mobilos/asztali próba, biztonsági és adatmegőrzési vizsgálat sikeres.
+- [ ] Kifejezett felhasználói engedély a közös rendszer élesítésére.
+
+**Tilos:** a régi flotta Apps Script végpontjának átírása, automatikus adatfelülírás, a nyilvános GitHub Pages-en éles adatok tárolása, staging automatikus élesítése.
+
+## Jelenlegi technikai korlát
+
+A régi Flotta Nyilvántartó egy teljes JSON-pillanatképet szinkronizál Google Apps Script-tel. A DepóKapacitás webkódja Firebase/Firestore-alapú; a staging ágon a `firebase-config.js` már az `imile-management-staging` projektre mutat. A közös élő törzsadat és közös belépés **még nincs igazolva**. A Firestore jogosultsági, felhasználói és adat-migrációs tesztek továbbra is szükségesek.
+
+
+## 2026-10-30 – végrehajtott staging-fejlesztés
+
+- Megjelent az **offline, kizárólag olvasó** flotta JSON-migrációs előnézet:
+  `staging/imile-management/migration-preview.html`.
+- DA-kód és rendszám normalizálás, státusztérkép, hiányzó / dupla azonosítók, ismeretlen státuszok ellenőrzése: `shared-records.mjs`.
+- Automatikus migráció **nincs**: a riportot csak a helyi böngésző dolgozza fel.
+- A DepóKapacitás fejlesztői ágán a `drivers` és `vehicles` közös törzsadatok **csak olvashatók**. A kapacitás külön `driverCapacities/{daCode}` dokumentumba kerül.
+- A foglalás ezt a külön kapacitást használja; az autó a közös flottaállapotot olvassa.
+- A staging Firestore-szabályok a közös törzs szerkesztését adminisztrátorra korlátozzák és a törlést tiltják.
+- GitHub Actions staging ellenőrzés `.github/workflows/imile-staging.yml`, `shared-records.test.mjs`.
+- **A staging webkonfiguráció már megvan; a tényleges Firestore/Auth beállítások, jogosultságpróbák, migrált adatok és közös belépés még nincsenek igazolva.**
+
+### Helyi migrációs próba
+
+1. Az éles Flotta Nyilvántartóban kattints a **JSON biztonsági mentés** gombra, és őrizd meg az eredeti fájlt.
+2. Külön, lokális tesztkörnyezetben indíts statikus HTTP-kiszolgálót a staging mappa felett (például `python -m http.server 8080` a repository gyökeréből).
+3. Nyisd meg a `http://localhost:8080/staging/imile-management/migration-preview.html` címet.
+4. Válaszd ki a korábban mentett flotta JSON-t, nézd meg a problémás rekordokat.
+5. A kapott ellenőrzési riportot **ne** töltsd fel nyilvános GitHubra. Személyes adatot tartalmazhat.
+6. A migráció csak az ellenőrzés és céges jogosultság után készíthető elő külön admin-műveletként.
+
+### Firebase Console – közvetlen hozzáférés nélkül
+
+A Firebase-bővítmény telepítettnek látszik, de a jelen ChatGPT-eszközkészlet nem biztosít közvetlen Firebase / Firestore projektműveleteket.
+Ezért **semmilyen állítás nem tehető** a Firestore szabályok tényleges publikálásáról, az Auth felhasználókról, az élő adatbázisról vagy a mentésekről.
+A felhasználó megadta a nyilvános Firebase webkonfigurációt, amelyet **kizárólag a staging ágon** beállítottunk. A Firestore Rules publikálás, az első admin felvétele és a Google IAM külön jogosultsági lépések; ezek állapotát a felhőkonzolban kell ellenőrizni.
+
+
+## 2026-10-30 – kapacitás és foglalás fejlesztői javítások
+
+A `depokapacitas/capacity-eligibility.mjs` megvizsgálja a futár és jármű közös törzsadatait:
+
+- **Mai/jövőbeli beosztás:** csak `active === true` futár és `status === 'Elérhető'` jármű kapacitása számít bele a tervezett összesenbe.
+- **Korábbi nap:** a korábban rögzített napi kapacitás a történeti kimutatás része marad, akkor is, ha a jármű azóta szervizbe került.
+- A hibás vagy hiányzó közös törzsrekordhoz tartozó foglalás kapacitása a mai és jövőbeli tervekben nulla.
+- Az áttekintés figyelmeztet a kapacitásból kizárt foglalásokra; a foglalási lista külön mutatja az elérhetőséget.
+- Foglalás mentésekor a Firebase tranzakció **ismét lekéri** a futárt, az autót és a külön kapacitásrekordot.
+- A staging `firestore.rules` fájlban a foglalás új létrehozását **szerveroldali** ellenőrzés is védi az inaktív futárral vagy szervizelt autóval szemben.
+- A `capacity-eligibility.test.mjs` a státuszok és a történeti adatok viselkedését teszteli.
+- Az új teszt bekerült a staging CI-munkafolyamatba.
+
+**Ellenőrzés:** 16/16 célzott logikai és kódintegritási teszt sikeres a beszélgetésben futtatott mintákon. Az éles Firebase jogosultságok, a GitHub Actions futás és a teljes böngészős integrációs teszt **még nincs igazolva**.
+
+**Élesítési állapot:** a staging Firebase webkonfiguráció elkészült; a `main` ágon továbbra sincs bekötve. A jelenlegi éles Flotta Nyilvántartóhoz nem nyúltunk.
+
+## 2026-10-30 – Importdátumok javítása
+
+A DepóKapacitás staging alkalmazás most a `depokapacitas/import-dates.mjs` közös feldolgozót használja. Támogatja az ISO (`2026-10-30`), magyar (`30.10.2026`), amerikai (`10/30/2026`) és Excel-sorszámos dátumokat. A jelenléti import kifejezetten amerikai `MDY` sorrendet használ a kétértelmű perjeles dátumoknál, a többi operatív import alapértelmezésben magyar `DMY` sorrendet. A dátumvalidálás megakadályozza a lehetetlen napok bekerülését. A `depokapacitas/import-dates.test.mjs` automatikus ellenőrzés a staging GitHub Actions része.
+
+Az új dátumkezelés kód- és mintatesztjei sikeresek, de teljes Excel/Google Attendance böngészős integrációs próba és éles Firestore-validálás még szükséges. Az éles Flotta változatlan.
+
+
+## 2026-10-30 – importbiztonság és Firestore szerveroldali integritás
+
+- Az Excel-beolvasás előzetes ellenőrzése **teljes fájlszintű**: hiányzó kötelező mező, rossz számérték, hibás jelenléti időpont vagy azonos Firestore-rekordra mutató duplikált sor esetén a feltöltés nem indul el.
+- A helytelen, negatív vagy nem egész csomagszámok nem alakulnak észrevétlenül nullává.
+- A feltöltés megmutatja, hány beolvasott rekord tér el a kliens által ismert központi adatoktól. A hálózati adatfrissítés miatt a változásszám csak tájékoztató jellegű; éles környezetben párhuzamos szerkesztést is vizsgálni kell.
+- A több részletből álló Firestore batch-írás részleges sikertelenségét a felület külön jelzi. Ez **nem tranzakciós, az egész fájlra vonatkozó atomicitás**. Teljes atomikus importhoz külön szerveroldali feldolgozási terv szükséges.
+- A Google Attendance Apps Script az AM/PM alakú időpontokat validálja, és a tartalék parszolás eredményét időpontként jelöli.
+- A Firestore staging szabályok a közös \`drivers\` és \`vehicles\` dokumentumoknál az azonosítók egyezését követelik; új foglalásnál a futár aktív, az autó elérhető, a kapacitás pedig az aktuálisan rögzített referenciaértékkel egyező kell legyen.
+- Új automatizált kódszintű tesztek: \`import-validation.test.mjs\`, \`google-sync/timestamp.test.mjs\`, \`rules-contract.test.mjs\`.
+
+**Nem igazolt még:** Firestore Emulator jogosultsági próba, élő Firebase-integráció és jogosultságok publikálása, teljes Excel böngészős kipróbálás, GitHub Actions sikeres futás. A szabályfájl módosítása önmagában nem publikálja a Firestore-szabályokat.
+
+**Kiadási tiltás:** a régi flottarendszer változatlanul üzemel; az új iMile Management átállításához a korábbi GO/NO-GO ellenőrzési lista mindegyik kapuja szükséges.
+
+## 2026-10-30 – Staging Firebase webkonfiguráció beállítva
+
+- A megadott, **nyilvános Firebase webkonfiguráció** bekerült a `depokapacitas/firebase-config.js` fájlba kizárólag a `staging/imile-management-integration` ágon.
+- Projekt: `imile-management-staging`; `authDomain`: `imile-management-staging.firebaseapp.com`.
+- A `main` ág konfigurációja továbbra is üres, ezért az éles Flotta és az éles GitHub Pages nem állt át a staging Firebase-re.
+- A `depokapacitas/firebase-config.test.mjs` ellenőrzi a projektazonosítót, a webkonfiguráció szerkezetét és azt, hogy ne kerüljenek bele szerveroldali titkok. A staging CI-folyamat meghívja ezt a tesztet.
+- **Még ellenőrizendő a felhőben:** Authentication Email/Password bekapcsolva; Firestore adatbázis és európai régió; publikált Security Rules; jogosultsággal ellátott első admin; engedélyezett domain; bejelentkezés és valós időben olvasott tesztadatok.
+- Ne állítsuk át a `main` ágat és ne töltsünk be személyes futáradatokat, amíg az adatbázis jogosultságai és az izolált staging környezet nem vizsgázott sikeresen.
+
+
+## 2026-10-30 – Work Firebase audit javítása (biztonsági publikálás előtt)
+
+A Work a Firebase Console-ban ellenőrizte a következőket: a staging Web App regisztrált, Email/Password bekapcsolt, az üres (default) Firestore adatbázis Frankfurtban (europe-west3) létezik, a GitHub Pages-domain engedélyezett. A Firestore jelenleg publikált szabályai minden kliens-hozzáférést tiltanak. **Nincs Auth-felhasználó, első admin vagy tesztadat**. A Work biztonsági indokból nem publikálta a régi fejlesztői rules-fájlt.
+
+A Work által feltárt problémákra a staging ágon javítás készült:
+1. A bookings/driverClaims tranzakciós párosításhoz a dátum-, futár- és foglalásazonosító egyezését kétirányúan megköveteljük.
+2. Az attendance minden elvárt mezőjét kötelezővé tesszük és típus-/hosszellenőrzésre visszük; az eseménytípus, DA-kód, forrás és időpont összhangját ellenőrizzük.
+3. A users, drivers, vehicles, driverCapacities, demands, results, bookings, driverClaims és sourceRows gyűjteményekre teljes mezőkészlet, rekordazonosító-, adattípus-, tartomány- és hosszkorlátokat alkalmazunk.
+4. Ismeretlen adatútvonalra továbbra is a teljes tiltás az alapértelmezés.
+5. A rules-contract.test.mjs kibővítve a Work három megállapításának regressziós ellenőrzésére.
+
+**FONTOS: a módosított fájl csak GitHub staging forrás.** A kódszintű tesztek nem helyettesítik a Firebase Rules-compiler, Emulator és Playground próbáját, és nem bizonyítják, hogy a szabályok publikálva vannak.
+
+### Elengedhetetlen Firebase Console validáció a következő Work-feladathoz
+
+- A staging ág pontos forrása: depokapacitas/firestore.rules; összevetés után először a Rules Playground és lehetőség szerint a Firebase Emulator segítségével validálni, majd csak kompatibilis, biztonságos szabályokat publikálni.
+- Negatív tesztek: névtelen olvasás/írás tiltása; inaktív felhasználó; viewer írás; érvénytelen users/attendance/results/demands rekordok; árva, eltérő napú, eltérő futárú vagy külön létrehozott driverClaims; dupla autó- vagy futárfoglalás.
+- Pozitív tesztek: jogosult admin és editor törzsadat/kapacitás/tervezés, viewer olvasás; ugyanazon batch/transaction végén egyező bookings + driverClaims engedélyezése és együtt történő feloldása. A Firestore szabályok get/exists/getAfter hozzáférési korlátját valós tranzakcióval is tesztelni kell.
+- Az első valódi admin belépési fiókot Firebase Authenticationben felhasználó által jóváhagyott e-mail címmel létrehozni; a hozzá tartozó users/{UID} dokumentumot adminisztratív Console-hozzáféréssel hozzáadni. **Jelszó, OAuth-token, privát kulcs GitHubba vagy chatbe nem kerülhet.**
+- Tesztadatot kizárólag külön szintetikus ID-kkal szabad létrehozni; az éles flottát, a main ágat és az eredeti Attendance táblát nem érintheti.
+- Csak a sikeres teszteket követően állapítható meg, hogy a DepóKapacitás készen áll a belső staging-belépésre. Élesítés és valódi adatimport továbbra is tiltva.
+
+
+## 2026-10-30 – Work 65 emulátoros próbájából 4 hiba javítása
+
+A Work az előző szabályfájlt sikeresen lefordította, majd a 65 izolált Firestore-emulátoros tesztből 61-et sikeresen futtatott. A négy hiba:
+- 2 teszt: ismeretlen \`users/{uid}.role\` esetén az aktív fiók olvashatta/listázhatta a drivers gyűjteményt;
+- 1 teszt: az attendance elfogadta a lehetetlen órát/percet/másodpercet;
+- 1 teszt: az attendance elfogadta a lehetetlen naptári dátumot, pl. február 31.
+
+A staging \`depokapacitas/firestore.rules\` fájlban:
+- A \`member()\` csak \`admin\`, \`editor\` vagy \`viewer\` szereppel enged jogosultságot.
+- A \`validDay()\` 1900–2199 közötti valódi naptári dátumot fogad el, ideértve a Gergely-naptár szökőéveit.
+- A \`validEventTime()\` a dátummal azonos napot és a 00–23 óra, 00–59 perc/másodperc tartományokat követeli meg.
+- A szabályokhoz igazított \`rules-contract.test.mjs\` és az új \`rules-calendar.test.mjs\` szerepel a GitHub Actions staging ellenőrzéseiben.
+
+**Lokális kódszintű ellenőrzés:** 111 600 naptári kombinációból 111 600 helyes egyezés, forráskód-szerződés ellenőrzése PASS. **Nem Firebase-emulátoros újrateszt**: a módosított szabályokat a Worknek újból le kell fordítania és a teljes 65 tesztet le kell futtatnia. Csak minden teszt sikeressége esetén lehet a \`imile-management-staging\` projekten publikálni. Az éles Flotta és a main ág változatlan.

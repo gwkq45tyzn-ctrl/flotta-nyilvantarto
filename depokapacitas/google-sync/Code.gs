@@ -19,8 +19,17 @@ function syncAttendance(){
     const props=PropertiesService.getScriptProperties();
     const last=sheet.getLastRow();const first=Math.max(2,Number(props.getProperty(DEPO_WATERMARK)||'2'));
     if(last<first)return;
-    const raw=sheet.getRange(first,1,last-first+1,16).getValues();
-    const display=sheet.getRange(first,1,last-first+1,16).getDisplayValues();
+    // The existing Mobile Attendance uses 16 columns. Only adopt a car ID
+    // after an explicitly named additional column is present in the sheet.
+    // Historic 16-column events stay unchanged and never generate handovers.
+    const columns=Math.max(16,sheet.getLastColumn());
+    const header=sheet.getRange(1,1,1,columns).getDisplayValues()[0];
+    const normHeader=x=>String(x||'').trim().toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const vehicleIndex=header.findIndex(x=>
+      ['vehicleplate','vehicleid','licenseplate','rendszam','autorendszama'].includes(normHeader(x)));
+    const raw=sheet.getRange(first,1,last-first+1,columns).getValues();
+    const display=sheet.getRange(first,1,last-first+1,columns).getDisplayValues();
     let writes=[];
     for(let i=0;i<raw.length;i++){
       const r=raw[i],v=display[i];
@@ -29,17 +38,30 @@ function syncAttendance(){
       if(!code||!['Log In','Log Out'].includes(type))continue;
       const dateValue=r[0];
       const known=dateValue instanceof Date && !isNaN(dateValue.valueOf());
-      const datetime=known?Utilities.formatDate(dateValue,DEPO_TZ,"yyyy-MM-dd'T'HH:mm:ss"):formatDisplayTimestamp(v[0]);
-      if(!datetime)continue;
+      const fallback=known?'':formatDisplayTimestamp(v[0]);
+      const datetime=known?Utilities.formatDate(dateValue,DEPO_TZ,"yyyy-MM-dd'T'HH:mm:ss"):fallback;
+      if(!datetime){console.warn('Hibás vagy hiányzó bejelentkezési időpont, forrássor: '+(first+i));continue;}
       const signature=datetime+'|'+code+'|'+type+'|'+String(v[12]||'');
       const id='s'+Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,signature)
         .slice(0,16).map(x=>('0'+((x+256)%256).toString(16)).slice(-2)).join('');
       const fields={
-        eventTime:datetime,eventDate:datetime.substring(0,10),timeKnown:known,
+        eventTime:datetime,eventDate:datetime.substring(0,10),timeKnown:known||Boolean(fallback),
         daCode:code,driverName:String(v[1]||''),vendor:String(v[3]||''),type:type,
         status:String(v[11]||''),photoFront:String(v[12]||''),photoLeft:String(v[13]||''),
         photoRight:String(v[14]||''),photoBack:String(v[15]||''),source:'google_sheet'
       };
+      // Optional: the Google Form must first add "Vehicle Plate" (exact
+      // plate ID only) to Mobile Attendance; no automatic assignment without it.
+      if(vehicleIndex>=0){
+        const vehicleId=String(v[vehicleIndex]||'').trim().toUpperCase().replace(/[\s-]+/g,'');
+        if(vehicleId){
+          if(!/^[A-Z0-9]{4,12}$/.test(vehicleId)){
+            console.warn('Érvénytelen kiválasztott rendszám, sor: '+(first+i));
+            continue;
+          }
+          fields.vehicleId=vehicleId;
+        }
+      }
       const firestoreFields={};
       for(const key in fields)firestoreFields[key]=typeof fields[key]==='boolean'?{booleanValue:fields[key]}:{stringValue:fields[key]};
       writes.push({update:{name:'projects/'+DEPO_PROJECT_ID+'/databases/(default)/documents/attendance/'+id,fields:firestoreFields}});
@@ -59,9 +81,19 @@ function syncAttendance(){
   }finally{lock.releaseLock();}
 }
 function formatDisplayTimestamp(s){
-  const x=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  // A Google Forms MM/DD/YYYY vagy M/D/YYYY formátumot írhat ki.
+  // Nem fogadunk el idő nélküli, érvénytelen vagy kétértelműen feldolgozott eseményt.
+  const x=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+)(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i);
   if(!x)return '';
-  return x[3]+'-'+x[1].padStart(2,'0')+'-'+x[2].padStart(2,'0')+'T'+(x[4]?x[4].padStart(2,'0')+':'+x[5]+':'+(x[6]||'00'):'00:00:00');
+  const month=Number(x[1]),day=Number(x[2]),year=Number(x[3]);
+  let hour=Number(x[4]);const minute=Number(x[5]),second=Number(x[6]||0);
+  if(year<2000||year>2100||month<1||month>12||day<1||day>31||minute>59||second>59)return '';
+  if(x[7]){if(hour<1||hour>12)return '';hour=hour%12+(x[7].toUpperCase()==='PM'?12:0);}
+  else if(hour>23)return '';
+  const dt=new Date(Date.UTC(year,month-1,day));
+  if(dt.getUTCFullYear()!==year||dt.getUTCMonth()!==month-1||dt.getUTCDate()!==day)return '';
+  const p=n=>String(n).padStart(2,'0');
+  return year+'-'+p(month)+'-'+p(day)+'T'+p(hour)+':'+p(minute)+':'+p(second);
 }
 function installFiveMinuteTrigger(){
   ScriptApp.getProjectTriggers().filter(x=>x.getHandlerFunction()==='syncAttendance').forEach(ScriptApp.deleteTrigger);

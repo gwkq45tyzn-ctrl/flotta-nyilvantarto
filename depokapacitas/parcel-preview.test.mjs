@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {previewParcelImport,MAX_PARCEL_ROWS} from './parcel-preview.mjs';
+const date='2099-02-01',row=(id,patch={})=>({date,trackingId:id,district:'IX.',kind:'new',...patch});
+const preview=(rows,extra={})=>previewParcelImport(JSON.stringify(rows),{date,format:'json',...extra});
+let count=0;function test(name,fn){try{fn();count++;}catch(error){throw Error(name+': '+error.message,{cause:error});}}
+test('identical rows count once',()=>{const p=preview([row('001'),row(' 001 '),row('002',{kind:'retry'}),row('003',{district:'X.'})]);assert.equal(p.status,'verified');assert.equal(p.uniqueCount,3);assert.equal(p.duplicates,1);assert.deepEqual(p.districts.map(x=>[x.newCount,x.retryCount]),[[1,1],[1,0]]);assert.equal(p.writesAllowed,false);});
+for(const patch of [{kind:'retry'},{district:'X.'}])test('conflict blocks all aggregates',()=>{for(const rows of [[row('001'),row('001',patch)],[row('001',patch),row('001')]]){const p=preview(rows);assert.equal(p.status,'blocked');assert.equal(p.uniqueCount,null);assert.deepEqual(p.districts,[]);assert.equal(p.audit.filter(x=>x.reason==='conflicting_parcel').length,2);assert.deepEqual(p.audit[0].relatedLines,[1,2]);}});
+test('same ID on another day is separate',()=>{const p=preview([row('001'),row('001',{date:'2099-02-02',kind:'retry'})]);assert.equal(p.uniqueCount,1);assert.equal(p.excludedRows,1);assert.equal(preview([row('001'),row('001',{date:'2099-02-02',kind:'retry'})],{date:'2099-02-02'}).districts[0].retryCount,1);});
+for(const rows of [[],[row('001',{date:'2099-02-02'})]])test('no selected rows is missing, not zero',()=>{const p=preview(rows);assert.equal(p.status,'missing');assert.equal(p.uniqueCount,null);assert.equal(p.verified,false);});
+for(const patch of [{date:'2099-02-31'},{trackingId:''},{trackingId:123},{trackingId:{id:'x'}},{district:''},{kind:'unknown'},{kind:null},{trackingId:'SYN 001'},{district:'x'.repeat(61)},{trackingId:'x'.repeat(101)},{extra:'unmapped'}])test('invalid row blocks whole source '+JSON.stringify(patch),()=>{const p=preview([row('001'),row('bad',patch)]);assert.equal(p.status,'blocked');assert.equal(p.uniqueCount,null);assert.ok(p.audit.some(x=>x.level==='error'&&x.line===2));});
+test('invalid other-day date is not silently filtered',()=>assert.equal(preview([row('ok'),row('bad',{date:'not-a-date'})]).status,'blocked'));
+test('leap calendar validation',()=>{assert.equal(preview([row('ok',{date:'2028-02-29'})],{date:'2028-02-29'}).status,'verified');assert.equal(preview([],{date:'2027-02-29'}).status,'blocked');});
+test('CSV original physical lines preserved across blank lines',()=>{const p=previewParcelImport('date,trackingId,district,kind\r\n'+date+',001,IX.,new\r\n\r\n'+date+',001,IX.,retry',{date});assert.equal(p.status,'blocked');assert.deepEqual(p.audit[0].relatedLines,[2,4]);});
+test('CSV quoted comma and UTF8 BOM',()=>{const p=previewParcelImport('\ufeffdate,trackingId,district,kind\n'+date+',00001,"IX., körzet",new\n'+date+',00001,"IX., körzet",new',{date});assert.equal(p.uniqueCount,1);assert.equal(p.districts[0].district,'IX., KÖRZET');});
+for(const text of ['wrong,trackingId,district,kind\n','date,date,district,kind\n','date,trackingId,district,kind\n"unterminated','date,trackingId,district,kind\n'+date+',"001"x,IX.,new'])test('malformed CSV rejected',()=>assert.equal(previewParcelImport(text,{date}).status,'blocked'));
+test('numeric-looking IDs retain zeros',()=>assert.equal(preview([row('001'),row('1')]).uniqueCount,2));
+test('case and outer whitespace normalize',()=>assert.equal(preview([row(' syn001 '),row('SYN001')]).uniqueCount,1));
+test('missing column is not inferred',()=>assert.equal(previewParcelImport('date,trackingId,district\n'+date+',001,IX.',{date}).status,'blocked'));
+test('unknown format rejected',()=>assert.equal(previewParcelImport('x',{date,format:'xlsx'}).status,'blocked'));
+test('row bound',()=>assert.equal(preview(Array.from({length:MAX_PARCEL_ROWS+1},(_,i)=>row('SYN'+i))).status,'blocked'));
+test('text bound',()=>assert.equal(previewParcelImport('x'.repeat(2000001),{date}).status,'blocked'));
+for(let seed=1;seed<=20;seed++)test('dedup invariant '+seed,()=>{const rows=Array.from({length:50},(_,i)=>row('SYN'+((i*seed)%17),{kind:((i*seed)%17)%2?'new':'retry'}));const p=preview(rows);assert.equal(p.uniqueCount,new Set(rows.map(x=>x.trackingId)).size);assert.equal(p.districts.reduce((n,x)=>n+x.newCount+x.retryCount,0),p.uniqueCount);});
+test('browser view cannot write to Firestore',()=>{const app=readFileSync(new URL('./parcel-preview-app.mjs',import.meta.url),'utf8');assert.doesNotMatch(app,/\b(?:setDoc|updateDoc|deleteDoc|writeBatch|runTransaction|addDoc)\b/);assert.doesNotMatch(app,/innerHTML/);assert.match(app,/allowedProfile\(profile\)/);});
+console.log('PASS: '+count+' parcel preview, provenance, blocked-conflict and no-write cases');

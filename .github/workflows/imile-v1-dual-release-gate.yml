@@ -1,0 +1,35 @@
+name: iMile V1 – independent dual release approval QA
+on:
+  push:
+    paths:
+      - 'docs/IMILE_V1_RELEASE_APPROVAL_TEMPLATE.json'
+      - 'docs/IMILE_V1_SHARED_CONTEXT_AND_DUAL_SIGNOFF.md'
+      - 'tools/verify-imile-v1-release-gate*'
+      - '.github/workflows/imile-v1-dual-release-gate.yml'
+  pull_request:
+    paths:
+      - 'docs/IMILE_V1_RELEASE_APPROVAL_TEMPLATE.json'
+      - 'docs/IMILE_V1_SHARED_CONTEXT_AND_DUAL_SIGNOFF.md'
+      - 'tools/verify-imile-v1-release-gate*'
+      - '.github/workflows/imile-v1-dual-release-gate.yml'
+permissions:
+  contents: read
+jobs:
+  audit-gate:
+    runs-on: ubuntu-latest
+    name: Verify structural gate and no-GO default
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Independent Grok ChatGPT user approval validator regressions
+        run: node --test tools/verify-imile-v1-release-gate.test.mjs
+      - name: Unapproved real template MUST fail closed
+        run: |
+          if node tools/verify-imile-v1-release-gate.mjs docs/IMILE_V1_RELEASE_APPROVAL_TEMPLATE.json; then
+            echo "SECURITY FAILURE: pending release template passed" >&2
+            exit 1
+          else
+            echo "PASS: unapproved production release remains BLOCKED"
+          fi
