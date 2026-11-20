@@ -36,6 +36,35 @@ test('provisional is not treated as final',()=>{
  const a=buildPerformanceStatistics(s.map(x=>({...x,status:'provisional'})));
  assert.equal(a.couriers[0].finalDays,0);
 });
+test('provisional OFD cannot inflate final-only performance KPI',()=>{
+ const all=planPerformanceSnapshots(report([
+  record('D1',10,10,'DS(AKE)','V','2026-10-30'),
+  record('D1',100,1,'DS(AKE)','V','2026-10-31')
+ ]));
+ const docs=all.map(d=>({...d,status:d.date==='2026-10-30'?'final':'provisional'}));
+ const s=buildPerformanceStatistics(docs);
+ assert.equal(s.totalOFD,110);
+ assert.equal(s.rate,11/110);
+ assert.equal(s.totalFinalOFD,10);assert.equal(s.totalFinalDelivered,10);
+ assert.equal(s.finalRate,1);assert.equal(s.finalReportDays,1);
+ assert.equal(s.provisionalReportDays,1);
+ assert.equal(s.couriers[0].finalOfd,10);
+ assert.equal(s.couriers[0].finalRate,1);
+});
+test('no final day is unknown final KPI, not zero percent',()=>{
+ const p=planPerformanceSnapshots(report([record('D1',10,4)]))[0];
+ const s=buildPerformanceStatistics([{...p,status:'provisional'}]);
+ assert.equal(s.finalRate,null);
+ assert.equal(s.couriers[0].finalRate,null);
+ assert.equal(s.totalFinalOFD,0);
+ assert.equal(s.provisionalReportDays,1);
+});
+test('weighted final KPI uses package volumes not mean of courier percentages',()=>{
+ const p=planPerformanceSnapshots(report([record('D1',1,1),record('D2',99,0)]))[0];
+ const s=buildPerformanceStatistics([{...p,status:'final'}]);
+ assert.equal(s.finalRate,.01);
+ assert.equal(s.totalFinalOFD,100);
+});
 test('same daily key twice does not double analytics',()=>{
  const s=planPerformanceSnapshots(report([record('D1',4,3)]))[0];
  const a=buildPerformanceStatistics([{...s,status:'provisional'},{...s,status:'provisional'}]);

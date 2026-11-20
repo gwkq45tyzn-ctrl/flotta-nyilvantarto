@@ -18,6 +18,7 @@ const allowed=[
   'staging/imile-management/core-cutover-preflight.mjs',
   'staging/imile-management/reports/index.html',
   'staging/imile-management/reports/report-app.mjs',
+  'staging/imile-management/reports/report-api-config.mjs',
   'staging/imile-management/reports/report-core.mjs',
   'staging/imile-management/reports/xlsx-lite.mjs',
   'staging/imile-management/reports/report-statistics.mjs',
