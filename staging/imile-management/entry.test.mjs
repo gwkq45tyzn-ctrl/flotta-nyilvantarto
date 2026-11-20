@@ -103,7 +103,7 @@ try{
    'depokapacitas/import-encoding.mjs',
    'depokapacitas/next-day-forecast.mjs','depokapacitas/source-health.mjs','depokapacitas/parcel-preview.html',
    'depokapacitas/parcel-preview.css','depokapacitas/parcel-preview-app.mjs',
-   'depokapacitas/parcel-preview.mjs'
+   'depokapacitas/parcel-demand-qa.mjs','depokapacitas/parcel-demand-reconciliation.mjs','depokapacitas/parcel-preview.mjs'
   ];
   for(const p of paths)assert.ok(existsSync(join(preview,p)),'Preview missing '+p);
   assert.ok(!existsSync(join(preview,'features')),'Live fleet features must not be copied');
